@@ -4,7 +4,10 @@ import {
   type Vec2,
   add2,
   cross2,
+  curvePointAt,
   dist2,
+  formatMeasure,
+  flattenCurve,
   planeToWorld,
   pointInPolygon,
   sub2,
@@ -15,11 +18,13 @@ import {
   type SketchEntity,
   type SketchRegion,
   type SnapResult,
+  type WindowItem,
   breakCurve,
   circularPattern,
   copyEntities,
   editSketch,
   entityPointIds,
+  entityToCurves,
   extendCurve,
   getPoint,
   hitTestSketch,
@@ -35,6 +40,9 @@ import {
   sketchFillet,
   snapPoint,
   trimCurve,
+  windowBounds,
+  windowMode,
+  windowSelect,
 } from "@fabcad/sketch";
 import {
   type Selection,
@@ -50,6 +58,7 @@ import {
   sketchView,
   solveDrag,
 } from "../app/session";
+import { currentMeasurement } from "../measure/MeasurePanel";
 import type { ViewportScene } from "../viewport/scene";
 import { SKETCH_COLORS } from "../viewport/theme";
 import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension } from "./constraintTools";
@@ -128,6 +137,16 @@ type Drag =
       startScreen: Vec2;
       dimensionId: string;
       started: boolean;
+    }
+  | {
+      /** Rectangle dragged over empty space: left → right window, right → left crossing. */
+      kind: "window";
+      startScreen: Vec2;
+      current: Vec2;
+      started: boolean;
+      additive: boolean;
+      /** What a click without movement selects. */
+      click: Selection | null;
     };
 
 export interface HoverProfile {
@@ -323,6 +342,47 @@ export class SketchController {
     this.requestDraw();
   }
 
+  /** Screen polylines of the entities of a sketch, for window selection. */
+  private windowItems(sketch: Sketch): WindowItem<EntityId>[] {
+    const projector = this.projectorFor(sketch);
+    const items: WindowItem<EntityId>[] = [];
+    for (const e of Object.values(sketch.entities)) {
+      // The origin is part of every sketch and cannot be edited: a window never picks it.
+      if (e.id === sketch.originId) continue;
+      if (e.type === "point") {
+        items.push({ id: e.id, points: [projector.toScreen(e)] });
+        continue;
+      }
+      const points: Vec2[] = [];
+      for (const curve of entityToCurves(sketch, e)) {
+        const flat = flattenCurve(curve, Math.max(projector.pixel(curvePointAt(curve, 0)) * 0.5, 1e-3));
+        for (const q of flat) points.push(projector.toScreen(q));
+      }
+      if (points.length > 0) items.push({ id: e.id, points });
+    }
+    return items;
+  }
+
+  private selectWindow(feature: SketchFeature, from: Vec2, to: Vec2, additive: boolean): void {
+    const ids = windowSelect(
+      this.windowItems(feature.sketch),
+      windowBounds(from, to),
+      windowMode(from, to),
+    );
+    const picked: Selection[] = ids.map((entityId) => ({
+      kind: "entity",
+      sketchId: feature.id,
+      entityId,
+    }));
+    if (!additive) {
+      appState.set({ selection: picked });
+      return;
+    }
+    const current = appState.get().selection;
+    const keys = new Set(current.map(selectionKey));
+    appState.set({ selection: [...current, ...picked.filter((s) => !keys.has(selectionKey(s)))] });
+  }
+
   /** Abort a drag in progress without touching the picks of the running command. */
   cancelDrag(): void {
     if (!this.drag) return;
@@ -482,6 +542,12 @@ export class SketchController {
     const drag = this.drag;
     if (!drag) return true;
     this.drag = null;
+    if (drag.kind === "window") {
+      if (drag.started) this.selectWindow(feature, drag.startScreen, { x: p.x, y: p.y }, drag.additive);
+      else select(drag.click, drag.additive);
+      this.requestDraw();
+      return true;
+    }
     if (drag.started) {
       documentStore.commit();
       this.requestDraw();
@@ -638,14 +704,16 @@ export class SketchController {
     if (!e || !start) {
       // Empty space: a profile can still be selected.
       const region = start ? this.regionAt(sketch, start) : null;
-      if (region) {
-        select(
-          { kind: "profile", sketchId: feature.id, regionId: region.id, ref: profileRefOf(region) },
-          p.shift || p.meta,
-        );
-      } else {
-        select(null, p.shift || p.meta);
-      }
+      this.drag = {
+        kind: "window",
+        startScreen: { x: p.x, y: p.y },
+        current: { x: p.x, y: p.y },
+        started: false,
+        additive: p.shift || p.meta,
+        click: region
+          ? { kind: "profile", sketchId: feature.id, regionId: region.id, ref: profileRefOf(region) }
+          : null,
+      };
       return;
     }
     // Dragging a selected entity moves the whole selection.
@@ -674,10 +742,18 @@ export class SketchController {
   private continueDrag(feature: SketchFeature, p: PointerInfo): void {
     const drag = this.drag;
     if (!drag) return;
+    // While measuring, geometry is looked at, not moved.
+    if (drag.kind === "entities" && appState.get().measuring) return;
     if (!drag.started) {
       if (Math.hypot(p.x - drag.startScreen.x, p.y - drag.startScreen.y) < DRAG_START_PX * this.reach) return;
       drag.started = true;
-      documentStore.begin(drag.kind === "label" ? "Move dimension" : "Drag sketch");
+      if (drag.kind !== "window") documentStore.begin(drag.kind === "label" ? "Move dimension" : "Drag sketch");
+    }
+    if (drag.kind === "window") {
+      drag.current = { x: p.x, y: p.y };
+      if (appState.get().hover) appState.set({ hover: null });
+      this.requestDraw();
+      return;
     }
     const base = drag.kind === "entities" ? drag.base : feature.sketch;
     const now = this.projectorFor(base).toSketch(p.x, p.y);
@@ -1287,6 +1363,54 @@ export class SketchController {
           this.cursor.snap.kind,
           this.cursor.inferred,
         );
+      }
+    }
+    if (this.drag?.kind === "window" && this.drag.started) {
+      const { startScreen: a, current: b } = this.drag;
+      const crossing = windowMode(a, b) === "crossing";
+      ctx.fillStyle = crossing ? SKETCH_COLORS.windowCrossingFill : SKETCH_COLORS.windowFill;
+      ctx.strokeStyle = crossing ? SKETCH_COLORS.windowCrossing : SKETCH_COLORS.window;
+      ctx.lineWidth = 1;
+      // Crossing is dashed, as in every CAD, so that the two modes can be told apart.
+      ctx.setLineDash(crossing ? [5, 4] : []);
+      ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      ctx.strokeRect(a.x + 0.5, a.y + 0.5, b.x - a.x, b.y - a.y);
+      ctx.setLineDash([]);
+    }
+    const between = currentMeasurement()?.between;
+    if (between?.line) {
+      const a = this.scene.project(between.line.from);
+      const b = this.scene.project(between.line.to);
+      ctx.strokeStyle = SKETCH_COLORS.selected;
+      ctx.fillStyle = SKETCH_COLORS.selected;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const q of [a, b]) {
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      const main = between.values.find((v) => v.id === "distance");
+      if (main && Math.hypot(a.x - b.x, a.y - b.y) > 24) {
+        const text = formatMeasure(main);
+        ctx.font = "600 11.5px ui-monospace, SFMono-Regular, Menlo, monospace";
+        const w = ctx.measureText(text).width + 10;
+        const cx = (a.x + b.x) / 2;
+        const cy = (a.y + b.y) / 2;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+        ctx.fillRect(cx - w / 2, cy - 9, w, 18);
+        ctx.strokeRect(cx - w / 2 + 0.5, cy - 8.5, w - 1, 17);
+        ctx.fillStyle = "#1d2b38";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, cx, cy + 0.5);
+        ctx.textAlign = "start";
+        ctx.textBaseline = "alphabetic";
       }
     }
     this.overlayPainter?.(ctx);

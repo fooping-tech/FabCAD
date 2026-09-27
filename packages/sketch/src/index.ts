@@ -6,3 +6,4 @@ export * from "./modify";
 export * from "./profiles";
 export * from "./measure";
 export * from "./project";
+export * from "./window";

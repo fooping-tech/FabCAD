@@ -164,11 +164,16 @@ export interface AppState {
   /** Open context menu, in client coordinates. */
   contextMenu: { x: number; y: number; held?: boolean } | null;
   /** The command that "Repeat" in the context menu starts again. */
-  lastCommand: { kind: "tool" | "dialog"; id: string; label: string } | null;
+  lastCommand: { kind: "tool" | "dialog" | "measure"; id: string; label: string } | null;
   /** Sketch tool to start as soon as a sketch plane has been picked. */
   pendingSketchTool: string | null;
   /** Small screens: whether the side panel sheet is open. */
   sidePanelOpen: boolean;
+  /**
+   * Measure command: clicks pick what is measured (at most two things). Inspection state of
+   * the session; nothing of it is stored in the document.
+   */
+  measuring: boolean;
 }
 
 export const appState = new TinyStore<AppState>({
@@ -205,6 +210,7 @@ export const appState = new TinyStore<AppState>({
   lastCommand: null,
   pendingSketchTool: null,
   sidePanelOpen: false,
+  measuring: false,
 });
 
 let toastId = 1;
@@ -223,7 +229,18 @@ export function setSelection(selection: Selection[]): void {
 
 /** Click selection: replace, or toggle when `additive` (Shift / Ctrl / Cmd held). */
 export function select(item: Selection | null, additive: boolean): void {
-  const { selection } = appState.get();
+  const { selection, measuring } = appState.get();
+  if (measuring) {
+    if (!item || item.kind === "constraint" || item.kind === "dimension" || item.kind === "feature") return;
+    const picked = selectionKey(item);
+    // A third pick starts the next measurement.
+    if (selection.some((s) => selectionKey(s) === picked)) {
+      appState.set({ selection: selection.filter((s) => selectionKey(s) !== picked) });
+    } else {
+      appState.set({ selection: selection.length >= 2 ? [item] : [...selection, item] });
+    }
+    return;
+  }
   if (!item) {
     if (!additive && selection.length > 0) appState.set({ selection: [] });
     return;

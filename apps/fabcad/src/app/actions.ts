@@ -34,6 +34,7 @@ import {
   profileRefOf,
 } from "@fabcad/sketch";
 import { projectInto } from "../sketch/projectTool";
+import { viewportApi } from "../viewport/api";
 import { edgeRefOf, faceRefOf } from "./topology";
 import {
   type Dialog,
@@ -63,7 +64,33 @@ const titleCase = (id: string): string =>
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
 
+/** Measure (I): picks made before the command was started are measured right away. */
+export function startMeasure(): void {
+  const state = appState.get();
+  if (state.measuring) return;
+  if (state.dialog) closeDialog();
+  viewportApi()?.cancel();
+  appState.set((s) => ({
+    measuring: true,
+    tool: "select",
+    dimensionEdit: null,
+    contextMenu: null,
+    selectionFilter: "auto",
+    selection: s.selection
+      .filter((x) => x.kind !== "constraint" && x.kind !== "dimension" && x.kind !== "feature")
+      .slice(0, 2),
+    lastCommand: { kind: "measure", id: "measure", label: "Measure" },
+    hint: "Measure: select one or two points, edges, faces or bodies.",
+  }));
+}
+
+export function stopMeasure(): void {
+  if (!appState.get().measuring) return;
+  appState.set({ measuring: false, selection: [], hover: null, hint: "" });
+}
+
 export function setTool(tool: string): void {
+  if (tool !== "select") stopMeasure();
   if (appState.get().tool === tool) return;
   const patch: Partial<ReturnType<typeof appState.get>> = { tool, hover: null, dimensionEdit: null };
   if (tool !== "select") patch.lastCommand = { kind: "tool", id: tool, label: titleCase(tool) };
@@ -74,12 +101,14 @@ export function setTool(tool: string): void {
 export function repeatLastCommand(): void {
   const last = appState.get().lastCommand;
   if (!last) return;
-  if (last.kind === "dialog") openDialog(last.id as Dialog["type"]);
+  if (last.kind === "measure") startMeasure();
+  else if (last.kind === "dialog") openDialog(last.id as Dialog["type"]);
   else if (appState.get().activeSketchId) setTool(last.id);
   else beginSketchPlanePick(last.id);
 }
 
 export function setWorkspace(workspace: "design" | "fabrication"): void {
+  stopMeasure();
   const s = appState.get();
   if (s.workspace === workspace) return;
   if (s.activeSketchId) finishSketch();
@@ -274,6 +303,7 @@ function defaultTargets(): string[] {
 }
 
 export function openDialog(type: Dialog["type"]): void {
+  stopMeasure();
   const state = appState.get();
   // Profiles picked inside the sketch carry over into the command started from it.
   const picked = selectedProfiles();
@@ -465,6 +495,9 @@ export function editFeature(featureId: string): void {
       break;
     case "import":
       toast("Imported bodies have nothing to edit.");
+      return;
+    default:
+      toast(`${f.name} cannot be edited here yet.`);
       return;
   }
   const filter =
@@ -727,5 +760,7 @@ export const featureIcon = (feature: Feature): string => {
       return "shell";
     case "import":
       return "import3d";
+    default:
+      return "body";
   }
 };

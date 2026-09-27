@@ -6,6 +6,8 @@ import {
   deleteSelection,
   openDialog,
   setTool,
+  startMeasure,
+  stopMeasure,
 } from "./actions";
 import { appState, setSelection } from "./appState";
 import { setBodyVisible, setSketchVisible } from "@fabcad/cad-document";
@@ -37,6 +39,10 @@ export function pressEscape(): void {
   }
   if (state.dialog) {
     closeDialog();
+    return;
+  }
+  if (state.measuring) {
+    stopMeasure();
     return;
   }
   if (state.activeSketchId) {
@@ -165,7 +171,8 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
 
     if (key === "Delete" || key === "Backspace") {
       e.preventDefault();
-      deleteSelection();
+      // What is picked for measuring is only being looked at.
+      if (!state.measuring) deleteSelection();
       return;
     }
 
@@ -177,6 +184,10 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
     if (key === "F6") {
       e.preventDefault();
       viewportApi()?.fit();
+      return;
+    }
+    if (key === "i" && (!state.dialog || state.dialog.type === "pick-sketch-plane")) {
+      startMeasure();
       return;
     }
     if (key === "v" && !state.dialog) {

@@ -251,6 +251,16 @@ select { padding-right: 4px; }
 .value-preview { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
 .empty { color: var(--ink-faint); padding: 10px 4px; line-height: 1.5; }
 .kv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 6px; }
+.measure-group { margin: 0 0 8px; }
+.measure-group:last-child { margin-bottom: 0; }
+.measure-group h4 { margin: 0 0 3px; font-size: 11px; font-weight: 650; color: var(--ink-soft); display: flex; gap: 5px; align-items: center; }
+.measure-group h4 .n { width: 15px; height: 15px; border-radius: 50%; background: var(--warm); color: #fff; font-size: 9.5px; display: grid; place-items: center; }
+.measure-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) 22px; align-items: center; gap: 4px; min-height: 22px; }
+.measure-row .name { color: var(--ink-soft); }
+.measure-row .value { font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums; user-select: text; }
+.measure-row.main .value { font-weight: 650; color: var(--accent-strong); }
+.measure-row button { width: 22px; height: 20px; padding: 0; display: grid; place-items: center; color: var(--ink-faint); background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.measure-row button:hover { background: var(--panel-alt); color: var(--ink); }
 .kv dt { color: var(--ink-soft); }
 .kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 

@@ -4,3 +4,4 @@ export * from "./polygon";
 export * from "./curves";
 export * from "./polyhedron";
 export * from "./topologyRef";
+export * from "./measure";

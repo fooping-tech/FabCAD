@@ -11,6 +11,7 @@ import {
   useFabrication,
 } from "./fabrication";
 import { BrowserTree } from "./panels/BrowserTree";
+import { MeasurePanel } from "./measure/MeasurePanel";
 import { ContextMenu } from "./panels/ContextMenu";
 import { FeatureDialog } from "./panels/FeatureDialog";
 import { Header, openProject } from "./panels/Header";
@@ -124,6 +125,7 @@ export function App(): ReactElement {
         </div>
         <TouchBar />
         {!fabrication && <FeatureDialog />}
+        {!fabrication && <MeasurePanel />}
         {fabrication && !printing && (
           <>
             <FabricationMain />

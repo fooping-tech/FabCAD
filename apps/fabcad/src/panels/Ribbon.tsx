@@ -6,6 +6,7 @@ import {
   importStep,
   openDialog,
   setTool,
+  startMeasure,
 } from "../app/actions";
 import { type SelectionFilter, type ToolOptions, appState, setSelection, toast } from "../app/appState";
 import { documentStore, editSketchSolved } from "../app/session";
@@ -140,6 +141,7 @@ function SketchRibbon(): ReactElement {
   const tool = useStore(appState, (s) => s.tool);
   const options = useStore(appState, (s) => s.toolOptions);
   const showConstraints = useStore(appState, (s) => s.showConstraints);
+  const measuring = useStore(appState, (s) => s.measuring);
   const showDimensions = useStore(appState, (s) => s.showDimensions);
   const setOptions = (patch: Partial<ToolOptions>): void =>
     appState.set((s) => ({ toolOptions: { ...s.toolOptions, ...patch } }));
@@ -248,6 +250,7 @@ function SketchRibbon(): ReactElement {
           active={tool === "dimension"}
           onClick={() => setTool("dimension")}
         />
+        <Tool icon="measure" title="Measure (I)" active={measuring} onClick={startMeasure} />
       </Group>
       <Group label="Options">
         <div className="ribbon-options">
@@ -332,6 +335,7 @@ const FILTERS: { id: SelectionFilter; label: string }[] = [
 function SolidRibbon(): ReactElement {
   const dialog = useStore(appState, (s) => s.dialog);
   const filter = useStore(appState, (s) => s.selectionFilter);
+  const measuring = useStore(appState, (s) => s.measuring);
   const is = (type: string): boolean => dialog?.type === type;
   return (
     <>
@@ -357,6 +361,9 @@ function SolidRibbon(): ReactElement {
       </Group>
       <Group label="Insert">
         <Tool icon="import3d" label="STEP" title="Import a STEP file" onClick={() => void importStep()} />
+      </Group>
+      <Group label="Inspect">
+        <Tool icon="measure" label="Measure" title="Measure (I)" active={measuring} onClick={startMeasure} />
       </Group>
       <Group label="Manage">
         <Tool icon="parameters" label="Parameters" title="Change parameters" active={is("parameters")} onClick={() => openDialog("parameters")} />

@@ -39,7 +39,7 @@ const DIALOG_LABELS: Record<string, string> = {
   "pick-sketch-plane": "Create Sketch",
 };
 
-function commandLabel(command: { kind: "tool" | "dialog"; id: string; label: string }): string {
+function commandLabel(command: { kind: "tool" | "dialog" | "measure"; id: string; label: string }): string {
   if (command.kind === "dialog") return DIALOG_LABELS[command.id] ?? command.label;
   if (command.id === "dimension") return "Sketch Dimension";
   if (command.id === "project") return "Project";

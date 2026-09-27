@@ -32,4 +32,8 @@ export const SKETCH_COLORS = {
   profileSelected: "rgba(47, 127, 184, 0.38)",
   grid: "rgba(37, 55, 72, 0.07)",
   gridMajor: "rgba(37, 55, 72, 0.14)",
+  window: "#2f7fb8",
+  windowFill: "rgba(47, 127, 184, 0.10)",
+  windowCrossing: "#2f9e6b",
+  windowCrossingFill: "rgba(47, 158, 107, 0.10)",
 };
