@@ -37,7 +37,13 @@ export function createProject(): void {
   newProject();
 }
 
-export function Header({ onExportFabrication }: { onExportFabrication: (format: "svg" | "dxf") => void }): ReactElement {
+export function Header({
+  onExportFabrication,
+  onExportPrint,
+}: {
+  onExportFabrication: (format: "svg" | "dxf") => void;
+  onExportPrint: (format: "stl" | "3mf") => void;
+}): ReactElement {
   const doc = useDocument();
   const history = useHistoryState();
   const workspace = useStore(appState, (s) => s.workspace);
@@ -158,9 +164,13 @@ export function Header({ onExportFabrication }: { onExportFabrication: (format: 
           </>
         }
         items={[
-          { title: "Fabrication" },
+          { title: "Laser cutting" },
           { label: "SVG — laser cutting", icon: "laser", onSelect: () => onExportFabrication("svg") },
           { label: "DXF — laser cutting", icon: "laser", onSelect: () => onExportFabrication("dxf") },
+          { separator: true },
+          { title: "3D printing" },
+          { label: "3MF — parts on the bed", icon: "print3d", onSelect: () => onExportPrint("3mf") },
+          { label: "STL — parts on the bed", icon: "print3d", onSelect: () => onExportPrint("stl") },
           { separator: true },
           { title: "Sketch" },
           { label: "SVG — selected sketch", icon: "sketch", onSelect: () => exportSketchSvg() },

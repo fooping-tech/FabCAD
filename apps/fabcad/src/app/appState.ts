@@ -133,8 +133,12 @@ export interface ToolOptions {
   gridSnap: boolean;
 }
 
+export type FabricationProcess = "laser" | "print";
+
 export interface AppState {
   workspace: Workspace;
+  /** Manufacturing process shown in the FABRICATION workspace. */
+  fabricationProcess: FabricationProcess;
   fabricationTab: FabricationTab;
   /** Sketch feature being edited, or null in the solid environment. */
   activeSketchId: string | null;
@@ -166,6 +170,7 @@ export interface AppState {
 
 export const appState = new TinyStore<AppState>({
   workspace: "design",
+  fabricationProcess: "laser",
   fabricationTab: "model",
   activeSketchId: null,
   tool: "select",

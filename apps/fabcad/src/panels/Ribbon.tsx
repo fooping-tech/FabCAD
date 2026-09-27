@@ -383,14 +383,29 @@ function SolidRibbon(): ReactElement {
 }
 
 function FabricationRibbon(): ReactElement {
+  const process = useStore(appState, (s) => s.fabricationProcess);
   return (
     <>
       <Group label="Process">
-        <Tool icon="laser" label="Laser" title="Laser fabrication" wide active onClick={() => undefined} />
+        <Tool
+          icon="laser"
+          label="Laser"
+          title="Laser cutting: flat parts from sheet material"
+          wide
+          active={process === "laser"}
+          onClick={() => appState.set({ fabricationProcess: "laser" })}
+        />
+        <Tool
+          icon="print3d"
+          label="3D Print"
+          title="3D printing: orientation, checks and mesh export for a slicer"
+          wide
+          active={process === "print"}
+          onClick={() => appState.set({ fabricationProcess: "print" })}
+        />
       </Group>
       <Group label="Coming later">
         <Tool icon="body" label="CNC" title="CNC — planned" disabled onClick={() => toast("CNC is planned.")} />
-        <Tool icon="body" label="3D Print" title="3D printing — planned" disabled onClick={() => undefined} />
         <Tool icon="body" label="Sheet Metal" title="Sheet metal — planned" disabled onClick={() => undefined} />
       </Group>
     </>

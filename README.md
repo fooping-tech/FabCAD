@@ -24,7 +24,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | スナップ | 既存の点・中点・曲線へのスナップ。何もない場所では 1 mm 単位に吸着します（リボンの **Snap 1 mm** で切り替え、`Ctrl/Cmd` を押している間は無効） |
 | 拘束状態 | Under-constrained（残り自由度を表示）/ Fully constrained / Over-constrained。過剰拘束になる操作は拒否します |
 | Profile | 交点を含めて閉領域を自動検出し、クリックで選択（複数選択可） |
-| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
+| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
 | 入出力 | STEP import / export、STL export、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
@@ -40,6 +40,19 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Parts | 部品名、寸法、厚み、材料、joint、mating edge（`EdgeConnection` を明示的に保持） |
 | Sheet | row / shelf packing、複数シート、90° 回転 |
 | Export | SVG（mm 単位、`cut` / `fold` / `engrave` をグループ分け）、DXF。プレビューと書き出しは同一の `SheetGeometry` を使います |
+
+### FABRICATION ワークスペース（3D Print）
+
+スライサーに渡す前の準備をします。G-code は作りません。
+
+| 分類 | 内容 |
+| --- | --- |
+| 向き | Body ごとに、どの向きを下にするかを選択。Auto はオーバーハングが最も少ない向き（同じなら接地面積が大きく、背が低い向き） |
+| 配置 | ベッドの上に、間隔を空けて並べます |
+| チェック | 造形範囲に収まるか、オーバーハング（サポートが必要な面を赤で表示）、接地面積、閉じた立体かどうか |
+| 見積もり | 樹脂の体積、重さ、フィラメントの長さ、レイヤー数。体積と表面積からの概算です |
+| 材料 | PLA、PETG、ABS、ASA、TPU |
+| Export | 3MF（単位 mm と部品名を保持）、STL。ベッドに置いた向きと位置で書き出します |
 
 ## 使い方
 
@@ -153,6 +166,7 @@ Fusion 360 の円形のマーキングメニューではなく、一覧形式の
 | 画面下の **Browser** / **Settings** | ブラウザとプロパティ、または Fabrication の設定を下から開きます |
 | 画面下の **Cancel** / **Done** / **Delete** / **Finish** | `Esc`、`Enter`、`Delete`、スケッチ終了の代わり |
 | 選択済みの寸法をもう一度タップ | 寸法値を編集 |
+| 数値の入力欄 | 数字のキーボードが開きます。パラメータや式を入れるときは、欄の右の **abc** で文字のキーボードに切り替えます |
 
 Extrude などのダイアログは主要な項目だけを表示し、**Options** で残りを開きます。
 
@@ -191,6 +205,7 @@ SheetGeometry  →  preview / SVG / DXF
 | `packages/features` | Feature Engine。Timeline を評価して Body を作り、入力のハッシュで Feature ごとにキャッシュします |
 | `packages/fabrication-core` | 材料、Strategy、`fabricate()`、Analyzer、Kerf 補正、Nesting、Sheet |
 | `packages/fabrication-laser` | Board と Paper の Strategy |
+| `packages/fabrication-print` | 3D プリント。向き、オーバーハングの解析、見積もり、ベッドへの配置、STL / 3MF の書き出し |
 | `packages/svg`、`packages/dxf` | 書き出し |
 | `apps/fabcad` | React アプリ。Feature Engine と OpenCASCADE は Web Worker 内で動きます |
 
@@ -250,6 +265,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | Ellipse と Spline | 拘束と寸法、Trim / Extend / Offset の対象外です（切る側としては使えます） |
 | 角度寸法 | 1 本目の線から 2 本目の線へ反時計回りに測ります |
 | Nesting | 外接矩形による row / shelf packing のみ |
+| 3D プリント | スライス（G-code の生成）はしません。見積もりは概算で、サポート材は含みません。実機での造形は未検証です |
 | 凹角 | Board のパネルは線で接するだけで、内側に隙間が残ります（警告を出します） |
 | 範囲選択 | 未実装 |
 | スマートフォン | Chrome のスマートフォン表示とタッチ入力のエミュレーションで確認しました。実機では未検証です |

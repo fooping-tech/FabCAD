@@ -392,6 +392,14 @@ table.grid td input { padding: 2px 5px; }
 .legend { display: flex; gap: 12px; align-items: center; font-size: 10.5px; color: var(--ink-soft); }
 .legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; margin-right: 4px; vertical-align: middle; }
 
+.print-view { position: absolute; inset: 0; background: #eef1f4; }
+.print-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.print-legend { position: absolute; left: 12px; top: 12px; z-index: 5; display: flex; flex-direction: column; gap: 6px; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+.print-bed-size { font-size: 10.5px; color: var(--ink-soft); }
+.print-ok { position: absolute; left: 12px; bottom: 12px; z-index: 5; padding: 3px 9px; }
+.print-body { padding: 4px 6px; margin: 0 -6px 4px; border-radius: 5px; cursor: default; }
+.print-body.selected { background: var(--accent-soft); }
+
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: #cfd6dc; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #b4bec7; background-clip: padding-box; border: 2px solid transparent; }
@@ -498,6 +506,8 @@ table.grid td input { padding: 2px 5px; }
   .sketch-banner { top: 6px; left: 6px; transform: none; max-width: calc(100% - 12px); padding: 3px 5px 3px 9px; gap: 6px; overflow: hidden; }
   .sketch-banner .btn { display: none; }
   .fab-tabs { top: 6px; }
+  .print-legend { left: 6px; top: 6px; padding: 5px 8px; }
+  .print-ok { bottom: 56px; left: 8px; }
   .fab-view.padded { padding: 50px 10px 60px; }
   .part-cards { grid-template-columns: minmax(0, 1fr); }
   .toasts { bottom: 110px; left: 12px; right: 12px; transform: none; }

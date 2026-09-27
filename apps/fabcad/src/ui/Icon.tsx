@@ -212,6 +212,7 @@ const P: Record<string, ReactElement> = {
     </>
   ),
   import3d: <path d="M3 7l7-3.5L17 7v7l-7 3.5L3 14zM10 8v6M7.5 11.5L10 14l2.5-2.5" />,
+  print3d: <path d="M3 4h14M6 4v3h8V4M10 7v3M7.5 10h5l1 2h-7zM5 17h10M6.5 14.5h7" />,
   laser: <path d="M10 2v7M10 9l-4 8h8zM3 17h14" />,
 };
 

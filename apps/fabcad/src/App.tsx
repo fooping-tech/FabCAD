@@ -20,6 +20,7 @@ import { Ribbon } from "./panels/Ribbon";
 import { StatusBar } from "./panels/StatusBar";
 import { Timeline } from "./panels/Timeline";
 import { Toasts } from "./panels/Toasts";
+import { PrintSidePanel, PrintView, exportPrintJob, usePrintJob } from "./print";
 import { TouchBar } from "./viewport/TouchBar";
 import { Viewport } from "./viewport/Viewport";
 
@@ -60,6 +61,11 @@ const registerExport = (fn: (format: "svg" | "dxf") => void): void => {
   exportHandler = fn;
 };
 
+let printExportHandler: (format: "stl" | "3mf") => void = () => undefined;
+const registerPrintExport = (fn: (format: "stl" | "3mf") => void): void => {
+  printExportHandler = fn;
+};
+
 export function App(): ReactElement {
   const workspace = useStore(appState, (s) => s.workspace);
   const fabricationTab = useStore(appState, (s) => s.fabricationTab);
@@ -71,12 +77,24 @@ export function App(): ReactElement {
     return installShortcuts({ openProject: () => void openProject() });
   }, []);
 
+  const process = useStore(appState, (s) => s.fabricationProcess);
+  const print = usePrintJob();
   const fabrication = workspace === "fabrication";
-  const showViewport = !fabrication || fabricationTab === "model";
+  const printing = fabrication && process === "print";
+  const showViewport = !fabrication || (!printing && fabricationTab === "model");
+
+  useEffect(() => {
+    registerPrintExport((format) =>
+      exportPrintJob(format, print.job, documentStore.document.name),
+    );
+  }, [print.job]);
 
   return (
     <div className={`app${fabrication ? " no-timeline" : ""}`}>
-      <Header onExportFabrication={(format) => exportHandler(format)} />
+      <Header
+        onExportFabrication={(format) => exportHandler(format)}
+        onExportPrint={(format) => printExportHandler(format)}
+      />
       <Ribbon />
       {sidePanelOpen && (
         <div className="side-backdrop" onPointerDown={() => appState.set({ sidePanelOpen: false })} />
@@ -87,7 +105,9 @@ export function App(): ReactElement {
           aria-label="Close panel"
           onClick={() => appState.set({ sidePanelOpen: false })}
         />
-        {fabrication ? (
+        {printing ? (
+          <PrintSidePanel state={print} />
+        ) : fabrication ? (
           <FabricationSidePanel />
         ) : (
           <>
@@ -103,12 +123,13 @@ export function App(): ReactElement {
         </div>
         <TouchBar />
         {!fabrication && <FeatureDialog />}
-        {fabrication && (
+        {fabrication && !printing && (
           <>
             <FabricationMain />
             <FabricationTabs />
           </>
         )}
+        {printing && <PrintView job={print.job} stale={print.stale} />}
       </main>
       {!fabrication && <Timeline />}
       <StatusBar />

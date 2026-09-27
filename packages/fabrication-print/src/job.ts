@@ -72,7 +72,7 @@ export function compilePrintJob(bodies: PrintBody[], settings: PrintSettings): P
       warnings.push({
         code: "non-manifold",
         severity: "error",
-        message: `"${body.name}" is not a closed solid and cannot be printed.`,
+        message: `"${body.name}" is not a closed solid and cannot be printed: its surface has gaps, or parts of it touch only along an edge.`,
         partId: body.id,
       });
       continue;

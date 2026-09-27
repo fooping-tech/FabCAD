@@ -40,6 +40,7 @@ npm run build
 | `apps/fabcad/src/sketch/` | `SketchController.ts`（スケッチの描画と入力）、`createTools.ts`（Create ツールの定義）、`constraintTools.ts`、`render.ts` |
 | `apps/fabcad/src/panels/` | Header、Ribbon、Browser、Properties、Timeline、ダイアログ |
 | `apps/fabcad/index.html`、`src/landing/` | 紹介ページ。静的な HTML と CSS。掲載しているスクリーンショット（`public/landing/`）は実際のアプリを Playwright で操作して撮ったもの。画面を大きく変えたら撮り直す |
+| `apps/fabcad/src/print/` | FABRICATION ワークスペースの 3D Print。設定は `extensions["fabrication.print"]`。受け取るのは Body のメッシュ（`modelState` の tessellation）だけ |
 | `apps/fabcad/src/fabrication/` | FABRICATION ワークスペース。`pipeline.ts` は React に依存しない純粋な関数 |
 
 スケッチは 3D ビューの上に重ねた 2D キャンバスに、3D カメラで投影して描く。マウス位置は視線とスケッチ平面の交点でスケッチ座標に変換する。
