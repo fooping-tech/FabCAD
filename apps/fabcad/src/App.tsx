@@ -14,6 +14,7 @@ import { BrowserTree } from "./panels/BrowserTree";
 import { ContextMenu } from "./panels/ContextMenu";
 import { FeatureDialog } from "./panels/FeatureDialog";
 import { Header, openProject } from "./panels/Header";
+import { ImportDxfDialog } from "./panels/ImportDxfDialog";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
 import { PropertiesPanel } from "./panels/PropertiesPanel";
 import { Ribbon } from "./panels/Ribbon";
@@ -137,6 +138,9 @@ export function App(): ReactElement {
       <ContextMenu />
       {dialog?.type === "parameters" && <ParametersDialog />}
       {dialog?.type === "about" && <AboutDialog />}
+      {dialog?.type === "import-dxf" && (
+        <ImportDxfDialog fileName={dialog.fileName} drawing={dialog.drawing} />
+      )}
       <FabricationExportBridge register={registerExport} />
     </div>
   );

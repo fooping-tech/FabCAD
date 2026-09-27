@@ -368,6 +368,9 @@ table.grid td input { padding: 2px 5px; }
 .modal { background: #fff; border-radius: 8px; border: 1px solid var(--line-strong); box-shadow: 0 20px 60px rgba(29, 43, 56, 0.3); width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 80px); display: flex; flex-direction: column; }
 .modal-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--line); font-weight: 680; font-size: 13px; }
 .modal-body { padding: 12px 14px; overflow: auto; }
+.dxf-layers { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dxf-layers th { text-align: left; font-weight: 600; color: var(--ink-soft); padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.dxf-layers td { padding: 3px 6px; border-bottom: 1px solid var(--line); }
 .modal-footer { display: flex; justify-content: flex-end; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel-alt); border-radius: 0 0 8px 8px; }
 
 /* -------------------------------------------------------------- fabrication */

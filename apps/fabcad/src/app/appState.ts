@@ -1,3 +1,4 @@
+import type { DxfDrawing } from "@fabcad/dxf";
 import type {
   BodyOperation,
   EdgeRef,
@@ -99,6 +100,8 @@ export type Dialog =
       picking: "target" | "tools";
     }
   | { type: "parameters" }
+  /** A parsed DXF file waiting for the unit and layer choice. */
+  | { type: "import-dxf"; fileName: string; drawing: DxfDrawing }
   | { type: "about" };
 
 export interface DimensionEdit {

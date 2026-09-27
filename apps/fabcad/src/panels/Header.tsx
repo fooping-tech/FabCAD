@@ -17,6 +17,7 @@ import {
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
+import { pickDxf } from "../sketch/importDxf";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 
@@ -104,6 +105,7 @@ export function Header({
           { label: "Save project", icon: "save", kbd: `${mod}S`, onSelect: saveProject },
           { separator: true },
           { label: "Import STEP…", icon: "import", onSelect: () => void importStep() },
+          { label: "Import DXF…", icon: "import", onSelect: () => void pickDxf() },
           { separator: true },
           { label: "Parameters…", icon: "parameters", onSelect: () => openDialog("parameters") },
           { label: "About FabCAD", icon: "info", onSelect: () => openDialog("about") },
