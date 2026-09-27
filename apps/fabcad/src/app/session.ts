@@ -251,6 +251,20 @@ async function recomputeLoop(): Promise<void> {
         sketches: result.sketches,
         lastDurationMs: result.durationMs,
       });
+      // Projected sketch geometry follows the bodies it was taken from.
+      const updates = result.sketchUpdates ?? {};
+      if (Object.keys(updates).length > 0 && documentStore.document === doc) {
+        documentStore.amend((d) => {
+          let features = d.features;
+          for (const [id, sketch] of Object.entries(updates)) {
+            const f = features[id];
+            if (!f || f.type !== "sketch") continue;
+            if (features === d.features) features = { ...d.features };
+            features[id] = { ...f, sketch };
+          }
+          return features === d.features ? d : { ...d, features };
+        });
+      }
     } while (recomputeQueued);
   } catch (err) {
     console.error(err);

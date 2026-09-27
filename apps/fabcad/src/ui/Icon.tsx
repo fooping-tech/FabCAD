@@ -135,6 +135,13 @@ const P: Record<string, ReactElement> = {
       <path d="M3 15l4-11 6 12 4-10" strokeDasharray="2 2" />
     </>
   ),
+  project: (
+    <>
+      <path d="M4 3.5l7 2.5v5L4 8.5z" />
+      <path d="M3 16.5h14" />
+      <path d="M5 12v2.5M10 13.5v1M7.5 14l-2.5 0M5 14.5l-1.2-1.5M5 14.5l1.2-1.5M10 14.5l-1.2-1.5M10 14.5l1.2-1.5" />
+    </>
+  ),
   // ---- sketch modify
   fillet: <path d="M4 16V9a5 5 0 015-5h7" />,
   chamfer: <path d="M4 16V9l5-5h7" />,

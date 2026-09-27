@@ -188,6 +188,8 @@ select { padding-right: 4px; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 .menu-title { font-size: 9px; letter-spacing: 0.9px; font-weight: 650; color: var(--ink-faint); text-transform: uppercase; padding: 5px 8px 3px; }
 
+.menu.context-menu { position: fixed; z-index: 90; min-width: 214px; max-height: calc(100dvh - 12px); overflow: auto; }
+
 /* --------------------------------------------------------------- side panel */
 .side {
   grid-area: side;
@@ -450,6 +452,7 @@ table.grid td input { padding: 2px 5px; }
   .tool.wide.finish span { display: inline; }
   .menu { position: fixed; top: calc(var(--header-h) + var(--ribbon-h) + 4px); left: 8px; right: 8px; max-height: 60dvh; overflow: auto; }
   .header .menu { top: calc(var(--header-h) + 4px); }
+  .menu.context-menu { right: auto; min-width: 200px; }
   .menu button { padding: 10px; }
 
   .side {

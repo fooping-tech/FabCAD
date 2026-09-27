@@ -2,6 +2,7 @@ import { listFeatures, setFeatureSuppressed, setTimelineCursor } from "@fabcad/c
 import type { ReactElement } from "react";
 import { editFeature, featureIcon } from "../app/actions";
 import { appState, isSelected, select } from "../app/appState";
+import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
@@ -77,6 +78,11 @@ export function Timeline(): ReactElement {
                 select({ kind: "feature", featureId: f.id }, e.shiftKey || e.metaKey || e.ctrlKey);
               }}
               onDoubleClick={() => editFeature(f.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                appState.set({ selection: [{ kind: "feature", featureId: f.id }] });
+                openContextMenu(e.clientX, e.clientY);
+              }}
             >
               <Icon name={featureIcon(f)} size={18} />
               <span>{f.name}</span>

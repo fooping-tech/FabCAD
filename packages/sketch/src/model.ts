@@ -137,8 +137,17 @@ export interface ProjectedGeometryRef {
   id: string;
   mode: "project" | "include" | "intersect";
   bodyId: string;
+  /** What was picked on the body. Defaults to "edge". */
+  source?: "edge" | "vertex";
   /** Point on the source edge or face used to re-identify it after recompute. */
   hint: Vec3;
+  /**
+   * Index of the source edge or vertex in its body and the number of edges or vertices the
+   * body had. While the count is unchanged the index identifies the source; otherwise the
+   * hint does.
+   */
+  index?: number;
+  count?: number;
   entityIds: EntityId[];
 }
 

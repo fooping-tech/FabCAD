@@ -155,6 +155,26 @@ export class DocumentStore {
     return true;
   }
 
+  /**
+   * Replace the current document by an equivalent one whose derived data was refreshed (e.g.
+   * projected sketch geometry after a recompute). This is not a user edit: no history entry is
+   * added, and the step that produced the document now leads to the amended one.
+   */
+  amend(fn: (doc: CadDocument) => CadDocument): boolean {
+    if (this.transaction) return false;
+    const before = this.doc;
+    const after = fn(before);
+    if (after === before) return false;
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (top && top.after === before) top.after = after;
+    const next = this.redoStack[this.redoStack.length - 1];
+    if (next && next.before === before) next.before = after;
+    if (this.saved === before) this.saved = after;
+    this.doc = after;
+    this.emit();
+    return true;
+  }
+
   /** Replace the document (New / Open). Clears the history. */
   load(doc: CadDocument): void {
     this.transaction = null;

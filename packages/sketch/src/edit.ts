@@ -215,6 +215,12 @@ export class SketchBuilder {
       if (!stillUsed) doomed.add(p);
     }
     for (const id of doomed) delete this.sketch.entities[id];
+    // A projection that lost one of its entities is released: what remains is plain geometry.
+    if (this.sketch.projections.some((r) => r.entityIds.some((id) => doomed.has(id)))) {
+      this.sketch.projections = this.sketch.projections.filter(
+        (r) => !r.entityIds.some((id) => doomed.has(id)),
+      );
+    }
     for (const c of Object.values(this.sketch.constraints)) {
       if (c.refs.some((r) => doomed.has(r))) delete this.sketch.constraints[c.id];
     }

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import type { GeometryKernel } from "@fabcad/brep";
+import { type GeometryKernel, edgePolyline } from "@fabcad/brep";
+import { ORIGIN_PLANES } from "@fabcad/geometry";
 import {
   type CadDocument,
   type CreatedRef,
@@ -28,6 +29,8 @@ import {
 } from "@fabcad/cad-document";
 import {
   type Sketch,
+  addProjection,
+  projectPolyline,
   createCircle,
   createPolyline,
   createRectangle2Point,
@@ -387,6 +390,71 @@ describe("feature engine", () => {
     const after = (await fresh.recompute(loaded)).bodies[0]!.geometry!;
     expect(after.volume).toBeCloseTo(before.volume, 6);
     expect(after.faces).toHaveLength(before.faces.length);
+  });
+
+  it("re-projects sketch geometry when the source body changes", async () => {
+    const store = new DocumentStore(createDocument());
+    run(store, addParameter({ name: "width", expression: "100", unit: "mm" }));
+    const s: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, s));
+    solvedEdit(store, s.id!, (sk) =>
+      editSketch(sk, (b) => {
+        const r = createRectangle2Point(b, { x: 0, y: 0 }, { x: 100, y: 80 });
+        b.dimension("distance", [r.entities[0]!], "width");
+        b.dimension("distance", [r.entities[1]!], "80");
+        b.constrain("fix", r.points[0]!);
+      }),
+    );
+    const region = detectProfiles(sketchOf(store.document, s.id!))[0]!;
+    const e: CreatedRef = {};
+    store.execute(addExtrude({ sketchId: s.id!, profiles: [profileRefOf(region)], distance: "50" }, e));
+
+    // A second sketch on the XY plane with the far top edge (y = 80, z = 50) projected into it.
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    const geometry = engine.bodyGeometry(e.bodyId!)!;
+    const edge = geometry.edges.find(
+      (g) => Math.abs(g.midpoint.y - 80) < 1e-6 && Math.abs(g.midpoint.z - 50) < 1e-6,
+    )!;
+    const p: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, p));
+    store.execute(
+      updateSketch(p.id!, "Project", (sk) => {
+        const shape = projectPolyline(ORIGIN_PLANES.XY, edgePolyline(geometry, edge))!;
+        return addProjection(sk, shape, { bodyId: e.bodyId!, source: "edge", hint: edge.midpoint })!
+          .sketch;
+      }),
+    );
+    const length = (doc: CadDocument): number => {
+      const sk = sketchOf(doc, p.id!);
+      const xs = sk.projections[0]!.entityIds.flatMap((id) => {
+        const ent = sk.entities[id]!;
+        return ent.type === "point" ? [ent.x] : [];
+      });
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    let result = await engine.recompute(store.document);
+    expect(result.sketchUpdates).toEqual({});
+    expect(length(store.document)).toBeCloseTo(100, 6);
+    // The projection is held in place: the sketch has no freedom left.
+    expect(result.sketches[p.id!]).toMatchObject({ status: "fully-constrained" });
+
+    const width = store.document.parameters[0]!;
+    run(store, updateParameter(width.id, { expression: "140" }));
+    result = await engine.recompute(store.document);
+    expect(Object.keys(result.sketchUpdates)).toEqual([p.id]);
+    const updated = result.sketchUpdates[p.id!]!;
+    store.amend((doc) => ({
+      ...doc,
+      features: { ...doc.features, [p.id!]: { ...(doc.features[p.id!] as SketchFeature), sketch: updated } },
+    }));
+    expect(length(store.document)).toBeCloseTo(140, 6);
+    // Amending is not an edit: one undo goes back to the state before the parameter change.
+    expect(store.undoLabel).toBe("Change parameter");
+    result = await engine.recompute(store.document);
+    expect(result.sketchUpdates).toEqual({});
+    store.undo();
+    expect(length(store.document)).toBeCloseTo(100, 6);
   });
 
   it("exports STEP and STL", async () => {

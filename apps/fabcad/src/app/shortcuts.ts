@@ -61,7 +61,7 @@ export function pressEnter(): boolean {
 
 /**
  * Keys follow Fusion 360 where FabCAD has the command: L R C D T O X (sketch), E Q F (solid),
- * M, V, Delete and F6. A (arc), P (point) and S (spline) are FabCAD's own.
+ * M, P, V, Delete and F6. A (arc) and S (spline) are FabCAD's own.
  */
 
 /** Q, Press Pull: fillet when edges are selected, extrude otherwise. */
@@ -103,7 +103,7 @@ const SKETCH_KEYS: Record<string, string> = {
   t: "trim",
   o: "offset",
   m: "move",
-  p: "point",
+  p: "project",
   s: "spline-fit",
   f: "fillet",
 };
@@ -170,6 +170,9 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
     }
 
     if (state.workspace !== "design" || e.altKey) return;
+
+    // A shortcut letter must not end up in the field that the command focuses next.
+    if (key.length === 1) e.preventDefault();
 
     if (key === "F6") {
       e.preventDefault();

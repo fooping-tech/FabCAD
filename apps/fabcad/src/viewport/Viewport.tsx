@@ -17,8 +17,10 @@ import {
   selectionKey,
   toast,
 } from "../app/appState";
+import { openContextMenu } from "../app/contextMenu";
 import { documentStore, editSketchSolved, modelState, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { projectPick } from "../sketch/projectTool";
 import { SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
 import { Icon } from "../ui/Icon";
@@ -187,7 +189,8 @@ export function Viewport(): ReactElement {
       }
       // A sketch drawn on a face lies on top of it: its profiles win over the face below.
       // Edges and vertices keep their priority, and so does an explicit selection filter.
-      if (!dialog && (hover === null || (hover.kind === "face" && filter === "auto"))) {
+      const below = hover?.kind === "face" || hover?.kind === "origin-plane";
+      if (!dialog && (hover === null || (below && filter === "auto"))) {
         const profile = controller.profileAt(x, y, { visibleOnly: true });
         controller.setHoverProfile(profile);
         if (profile) hover = null;
@@ -333,6 +336,34 @@ export function Viewport(): ReactElement {
       if (m) drawManipulator(ctx, scene, m, manipulator ? "drag" : manipulatorHover ? "hover" : "idle");
     };
 
+    // ------------------------------------------------------ project tool
+    const projecting = (): boolean =>
+      appState.get().activeSketchId !== null && appState.get().tool === "project";
+
+    const projectHover = (x: number, y: number): Selection | null => {
+      const pick = scene.pick(x, y, { faces: true, edges: true, vertices: true });
+      const hover = pick && pick.kind !== "origin-plane" ? pickToSelection(pick) : null;
+      const prev = appState.get().hover;
+      if ((prev ? selectionKey(prev) : "") !== (hover ? selectionKey(hover) : "")) {
+        appState.set({ hover });
+      }
+      return hover;
+    };
+
+    const projectClick = (x: number, y: number): void => {
+      const hover = projectHover(x, y);
+      if (!hover) return;
+      if (hover.kind === "edge") projectPick({ kind: "edge", bodyId: hover.bodyId, edgeIndex: hover.edgeIndex });
+      else if (hover.kind === "face") projectPick({ kind: "face", bodyId: hover.bodyId, faceIndex: hover.faceIndex });
+      else if (hover.kind === "vertex") projectPick({
+          kind: "vertex",
+          bodyId: hover.bodyId,
+          vertexIndex: hover.vertexIndex,
+          point: hover.point,
+        });
+      appState.set({ hover: null });
+    };
+
     // ---------------------------------------------------------- pointers
     const touches = new Set<number>();
     /** A touch that places a point when the finger is lifted, so that it can be aimed first. */
@@ -342,6 +373,7 @@ export function Viewport(): ReactElement {
 
     const onPointerDown = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
+      lastPointerType = e.pointerType;
       controller.setCoarse(touch);
       scene.setTouchInput(touch);
       if (touch) {
@@ -350,8 +382,23 @@ export function Viewport(): ReactElement {
         touches.add(e.pointerId);
       }
       down = { x: e.clientX, y: e.clientY, button: e.button };
+      cancelLongPress();
       if (e.button !== 0) return;
       const p = info(e);
+
+      if (touch && touches.size === 1) {
+        const origin = { clientX: e.clientX, clientY: e.clientY };
+        longPress = setTimeout(() => {
+          longPress = null;
+          if (touches.size !== 1 || manipulator || appState.get().contextMenu) return;
+          // The finger is still down: whatever it started is called off in favour of the menu.
+          if (touchPick) touchPick.aborted = true;
+          touchPan = null;
+          controller.cancelDrag();
+          down = null;
+          contextAt(origin, p, true);
+        }, 550);
+      }
 
       if (touch && touches.size > 1) {
         // A second finger means pan / zoom: whatever the first finger started is called off.
@@ -394,7 +441,12 @@ export function Viewport(): ReactElement {
       if (touch && appState.get().tool !== "select") {
         scene.setOneFingerGesture("none");
         touchPick = { id: e.pointerId, aborted: false };
-        controller.pointerMove(p);
+        if (projecting()) projectHover(p.x, p.y);
+        else controller.pointerMove(p);
+        return;
+      }
+      if (projecting()) {
+        projectClick(p.x, p.y);
         return;
       }
       if (touch && !controller.hitsSomething(p)) {
@@ -409,6 +461,9 @@ export function Viewport(): ReactElement {
 
     const onPointerMove = (e: PointerEvent): void => {
       const p = info(e);
+      if (longPress && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
+        cancelLongPress();
+      }
       if (manipulator) {
         if (e.pointerId !== manipulator.pointerId) return;
         const t = scene.axisParameter(p.x, p.y, manipulator.base, manipulator.normal);
@@ -425,6 +480,10 @@ export function Viewport(): ReactElement {
         if (e.pointerType === "touch") {
           if (touches.size > 1 || touchPan) return;
           if (touchPick && (touchPick.aborted || touchPick.id !== e.pointerId)) return;
+        }
+        if (projecting()) {
+          if (e.buttons === 0 || e.pointerType === "touch") projectHover(p.x, p.y);
+          return;
         }
         if (e.buttons === 0 || e.buttons === 1) controller.pointerMove(p);
         return;
@@ -445,9 +504,57 @@ export function Viewport(): ReactElement {
       hover3d(p.x, p.y);
     };
 
+    /** Right-click or long-press: select what is under the pointer and open the menu. */
+    const contextAt = (
+      e: { clientX: number; clientY: number },
+      p: ReturnType<typeof info>,
+      held = false,
+    ): void => {
+      const state = appState.get();
+      if (state.workspace !== "design") return;
+      let target: Selection | null = null;
+      if (state.activeSketchId) {
+        target = state.tool === "select" ? controller.pickForMenu(p) : null;
+      } else if (!state.dialog) {
+        hover3d(p.x, p.y);
+        target = appState.get().hover;
+        const profile = controller.hoveredProfile;
+        if (!target && profile) {
+          target = {
+            kind: "profile",
+            sketchId: profile.sketchId,
+            regionId: profile.region.id,
+            ref: profileRefOf(profile.region),
+          };
+        }
+      }
+      // Like Fusion: the menu acts on the selection; a click on something else selects that.
+      if (target && !state.selection.some((s) => selectionKey(s) === selectionKey(target))) {
+        appState.set({ selection: [target] });
+      }
+      openContextMenu(e.clientX, e.clientY, held);
+    };
+
+    let lastPointerType = "mouse";
+    let longPress: ReturnType<typeof setTimeout> | null = null;
+    const cancelLongPress = (): void => {
+      if (longPress) clearTimeout(longPress);
+      longPress = null;
+    };
+
     const onPointerUp = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
+      cancelLongPress();
       if (touch) touches.delete(e.pointerId);
+      if (e.button === 2 && !manipulator) {
+        const start = down;
+        down = null;
+        // A right-drag orbits; only a click without movement opens the menu.
+        if (start?.button === 2 && Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 4) {
+          if (e.target === webgl) contextAt(e, info(e));
+        }
+        return;
+      }
       if (manipulator) {
         if (e.pointerId !== manipulator.pointerId) return;
         manipulator = null;
@@ -472,8 +579,13 @@ export function Viewport(): ReactElement {
           const pick = touchPick;
           touchPick = null;
           if (pick.id !== e.pointerId || pick.aborted) return;
+          if (projecting()) {
+            projectClick(p.x, p.y);
+            return;
+          }
           controller.pointerDown(p);
         }
+        if (projecting()) return;
         controller.pointerUp(p);
         if (touch) controller.clearCursor();
         return;
@@ -502,7 +614,17 @@ export function Viewport(): ReactElement {
       if (appState.get().hover) appState.set({ hover: null });
       appState.set({ cursor: null });
     };
-    const onContextMenu = (e: MouseEvent): void => e.preventDefault();
+    const onContextMenu = (e: MouseEvent): void => {
+      e.preventDefault();
+      // Android reports a long press as a context menu event (and cancels the touch).
+      if (lastPointerType !== "touch" || appState.get().contextMenu) return;
+      cancelLongPress();
+      if (touchPick) touchPick.aborted = true;
+      touchPan = null;
+      controller.cancelDrag();
+      down = null;
+      contextAt(e, info(e), touches.size > 0);
+    };
     // iOS Safari: keep the page itself from zooming while the view is pinched.
     const onGesture = (e: Event): void => e.preventDefault();
     host.addEventListener("gesturestart", onGesture);
@@ -558,6 +680,7 @@ export function Viewport(): ReactElement {
       confirm: () => controller.confirm(),
       fit: () => scene.fitAll(sketchExtents()),
       setView: (view) => scene.setView(view),
+      editDimension: (id) => controller.editDimension(id),
     });
 
     return () => {

@@ -149,6 +149,10 @@ export interface AppState {
   hint: string;
   showConstraints: boolean;
   showDimensions: boolean;
+  /** Open context menu, in client coordinates. */
+  contextMenu: { x: number; y: number; held?: boolean } | null;
+  /** The command that "Repeat" in the context menu starts again. */
+  lastCommand: { kind: "tool" | "dialog"; id: string; label: string } | null;
   /** Sketch tool to start as soon as a sketch plane has been picked. */
   pendingSketchTool: string | null;
   /** Small screens: whether the side panel sheet is open. */
@@ -184,6 +188,8 @@ export const appState = new TinyStore<AppState>({
   hint: "",
   showConstraints: true,
   showDimensions: true,
+  contextMenu: null,
+  lastCommand: null,
   pendingSketchTool: null,
   sidePanelOpen: false,
 });

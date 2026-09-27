@@ -39,9 +39,27 @@ import {
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
+const titleCase = (id: string): string =>
+  id
+    .replace(/^constraint:/, "")
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
 export function setTool(tool: string): void {
   if (appState.get().tool === tool) return;
-  appState.set({ tool, hover: null, dimensionEdit: null });
+  const patch: Partial<ReturnType<typeof appState.get>> = { tool, hover: null, dimensionEdit: null };
+  if (tool !== "select") patch.lastCommand = { kind: "tool", id: tool, label: titleCase(tool) };
+  appState.set(patch);
+}
+
+/** Start the most recent command again. */
+export function repeatLastCommand(): void {
+  const last = appState.get().lastCommand;
+  if (!last) return;
+  if (last.kind === "dialog") openDialog(last.id as Dialog["type"]);
+  else if (appState.get().activeSketchId) setTool(last.id);
+  else beginSketchPlanePick(last.id);
 }
 
 export function setWorkspace(workspace: "design" | "fabrication"): void {
@@ -252,6 +270,9 @@ export function openDialog(type: Dialog["type"]): void {
     hover: null,
     selectionFilter: filter,
     sidePanelOpen: false,
+    ...(dialog.type !== "parameters" && dialog.type !== "about"
+      ? { lastCommand: { kind: "dialog" as const, id: dialog.type, label: titleCase(dialog.type) } }
+      : {}),
   });
 }
 

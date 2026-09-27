@@ -1,4 +1,11 @@
-import type { BodyGeometry, GeometryKernel, KernelShape } from "@fabcad/brep";
+import {
+  type BodyGeometry,
+  type GeometryKernel,
+  type KernelShape,
+  edgePolyline,
+  nearestEdge,
+  nearestVertex,
+} from "@fabcad/brep";
 import {
   type CadDocument,
   type Feature,
@@ -21,11 +28,14 @@ import {
 } from "@fabcad/geometry";
 import {
   type ProfileRef,
+  type Sketch,
   type SketchRegion,
   type SolveStatus,
   detectProfiles,
   getPoint,
+  projectPolyline,
   resolveProfileRef,
+  updateProjection,
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
 import { resolveSketchPlane, solveSketchWithParameters } from "./sketchSolve";
@@ -67,6 +77,11 @@ export interface RecomputeResult {
   bodies: BodyResult[];
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
+  /**
+   * Sketches whose projected geometry moved because the body it comes from changed. The
+   * document stores solved sketches, so the caller writes these back.
+   */
+  sketchUpdates: Record<string, Sketch>;
   parameters: ParameterEvaluation;
   durationMs: number;
 }
@@ -91,6 +106,8 @@ interface CacheEntry {
 }
 
 interface SketchEval {
+  /** The sketch as evaluated: projections refreshed and constraints solved. */
+  sketch: Sketch;
   hash: string;
   plane: Plane3;
   regions: SketchRegion[];
@@ -131,6 +148,8 @@ export class FeatureEngine {
   private geometryCache = new Map<string, { hash: string; geometry: BodyGeometry }>();
   private topologyCache = new Map<string, { hash: string; topology: SolidTopology }>();
   private sketches = new Map<string, SketchEval>();
+  /** Tessellations used for re-projecting sketch geometry, by body hash. */
+  private projectionGeometry = new Map<string, BodyGeometry>();
   /** Number of features actually evaluated (not served from cache) by the last recompute. */
   lastEvaluated: string[] = [];
 
@@ -147,6 +166,8 @@ export class FeatureEngine {
     const sketchStatuses: Record<string, SketchStatus> = {};
     const bodies = new Map<string, BodyState>();
     const sketches = new Map<string, SketchEval>();
+    const sketchUpdates: Record<string, Sketch> = {};
+    const projectionHashes = new Set<string>();
     const used = new Set<string>();
     this.lastEvaluated = [];
 
@@ -165,7 +186,12 @@ export class FeatureEngine {
       }
       if (feature.type === "sketch") {
         try {
-          const evaluated = this.evaluateSketch(feature, scope);
+          const projected = this.reproject(feature.sketch, bodies, projectionHashes);
+          const evaluated = this.evaluateSketch(
+            projected === feature.sketch ? feature : { ...feature, sketch: projected },
+            scope,
+          );
+          if (projected !== feature.sketch) sketchUpdates[id] = evaluated.sketch;
           sketches.set(id, evaluated);
           sketchStatuses[id] = evaluated.status;
           const dimensionError = Object.values(evaluated.status.dimensionErrors)[0];
@@ -240,6 +266,9 @@ export class FeatureEngine {
 
     this.bodies = bodies;
     this.sketches = sketches;
+    for (const hash of [...this.projectionGeometry.keys()]) {
+      if (!projectionHashes.has(hash)) this.projectionGeometry.delete(hash);
+    }
 
     const results: BodyResult[] = [];
     for (const [id, state] of bodies) {
@@ -277,6 +306,7 @@ export class FeatureEngine {
       bodies: results,
       features: statuses,
       sketches: sketchStatuses,
+      sketchUpdates,
       parameters,
       durationMs: Date.now() - started,
     };
@@ -349,6 +379,65 @@ export class FeatureEngine {
     for (const id of featureConsumedBodies(feature)) bodies.delete(id);
   }
 
+  /**
+   * Project the source geometry of every projection again, from the bodies as they are at this
+   * point of the timeline. Returns the same sketch object when nothing moved.
+   */
+  private reproject(
+    sketch: Sketch,
+    bodies: Map<string, BodyState>,
+    usedHashes: Set<string>,
+  ): Sketch {
+    if (sketch.projections.length === 0) return sketch;
+    const plane = resolveSketchPlane(sketch.plane);
+    let current = sketch;
+    for (const ref of sketch.projections) {
+      const body = bodies.get(ref.bodyId);
+      if (!body) continue;
+      usedHashes.add(body.hash);
+      let geometry = this.projectionGeometry.get(body.hash);
+      if (!geometry) {
+        try {
+          geometry = this.kernel.tessellate(body.shape);
+        } catch {
+          continue;
+        }
+        this.projectionGeometry.set(body.hash, geometry);
+      }
+      let points: Vec3[];
+      let hint: Vec3;
+      // The index identifies the source as long as the body kept its structure.
+      if ((ref.source ?? "edge") === "vertex") {
+        const total = geometry.vertices.length / 3;
+        const i = ref.index;
+        const v =
+          i !== undefined && ref.count === total && i < total
+            ? {
+                x: geometry.vertices[i * 3]!,
+                y: geometry.vertices[i * 3 + 1]!,
+                z: geometry.vertices[i * 3 + 2]!,
+              }
+            : nearestVertex(geometry, ref.hint);
+        if (!v) continue;
+        points = [v];
+        hint = v;
+      } else {
+        const edge =
+          ref.index !== undefined && ref.count === geometry.edges.length
+            ? (geometry.edges[ref.index] ?? nearestEdge(geometry, ref.hint))
+            : nearestEdge(geometry, ref.hint);
+        if (!edge) continue;
+        points = edgePolyline(geometry, edge);
+        hint = edge.midpoint;
+      }
+      const shape = projectPolyline(plane, points);
+      const live = current.projections.find((r) => r.id === ref.id);
+      if (!shape || !live) continue;
+      current = updateProjection(current, live, shape, hint) ?? current;
+    }
+    return current;
+  }
+
   private evaluateSketch(feature: Extract<Feature, { type: "sketch" }>, scope: Scope): SketchEval {
     const info = solveSketchWithParameters(feature.sketch, this.solver, scope);
     const sketch = info.converged ? info.sketch : feature.sketch;
@@ -356,6 +445,7 @@ export class FeatureEngine {
     const regions = detectProfiles(sketch);
     const geometryKey = JSON.stringify([sketch.entities, plane]);
     return {
+      sketch,
       hash: hashString(geometryKey),
       plane,
       regions,

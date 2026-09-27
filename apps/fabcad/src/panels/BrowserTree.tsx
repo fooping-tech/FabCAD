@@ -11,6 +11,7 @@ import type { OriginPlaneName } from "@fabcad/geometry";
 import { type ReactElement, type ReactNode, useState } from "react";
 import { enterSketch } from "../app/actions";
 import { type Selection, appState, isSelected, select } from "../app/appState";
+import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
@@ -31,8 +32,10 @@ function Row({
   onClick,
   onDoubleClick,
   onRename,
+  onMenu,
   title,
 }: {
+  onMenu?: (e: React.MouseEvent) => void;
   depth: number;
   icon: string;
   name: string;
@@ -63,6 +66,14 @@ function Row({
       title={title}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      onContextMenu={
+        onMenu
+          ? (e) => {
+              e.preventDefault();
+              onMenu(e);
+            }
+          : undefined
+      }
     >
       <span
         className={`tree-caret${open ? " open" : ""}`}
@@ -171,6 +182,10 @@ export function BrowserTree(): ReactElement {
   });
   const toggle = (key: string): void => setOpen((o) => ({ ...o, [key]: !o[key] }));
   const additive = (e: React.MouseEvent): boolean => e.shiftKey || e.metaKey || e.ctrlKey;
+  const menuFor = (sel: Selection) => (e: React.MouseEvent): void => {
+    if (!isSelected(appState.get().selection, sel)) appState.set({ selection: [sel] });
+    openContextMenu(e.clientX, e.clientY);
+  };
 
   const root = doc.assembly.rootComponentId;
   const sketches = listSketchFeatures(doc, root);
@@ -218,6 +233,7 @@ export function BrowserTree(): ReactElement {
                     onVisible={(v) => run(setOriginVisible(item.key, v))}
                     selected={sel ? isSelected(selection, sel) : false}
                     onClick={sel ? (e) => select(sel, additive(e)) : undefined}
+                    onMenu={sel ? menuFor(sel) : undefined}
                   />
                 );
               })}
@@ -249,6 +265,7 @@ export function BrowserTree(): ReactElement {
                     title={statuses[f.id]?.message ?? "Double-click to edit the sketch"}
                     onClick={(e) => select(sel, additive(e))}
                     onDoubleClick={() => enterSketch(f.id)}
+                    onMenu={menuFor(sel)}
                     onRename={(name) => run(renameFeature(f.id, name))}
                   />
                 );
@@ -280,6 +297,7 @@ export function BrowserTree(): ReactElement {
                     error={missing && statuses[b.createdBy]?.state === "error"}
                     title={missing ? "This body has no geometry at the current history position" : undefined}
                     onClick={(e) => select(sel, additive(e))}
+                    onMenu={menuFor(sel)}
                     onRename={(name) => run(renameBody(b.id, name))}
                   />
                 );

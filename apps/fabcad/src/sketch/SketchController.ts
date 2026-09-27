@@ -28,6 +28,7 @@ import {
   moveEntities,
   offsetEntities,
   profileRefOf,
+  projectedEntityIds,
   rectangularPattern,
   scaleEntities,
   sketchChamfer,
@@ -252,6 +253,7 @@ export class SketchController {
       fillet: this.entityPicks.length === 0 ? "Fillet: pick the first line" : "Fillet: pick the second line",
       chamfer: this.entityPicks.length === 0 ? "Chamfer: pick the first line" : "Chamfer: pick the second line",
       offset: "Offset: click a curve on the side to offset to",
+      project: "Project: click edges, faces or vertices of a body to project them onto the sketch",
       mirror: "Mirror: select the geometry first, then click the mirror line",
       move: this.picks.length === 0 ? "Move: pick the base point" : "Move: pick the destination",
       copy: this.picks.length === 0 ? "Copy: pick the base point" : "Copy: pick the destination",
@@ -278,6 +280,31 @@ export class SketchController {
     this.refreshHint();
     this.requestDraw();
     return had;
+  }
+
+  /**
+   * What a right-click refers to: the dimension, constraint, entity or profile under the
+   * pointer of the active sketch.
+   */
+  pickForMenu(p: PointerInfo): Selection | null {
+    const feature = this.activeFeature();
+    if (!feature) return null;
+    const onPoint = this.hitEntity(feature.sketch, p, { curves: false });
+    if (onPoint) return { kind: "entity", sketchId: feature.id, entityId: onPoint.id };
+    const label = this.hitLabel(p);
+    if (label) return { kind: label.kind, sketchId: feature.id, id: label.id };
+    const e = this.hitEntity(feature.sketch, p);
+    if (e) return { kind: "entity", sketchId: feature.id, entityId: e.id };
+    const at = this.projectorFor(feature.sketch).toSketch(p.x, p.y);
+    const region = at ? this.regionAt(feature.sketch, at) : null;
+    return region
+      ? { kind: "profile", sketchId: feature.id, regionId: region.id, ref: profileRefOf(region) }
+      : null;
+  }
+
+  editDimension(dimensionId: string): void {
+    const feature = this.activeFeature();
+    if (feature) this.openDimensionEditor(feature, dimensionId, false);
   }
 
   /** True when the pointer is on sketch geometry, a dimension or a constraint glyph. */
@@ -1158,6 +1185,7 @@ export class SketchController {
             ? `${hover.kind}:${hover.id}`
             : null,
         conflicting: new Set(view.status === "over-constrained" ? view.conflicting : []),
+        projected: projectedEntityIds(sketch),
         previewEntities: new Set(),
         showConstraints: state.showConstraints,
         showDimensions: state.showDimensions,

@@ -11,6 +11,7 @@ import {
   useFabrication,
 } from "./fabrication";
 import { BrowserTree } from "./panels/BrowserTree";
+import { ContextMenu } from "./panels/ContextMenu";
 import { FeatureDialog } from "./panels/FeatureDialog";
 import { Header, openProject } from "./panels/Header";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
@@ -112,6 +113,7 @@ export function App(): ReactElement {
       {!fabrication && <Timeline />}
       <StatusBar />
       <Toasts />
+      <ContextMenu />
       {dialog?.type === "parameters" && <ParametersDialog />}
       {dialog?.type === "about" && <AboutDialog />}
       <FabricationExportBridge register={registerExport} />

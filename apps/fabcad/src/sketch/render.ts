@@ -56,6 +56,8 @@ export interface SketchDrawState {
   /** Evaluated values of driving dimensions. */
   dimensionValues: Record<string, number>;
   dimensionErrors: Record<string, string>;
+  /** Entities projected from bodies; drawn in their own colour. */
+  projected?: Set<string>;
 }
 
 export class Projector {
@@ -162,6 +164,7 @@ function entityColor(id: string, construction: boolean, state: SketchDrawState):
   if (state.selectedEntities.has(id)) return SKETCH_COLORS.selected;
   if (state.hoverEntity === id) return SKETCH_COLORS.hover;
   if (!state.active) return SKETCH_COLORS.inactive;
+  if (state.projected?.has(id)) return SKETCH_COLORS.projected;
   if (construction) return SKETCH_COLORS.construction;
   return state.fullyConstrained ? SKETCH_COLORS.curveFull : SKETCH_COLORS.curve;
 }

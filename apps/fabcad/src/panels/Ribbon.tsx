@@ -91,7 +91,7 @@ function NumberOption({
 }
 
 /** Tools shown directly in the sketch ribbon; the rest live in the "More" menus. */
-const PRIMARY_CREATE = ["line", "rectangle-2point", "circle", "arc-3point", "polygon-inscribed", "slot", "spline-fit", "point"];
+const PRIMARY_CREATE = ["line", "rectangle-2point", "circle", "arc-3point", "polygon-inscribed", "slot", "spline-fit"];
 const PRIMARY_MODIFY = ["trim", "extend", "offset", "mirror", "move", "copy", "fillet"];
 
 function applyConstraintToSelection(type: (typeof CONSTRAINT_TOOLS)[number]["type"]): void {
@@ -182,6 +182,12 @@ function SketchRibbon(): ReactElement {
             onClick={() => setTool(t.id)}
           />
         ))}
+        <Tool
+          icon="project"
+          title="Project (P) — project edges, faces or vertices of a body onto the sketch"
+          active={tool === "project"}
+          onClick={() => setTool("project")}
+        />
         <Menu
           buttonClass={`tool${activeMoreCreate ? " on" : ""}`}
           title="More create tools"

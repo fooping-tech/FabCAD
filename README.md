@@ -17,6 +17,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | 分類 | 内容 |
 | --- | --- |
 | Sketch Create | Line、Polyline、2 点 / 3 点 / 中心の Rectangle、Circle、3 点 Circle、中心点 Arc、3 点 Arc、Ellipse、内接 / 外接 Polygon、Slot、Point、Fit Point Spline、Control Point Spline、Construction Line |
+| Project | 立体の稜線・面の輪郭・頂点をスケッチ平面へ投影（`P`）。投影した要素は固定され、元の立体が変わると追従します |
 | Sketch Modify | Move、Copy、Trim、Extend、Offset、Mirror、Fillet、Chamfer、Break、Scale、Rectangular Pattern、Circular Pattern、Construction 切り替え |
 | Constraints | Coincident、Horizontal、Vertical、Parallel、Perpendicular、Tangent、Equal、Concentric、Collinear、Midpoint、Fix、Symmetry |
 | Dimensions | Distance、Horizontal / Vertical Distance、Angle、Radius、Diameter。値にはパラメータ式を入力できます |
@@ -87,7 +88,8 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 | `M` | Move | — |
 | `V` | — | 選択した Body / Sketch の表示・非表示 |
 | `S` | Fit Point Spline | Create Sketch |
-| `A` `P` | 3-Point Arc、Point（FabCAD 独自） | 平面を選んでそのツールでスケッチ開始 |
+| `P` | Project（立体の形状をスケッチ平面へ投影） | 平面を選んで Project でスケッチ開始 |
+| `A` | 3-Point Arc（FabCAD 独自） | 平面を選んで Arc でスケッチ開始 |
 | `F6` | 全体表示 | 全体表示 |
 | `Esc` | 実行中のコマンドをキャンセル | 同左 |
 | `Enter` | Polyline / Spline の終了 | ダイアログの確定 |
@@ -97,7 +99,27 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 
 3D で原点平面か平らな面を選んでから `L` `R` `C` などを押すと、その面ですぐにスケッチが始まります。立体の面に描いたスケッチの閉領域は、下の面より優先して選択できます。
 
-Fusion 360 のショートカットのうち、対応するコマンドがないもの（`H` Hole、`J` Joint、`I` Measure、`P` Project、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
+Fusion 360 のショートカットのうち、対応するコマンドがないもの（`H` Hole、`J` Joint、`I` Measure、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
+
+### 右クリックメニュー
+
+右クリック（スマートフォンでは長押し）で、カーソル位置の対象を選択してメニューを開きます。右ボタンを押したままドラッグするとオービットです。
+
+| 状況 | メニューの内容 |
+| --- | --- |
+| コマンドの実行中 | OK、Cancel |
+| 直前にコマンドを使った | Repeat（直前のコマンドをもう一度） |
+| 稜線 | Fillet、Chamfer |
+| 平らな面・原点平面 | Create Sketch、Shell |
+| スケッチの閉領域 | Extrude、Revolve、Edit Sketch |
+| Body | Show / Hide、Combine、Delete |
+| タイムライン・ブラウザの項目 | Edit Feature / Edit Sketch、Suppress、Show / Hide、Delete |
+| スケッチ中の線や円 | Normal / Construction、Move、Copy、Delete |
+| スケッチ中の寸法 | Edit Dimension、Delete |
+| スケッチ中 | Line、Rectangle、Circle、Dimension、Trim、Offset、Project、Finish Sketch |
+| 常に | Undo、Redo |
+
+Fusion 360 の円形のマーキングメニューではなく、一覧形式のメニューです。
 
 | マウス | 内容 |
 | --- | --- |
@@ -211,7 +233,8 @@ SPA ルーティングは使っていません。WebAssembly（約 23 MB、gzip 
 
 | 項目 | 状態 |
 | --- | --- |
-| Project / Include / Intersect | データモデル（`Sketch.projections`）のみ。ソルバーは投影された要素を固定として扱います |
+| Project | 実装済み。楕円になる投影（斜めから見た円）はスプラインで近似します。立体の稜線の数が変わる変更のあとは、位置が最も近い稜線に付け替えます |
+| Include / Intersect | 未実装 |
 | Assembly | データモデルのみ。Component や Joint を操作する UI はありません |
 | Sweep、Loft、Draft、Rib、Hole、Thread、Split Body | 未実装 |
 | DXF import、IGES | 未実装 |

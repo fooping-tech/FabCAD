@@ -19,6 +19,7 @@ export const SKETCH_COLORS = {
   curveFull: "#1d2b38",
   construction: "#c7773b",
   inactive: "#6f8191",
+  projected: "#9a3fb5",
   point: "#1f6fa8",
   selected: "#e0762a",
   hover: "#f0a45c",
