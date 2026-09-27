@@ -26,6 +26,8 @@ export interface MeshFaceGroup {
   /** A point on the face and the outward normal there; used for persistent face references. */
   center: Vec3;
   normal: Vec3;
+  /** mm² */
+  area: number;
 }
 
 export interface MeshEdgeGroup {
@@ -37,6 +39,14 @@ export interface MeshEdgeGroup {
   midpoint: Vec3;
   curve: "line" | "circle" | "other";
   length: number;
+  /** End points of the edge. */
+  from: Vec3;
+  to: Vec3;
+  /** True for a full circle or another closed curve. */
+  closed: boolean;
+  /** For circles and circular arcs. */
+  radius?: number;
+  center?: Vec3;
 }
 
 /** Display geometry of one body. All arrays are transferable between threads. */
@@ -62,7 +72,12 @@ export interface TessellationOptions {
   angularTolerance?: number;
 }
 
+/**
+ * Selects a face or an edge of a shape. `index` is the position in the tessellation of that
+ * very shape (`BodyGeometry.faces` / `.edges`) and wins when present; `point` is the fallback.
+ */
 export interface PointRef {
+  index?: number;
   point: Vec3;
   normal?: Vec3;
 }

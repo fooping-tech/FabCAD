@@ -21,6 +21,8 @@ import {
   toast,
 } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
+import { edgeIndexOf, edgeRefOf, faceIndexOf, faceRefOf } from "../app/topology";
+import type { TopologyRef } from "@fabcad/cad-document";
 import { documentStore, editSketchSolved, modelState, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { useNumericKeypad } from "../panels/ExpressionInput";
@@ -88,16 +90,14 @@ function dialogHighlights(dialog: Dialog | null, scene: ViewportScene): Highligh
   if (!dialog) return [];
   const out: Highlight[] = [];
   if ((dialog.type === "fillet" || dialog.type === "chamfer") && dialog.bodyId) {
-    const g = scene.bodyGeometry(dialog.bodyId);
     for (const ref of dialog.edges) {
-      const edge = g?.edges.find((e) => near(e.midpoint, ref.point));
-      if (edge) out.push({ kind: "edge", bodyId: dialog.bodyId, edgeIndex: edge.edgeIndex });
+      const edgeIndex = edgeIndexOf(dialog.bodyId, ref);
+      if (edgeIndex >= 0) out.push({ kind: "edge", bodyId: dialog.bodyId, edgeIndex });
     }
   } else if (dialog.type === "shell" && dialog.bodyId) {
-    const g = scene.bodyGeometry(dialog.bodyId);
     for (const ref of dialog.faces) {
-      const face = g?.faces.find((f) => near(f.center, ref.point));
-      if (face) out.push({ kind: "face", bodyId: dialog.bodyId, faceIndex: face.faceIndex });
+      const faceIndex = faceIndexOf(dialog.bodyId, ref);
+      if (faceIndex >= 0) out.push({ kind: "face", bodyId: dialog.bodyId, faceIndex });
     }
   } else if (dialog.type === "combine") {
     if (dialog.targetBodyId) out.push({ kind: "body", bodyId: dialog.targetBodyId });
@@ -276,31 +276,35 @@ export function Viewport(): ReactElement {
       }
       if (dialog && (dialog.type === "fillet" || dialog.type === "chamfer")) {
         if (hover?.kind !== "edge") return;
+        const picked = edgeRefOf(hover.bodyId, hover.edgeIndex, hover.point);
         if (dialog.bodyId && dialog.bodyId !== hover.bodyId) {
-          patchDialog({ bodyId: hover.bodyId, edges: [{ point: hover.point }] });
+          patchDialog({ bodyId: hover.bodyId, edges: [picked] });
           return;
         }
-        const exists = dialog.edges.some((e) => near(e.point, hover.point));
+        const same = (e: TopologyRef): boolean =>
+          edgeIndexOf(hover.bodyId, e) === hover.edgeIndex;
         patchDialog({
           bodyId: hover.bodyId,
-          edges: exists
-            ? dialog.edges.filter((e) => !near(e.point, hover.point))
-            : [...dialog.edges, { point: hover.point }],
+          edges: dialog.edges.some(same)
+            ? dialog.edges.filter((e) => !same(e))
+            : [...dialog.edges, picked],
         });
         return;
       }
       if (dialog?.type === "shell") {
         if (hover?.kind !== "face") return;
+        const picked = faceRefOf(hover.bodyId, hover.faceIndex, hover.point, hover.normal);
         if (dialog.bodyId && dialog.bodyId !== hover.bodyId) {
-          patchDialog({ bodyId: hover.bodyId, faces: [{ point: hover.point, normal: hover.normal }] });
+          patchDialog({ bodyId: hover.bodyId, faces: [picked] });
           return;
         }
-        const exists = dialog.faces.some((f) => near(f.point, hover.point));
+        const same = (f: TopologyRef): boolean =>
+          faceIndexOf(hover.bodyId, f) === hover.faceIndex;
         patchDialog({
           bodyId: hover.bodyId,
-          faces: exists
-            ? dialog.faces.filter((f) => !near(f.point, hover.point))
-            : [...dialog.faces, { point: hover.point, normal: hover.normal }],
+          faces: dialog.faces.some(same)
+            ? dialog.faces.filter((f) => !same(f))
+            : [...dialog.faces, picked],
         });
         return;
       }

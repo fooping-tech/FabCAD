@@ -34,6 +34,7 @@ import {
   profileRefOf,
 } from "@fabcad/sketch";
 import { projectInto } from "../sketch/projectTool";
+import { edgeRefOf, faceRefOf } from "./topology";
 import {
   type Dialog,
   type Selection,
@@ -146,11 +147,20 @@ export function startSketchOnFace(
   const n = norm3(normal);
   const origin = scale3(n, dot3(n, point));
   const plane = makePlane(origin, n, xHint);
-  const geometry = modelState.get().bodies[bodyId]?.geometry;
+  const model = modelState.get().bodies[bodyId];
+  const geometry = model?.geometry;
   startSketch(
-    { type: "face", bodyId, hint: point, plane },
+    {
+      type: "face",
+      bodyId,
+      hint: point,
+      plane,
+      ...(faceIndex !== undefined ? { ref: faceRefOf(bodyId, faceIndex, point, normal) } : {}),
+    },
     geometry && faceIndex !== undefined
-      ? (sketch) => projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }).sketch
+      ? (sketch) =>
+          projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }, model.names)
+            .sketch
       : undefined,
   );
 }
@@ -168,19 +178,24 @@ export function faceAsProfile(
   normal: Vec3,
   faceIndex: number,
 ): { sketchId: string; profiles: ProfileRef[] } | null {
-  const geometry = modelState.get().bodies[bodyId]?.geometry;
+  const model = modelState.get().bodies[bodyId];
+  const geometry = model?.geometry;
   if (!geometry) return null;
   const xHint = Math.abs(normal.x) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
   const n = norm3(normal);
   const plane = makePlane(scale3(n, dot3(n, point)), n, xHint);
   const out: CreatedRef = {};
-  const create = addSketch({ type: "face", bodyId, hint: point, plane }, out);
+  const create = addSketch(
+    { type: "face", bodyId, hint: point, plane, ref: faceRefOf(bodyId, faceIndex, point, normal) },
+    out,
+  );
   const ok = run(
     command(FACE_PROFILE, (doc) => {
       const next = create.apply(doc);
       return out.id
         ? applySketchEdit(next, out.id, (sketch) =>
-            projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }).sketch,
+            projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }, model.names)
+              .sketch,
           )
         : next;
     }),
@@ -330,7 +345,9 @@ export function openDialog(type: Dialog["type"]): void {
         type,
         editing: null,
         bodyId,
-        edges: edges.filter((e) => e.bodyId === bodyId).map((e) => ({ point: e.point })),
+        edges: edges
+          .filter((e) => e.bodyId === bodyId)
+          .map((e) => edgeRefOf(e.bodyId, e.edgeIndex, e.point)),
         value: type === "fillet" ? "3" : "2",
       };
       break;
@@ -344,7 +361,7 @@ export function openDialog(type: Dialog["type"]): void {
         bodyId,
         faces: faces
           .filter((f) => f.bodyId === bodyId)
-          .map((f) => ({ point: f.point, normal: f.normal })),
+          .map((f) => faceRefOf(f.bodyId, f.faceIndex, f.point, f.normal)),
         value: "2",
       };
       break;

@@ -15,6 +15,7 @@ import {
   updateSketch,
 } from "@fabcad/cad-document";
 import {
+  type BodyNames,
   type FeatureStatus,
   type SketchSolveInfo,
   type SketchStatus,
@@ -41,6 +42,8 @@ export interface BodyModel {
   id: string;
   hash: string;
   geometry: BodyGeometry;
+  /** Persistent names of the faces and edges of `geometry`. */
+  names: BodyNames;
 }
 
 export interface ModelState {
@@ -243,7 +246,8 @@ async function recomputeLoop(): Promise<void> {
       const bodies: Record<string, BodyModel> = {};
       for (const b of result.bodies) {
         const geometry = b.geometry ?? previous[b.id]?.geometry;
-        if (geometry) bodies[b.id] = { id: b.id, hash: b.hash, geometry };
+        const names = b.names ?? previous[b.id]?.names;
+        if (geometry && names) bodies[b.id] = { id: b.id, hash: b.hash, geometry, names };
       }
       modelState.set({
         bodies,

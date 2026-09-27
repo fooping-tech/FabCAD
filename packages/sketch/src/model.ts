@@ -1,4 +1,4 @@
-import type { OriginPlaneName, Plane3, Vec2, Vec3 } from "@fabcad/geometry";
+import type { OriginPlaneName, Plane3, TopologyRef, Vec2, Vec3 } from "@fabcad/geometry";
 
 /**
  * Sketch data model. A sketch is plain serialisable data: entities reference points by id,
@@ -148,13 +148,23 @@ export interface ProjectedGeometryRef {
    */
   index?: number;
   count?: number;
+  /** Persistent name of the source edge. Takes precedence over `index` and `hint`. */
+  ref?: TopologyRef;
   entityIds: EntityId[];
 }
 
 export type SketchPlaneRef =
   | { type: "origin"; plane: OriginPlaneName }
   | { type: "custom"; plane: Plane3 }
-  | { type: "face"; bodyId: string; hint: Vec3; plane: Plane3 };
+  | {
+      type: "face";
+      bodyId: string;
+      hint: Vec3;
+      /** The plane of the face when the sketch was last evaluated. */
+      plane: Plane3;
+      /** Persistent name of the face: the sketch follows the face when the body changes. */
+      ref?: TopologyRef;
+    };
 
 export interface Sketch {
   id: string;

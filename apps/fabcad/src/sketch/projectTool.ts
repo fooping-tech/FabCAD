@@ -1,6 +1,6 @@
 import { type BodyGeometry, type MeshEdgeGroup, edgePolyline, faceEdges } from "@fabcad/brep";
-import { resolveSketchPlane } from "@fabcad/features";
-import type { Plane3, Vec3 } from "@fabcad/geometry";
+import { type BodyNames, makeEdgeRef, resolveSketchPlane } from "@fabcad/features";
+import type { Plane3, TopologyRef, Vec3 } from "@fabcad/geometry";
 import { type Sketch, addProjection, projectPolyline } from "@fabcad/sketch";
 import { appState, toast } from "../app/appState";
 import { documentStore, editSketchSolved, modelState } from "../app/session";
@@ -17,7 +17,10 @@ export function projectInto(
   plane: Plane3,
   geometry: BodyGeometry,
   pick: ProjectPick,
+  names?: BodyNames,
 ): { sketch: Sketch; added: number; edges: number } {
+  const edgeRef = (index: number): TopologyRef | undefined =>
+    names ? (makeEdgeRef({ geometry, names }, index) ?? undefined) : undefined;
   let edges: MeshEdgeGroup[] = [];
   if (pick.kind === "edge") {
     const e = geometry.edges[pick.edgeIndex];
@@ -36,7 +39,14 @@ export function projectInto(
   ): void => {
     const shape = projectPolyline(plane, points);
     if (!shape) return;
-    const result = addProjection(current, shape, { bodyId: pick.bodyId, source, hint, index, count });
+    const result = addProjection(current, shape, {
+      bodyId: pick.bodyId,
+      source,
+      hint,
+      index,
+      count,
+      ...(source === "edge" && names ? { ref: edgeRef(index) } : {}),
+    });
     if (!result) return;
     current = result.sketch;
     added += 1;
@@ -57,13 +67,15 @@ export function projectInto(
 export function projectPick(pick: ProjectPick): number {
   const sketchId = appState.get().activeSketchId;
   const feature = sketchId ? documentStore.document.features[sketchId] : undefined;
-  const geometry = modelState.get().bodies[pick.bodyId]?.geometry;
+  const model = modelState.get().bodies[pick.bodyId];
+  const geometry = model?.geometry;
+  const names = model?.names;
   if (!sketchId || feature?.type !== "sketch" || !geometry) return 0;
   const plane = resolveSketchPlane(feature.sketch.plane);
   let added = 0;
   let edges = 0;
   const ok = editSketchSolved(sketchId, "Project", (sketch) => {
-    const result = projectInto(sketch, plane, geometry, pick);
+    const result = projectInto(sketch, plane, geometry, pick, names);
     added = result.added;
     edges = result.edges;
     return result.sketch;

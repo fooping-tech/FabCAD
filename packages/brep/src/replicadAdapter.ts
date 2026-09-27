@@ -187,6 +187,34 @@ function fuseAll(shapes: Shape3D[]): Shape3D {
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
 
+/** Circle through three points in space. */
+function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: number } | null {
+  const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const ac = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+  const n = {
+    x: ab.y * ac.z - ab.z * ac.y,
+    y: ab.z * ac.x - ab.x * ac.z,
+    z: ab.x * ac.y - ab.y * ac.x,
+  };
+  const n2 = n.x * n.x + n.y * n.y + n.z * n.z;
+  if (n2 < 1e-18) return null;
+  const ab2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+  const ac2 = ac.x * ac.x + ac.y * ac.y + ac.z * ac.z;
+  // (|ab|² · (ac × n) − |ac|² · (ab × n)) / (2 |n|²), measured from a … with the usual signs.
+  const acn = { x: ac.y * n.z - ac.z * n.y, y: ac.z * n.x - ac.x * n.z, z: ac.x * n.y - ac.y * n.x };
+  const abn = { x: ab.y * n.z - ab.z * n.y, y: ab.z * n.x - ab.x * n.z, z: ab.x * n.y - ab.y * n.x };
+  const k = 1 / (2 * n2);
+  const o = {
+    x: (ac2 * abn.x - ab2 * acn.x) * -k,
+    y: (ac2 * abn.y - ab2 * acn.y) * -k,
+    z: (ac2 * abn.z - ab2 * acn.z) * -k,
+  };
+  return {
+    center: { x: a.x + o.x, y: a.y + o.y, z: a.z + o.z },
+    radius: Math.hypot(o.x, o.y, o.z),
+  };
+}
+
 class ReplicadKernel implements GeometryKernel {
   readonly name = "replicad-opencascade";
 
@@ -238,6 +266,9 @@ class ReplicadKernel implements GeometryKernel {
 
   private findEdges(shape: Shape3D, refs: PointRef[]): replicad.Edge[] {
     const edges = shape.edges;
+    if (refs.length > 0 && refs.every((r) => r.index !== undefined && edges[r.index])) {
+      return [...new Set(refs.map((r) => r.index!))].map((i) => edges[i]!);
+    }
     const samples = edges.map((e) => {
       const pts: Vec3[] = [];
       for (let i = 0; i <= 8; i++) pts.push(vec(e.pointAt(i / 8)));
@@ -263,6 +294,9 @@ class ReplicadKernel implements GeometryKernel {
 
   private findFaces(shape: Shape3D, refs: PointRef[]): replicad.Face[] {
     const faces = shape.faces;
+    if (refs.length > 0 && refs.every((r) => r.index !== undefined && faces[r.index])) {
+      return [...new Set(refs.map((r) => r.index!))].map((i) => faces[i]!);
+    }
     const info = faces.map((f) => ({ center: vec(f.center), normal: vec(f.normalAt()) }));
     const picked = new Set<number>();
     for (const ref of refs) {
@@ -337,12 +371,14 @@ class ReplicadKernel implements GeometryKernel {
         let center: Vec3 = { x: 0, y: 0, z: 0 };
         let normal: Vec3 = { x: 0, y: 0, z: 1 };
         let surface: SurfaceKind = "other";
+        let area = 0;
         if (face) {
           surface = SURFACES[face.geomType] ?? "other";
           center = vec(face.center);
           normal = vec(face.normalAt());
+          area = replicad.measureArea(face);
         }
-        return { faceIndex: i, start: g.start, count: g.count, surface, center, normal };
+        return { faceIndex: i, start: g.start, count: g.count, surface, center, normal, area };
       });
 
       const edgeMesh = s.meshEdges({ tolerance, angularTolerance });
@@ -350,14 +386,30 @@ class ReplicadKernel implements GeometryKernel {
       const edgeGroups: MeshEdgeGroup[] = edgeMesh.edgeGroups.map((g, i) => {
         const edge = brepEdges[i];
         const type = edge?.geomType;
-        return {
+        const zero = { x: 0, y: 0, z: 0 };
+        const from = edge ? vec(edge.startPoint) : zero;
+        const to = edge ? vec(edge.endPoint) : zero;
+        const midpoint = edge ? vec(edge.pointAt(0.5)) : zero;
+        const group: MeshEdgeGroup = {
           edgeIndex: i,
           start: g.start,
           count: g.count,
-          midpoint: edge ? vec(edge.pointAt(0.5)) : { x: 0, y: 0, z: 0 },
+          midpoint,
           curve: type === "LINE" ? "line" : type === "CIRCLE" ? "circle" : "other",
           length: edge ? edge.length : 0,
+          from,
+          to,
+          closed: dist3(from, to) < 1e-7 && (edge?.length ?? 0) > 1e-7,
         };
+        if (edge && type === "CIRCLE") {
+          // Three points on the curve give the circle exactly.
+          const circle = circleThrough(vec(edge.pointAt(0)), vec(edge.pointAt(1 / 3)), vec(edge.pointAt(2 / 3)));
+          if (circle) {
+            group.radius = circle.radius;
+            group.center = circle.center;
+          }
+        }
+        return group;
       });
 
       const seen = new Set<string>();

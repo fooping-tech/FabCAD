@@ -7,6 +7,17 @@ import {
   nearestVertex,
 } from "@fabcad/brep";
 import {
+  type BodyNames,
+  type FaceSample,
+  type NamedBody,
+  distanceToFace,
+  nameSolid,
+  nearestNamedEdge,
+  propagateNames,
+  resolveEdgeRef,
+  resolveFaceRef,
+} from "./naming";
+import {
   type CadDocument,
   type Feature,
   type ParameterEvaluation,
@@ -21,10 +32,19 @@ import {
   type Plane3,
   type Profile2,
   type SolidTopology,
+  type TopologyRef,
   type Vec3,
+  add3,
+  curveStart,
+  distanceToPlane,
+  dot3,
+  len3,
+  makePlane,
   norm3,
   planeToWorld,
+  scale3,
   sub3,
+  worldToPlane,
 } from "@fabcad/geometry";
 import {
   type ProfileRef,
@@ -33,6 +53,7 @@ import {
   type SolveStatus,
   detectProfiles,
   getPoint,
+  hitTestSketch,
   projectPolyline,
   resolveProfileRef,
   updateProjection,
@@ -71,6 +92,8 @@ export interface BodyResult {
   hash: string;
   /** Null when the caller already has the geometry for this hash. */
   geometry: BodyGeometry | null;
+  /** Persistent names of the faces and edges; null together with `geometry`. */
+  names: BodyNames | null;
 }
 
 export interface RecomputeResult {
@@ -91,7 +114,7 @@ export interface RecomputeOptions {
   known?: Record<string, string>;
 }
 
-interface BodyState {
+interface BodyState extends NamedBody {
   shape: KernelShape;
   hash: string;
 }
@@ -145,11 +168,8 @@ function decodeBase64(data: string): Uint8Array {
 export class FeatureEngine {
   private cache = new Map<string, CacheEntry>();
   private bodies = new Map<string, BodyState>();
-  private geometryCache = new Map<string, { hash: string; geometry: BodyGeometry }>();
   private topologyCache = new Map<string, { hash: string; topology: SolidTopology }>();
   private sketches = new Map<string, SketchEval>();
-  /** Tessellations used for re-projecting sketch geometry, by body hash. */
-  private projectionGeometry = new Map<string, BodyGeometry>();
   /** Number of features actually evaluated (not served from cache) by the last recompute. */
   lastEvaluated: string[] = [];
 
@@ -167,7 +187,6 @@ export class FeatureEngine {
     const bodies = new Map<string, BodyState>();
     const sketches = new Map<string, SketchEval>();
     const sketchUpdates: Record<string, Sketch> = {};
-    const projectionHashes = new Set<string>();
     const used = new Set<string>();
     this.lastEvaluated = [];
 
@@ -186,7 +205,7 @@ export class FeatureEngine {
       }
       if (feature.type === "sketch") {
         try {
-          const projected = this.reproject(feature.sketch, bodies, projectionHashes);
+          const projected = this.reproject(feature.sketch, bodies);
           const evaluated = this.evaluateSketch(
             projected === feature.sketch ? feature : { ...feature, sketch: projected },
             scope,
@@ -266,37 +285,17 @@ export class FeatureEngine {
 
     this.bodies = bodies;
     this.sketches = sketches;
-    for (const hash of [...this.projectionGeometry.keys()]) {
-      if (!projectionHashes.has(hash)) this.projectionGeometry.delete(hash);
-    }
 
     const results: BodyResult[] = [];
     for (const [id, state] of bodies) {
       if (!doc.bodies[id]) continue;
-      let geo = this.geometryCache.get(id);
-      if (!geo || geo.hash !== state.hash) {
-        try {
-          geo = { hash: state.hash, geometry: this.kernel.tessellate(state.shape) };
-          this.geometryCache.set(id, geo);
-        } catch (err) {
-          const creator = doc.bodies[id]!.createdBy;
-          statuses[creator] = {
-            id: creator,
-            state: "error",
-            message: err instanceof Error ? err.message : String(err),
-            cached: false,
-          };
-          continue;
-        }
-      }
+      const known = options.known?.[id] === state.hash;
       results.push({
         id,
         hash: state.hash,
-        geometry: options.known?.[id] === state.hash ? null : geo.geometry,
+        geometry: known ? null : state.geometry,
+        names: known ? null : state.names,
       });
-    }
-    for (const id of [...this.geometryCache.keys()]) {
-      if (!bodies.has(id)) this.geometryCache.delete(id);
     }
     for (const id of [...this.topologyCache.keys()]) {
       if (!bodies.has(id)) this.topologyCache.delete(id);
@@ -324,7 +323,11 @@ export class FeatureEngine {
   }
 
   bodyGeometry(bodyId: string): BodyGeometry | null {
-    return this.geometryCache.get(bodyId)?.geometry ?? null;
+    return this.bodies.get(bodyId)?.geometry ?? null;
+  }
+
+  bodyNames(bodyId: string): BodyNames | null {
+    return this.bodies.get(bodyId)?.names ?? null;
   }
 
   bodyIds(): string[] {
@@ -357,7 +360,6 @@ export class FeatureEngine {
     for (const entry of this.cache.values()) this.release(entry);
     this.cache.clear();
     this.bodies.clear();
-    this.geometryCache.clear();
     this.topologyCache.clear();
   }
 
@@ -383,31 +385,19 @@ export class FeatureEngine {
    * Project the source geometry of every projection again, from the bodies as they are at this
    * point of the timeline. Returns the same sketch object when nothing moved.
    */
-  private reproject(
-    sketch: Sketch,
-    bodies: Map<string, BodyState>,
-    usedHashes: Set<string>,
-  ): Sketch {
-    if (sketch.projections.length === 0) return sketch;
-    const plane = resolveSketchPlane(sketch.plane);
-    let current = sketch;
+  private reproject(sketch: Sketch, bodies: Map<string, BodyState>): Sketch {
+    let current = this.followFace(sketch, bodies);
+    if (sketch.projections.length === 0) return current;
+    const plane = resolveSketchPlane(current.plane);
     for (const ref of sketch.projections) {
       const body = bodies.get(ref.bodyId);
       if (!body) continue;
-      usedHashes.add(body.hash);
-      let geometry = this.projectionGeometry.get(body.hash);
-      if (!geometry) {
-        try {
-          geometry = this.kernel.tessellate(body.shape);
-        } catch {
-          continue;
-        }
-        this.projectionGeometry.set(body.hash, geometry);
-      }
+      const geometry = body.geometry;
       let points: Vec3[];
       let hint: Vec3;
-      // The index identifies the source as long as the body kept its structure.
       if ((ref.source ?? "edge") === "vertex") {
+        // Vertices have no name of their own: the index holds while the body keeps its
+        // structure, then the position decides.
         const total = geometry.vertices.length / 3;
         const i = ref.index;
         const v =
@@ -422,10 +412,14 @@ export class FeatureEngine {
         points = [v];
         hint = v;
       } else {
-        const edge =
-          ref.index !== undefined && ref.count === geometry.edges.length
-            ? (geometry.edges[ref.index] ?? nearestEdge(geometry, ref.hint))
-            : nearestEdge(geometry, ref.hint);
+        let edge = ref.ref ? geometry.edges[resolveEdgeRef(ref.ref, body)?.index ?? -1] : undefined;
+        if (!edge) {
+          edge =
+            ref.index !== undefined && ref.count === geometry.edges.length
+              ? (geometry.edges[ref.index] ?? undefined)
+              : undefined;
+        }
+        edge ??= nearestEdge(geometry, ref.hint) ?? undefined;
         if (!edge) continue;
         points = edgePolyline(geometry, edge);
         hint = edge.midpoint;
@@ -436,6 +430,32 @@ export class FeatureEngine {
       current = updateProjection(current, live, shape, hint) ?? current;
     }
     return current;
+  }
+
+  /** A sketch drawn on a face of a body stays on that face when the body changes. */
+  private followFace(sketch: Sketch, bodies: Map<string, BodyState>): Sketch {
+    const plane = sketch.plane;
+    if (plane.type !== "face" || !plane.ref) return sketch;
+    const body = bodies.get(plane.bodyId);
+    const found = body ? resolveFaceRef(plane.ref, body) : null;
+    const face = found && body ? body.geometry.faces[found.index] : undefined;
+    if (!face || face.surface !== "plane") return sketch;
+    const n = norm3(face.normal);
+    const d = n.x * face.center.x + n.y * face.center.y + n.z * face.center.z;
+    const origin = { x: n.x * d, y: n.y * d, z: n.z * d };
+    const next = makePlane(origin, n, plane.plane.xDir);
+    const same =
+      Math.hypot(
+        next.origin.x - plane.plane.origin.x,
+        next.origin.y - plane.plane.origin.y,
+        next.origin.z - plane.plane.origin.z,
+      ) < 1e-9 &&
+      Math.hypot(
+        next.normal.x - plane.plane.normal.x,
+        next.normal.y - plane.plane.normal.y,
+        next.normal.z - plane.plane.normal.z,
+      ) < 1e-9;
+    return same ? sketch : { ...sketch, plane: { ...plane, plane: next, hint: face.center } };
   }
 
   private evaluateSketch(feature: Extract<Feature, { type: "sketch" }>, scope: Scope): SketchEval {
@@ -526,16 +546,57 @@ export class FeatureEngine {
     return { sketch, profiles: [...picked.values()].map((r) => r.profile) };
   }
 
+  /** Tessellate a shape and put it into the form bodies are kept in. */
+  private named(shape: KernelShape, hash: string, names: (g: BodyGeometry) => BodyNames): BodyState {
+    const geometry = this.kernel.tessellate(shape);
+    return { shape, hash, geometry, names: names(geometry) };
+  }
+
+  /**
+   * Names for a solid swept from sketch profiles. `toSketch` maps a point on a side face back
+   * to the point of the sketch it was generated from; `cap` tells the end faces apart.
+   */
+  private sweptNames(
+    featureId: string,
+    sketch: SketchEval,
+    sketchId: string,
+    cap: (sample: FaceSample, surface: string) => "start" | "end" | null,
+    toSketch: (p: Vec3) => { x: number; y: number } | null,
+  ): (g: BodyGeometry) => BodyNames {
+    return (g) =>
+      nameSolid(g, featureId, (faceIndex, samples) => {
+        const first = samples[0];
+        if (!first) return null;
+        const role = cap(first, g.faces[faceIndex]!.surface);
+        if (role) return { role };
+        // The sketch curve that most of the samples lie on.
+        const votes = new Map<string, number>();
+        for (const s of samples) {
+          const p = toSketch(s.point);
+          if (!p) continue;
+          const hit = hitTestSketch(sketch.sketch, p, 0.2, { points: false });
+          const e = hit ? sketch.sketch.entities[hit.id] : undefined;
+          if (hit && e && e.type !== "point" && !e.construction) {
+            votes.set(hit.id, (votes.get(hit.id) ?? 0) + 1);
+          }
+        }
+        const entity = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        return entity ? { role: "side", sketch: sketchId, entity } : { role: "side" };
+      });
+  }
+
   private applyOperation(
-    feature: Extract<Feature, { type: "extrude" | "revolve" }>,
+    feature: Extract<Feature, { type: "extrude" | "revolve" | "sweep" | "loft" }>,
     tool: KernelShape,
+    toolNames: (g: BodyGeometry) => BodyNames,
     bodies: Map<string, BodyState>,
     entry: CacheEntry,
   ): void {
     entry.owned.push(tool);
+    const made = this.named(tool, entry.hash, toolNames);
     if (feature.operation === "new") {
       if (!this.kernel.isValidSolid(tool)) throw new Error("The result is not a valid solid.");
-      entry.outputs.set(feature.bodyId, { shape: tool, hash: entry.hash });
+      entry.outputs.set(feature.bodyId, made);
       return;
     }
     if (feature.targetBodyIds.length === 0) throw new Error("No target body selected.");
@@ -548,8 +609,32 @@ export class FeatureEngine {
       if (!this.kernel.isValidSolid(result)) {
         throw new Error("The operation removes the whole body.");
       }
-      entry.outputs.set(targetId, { shape: result, hash: hashString(entry.hash + targetId) });
+      entry.outputs.set(
+        targetId,
+        this.named(result, hashString(entry.hash + targetId), (g) =>
+          propagateNames([target, made], g, feature.id),
+        ),
+      );
     }
+  }
+
+  /** Indices of the edges that references point at, in the body as it is now. */
+  private edgeSelection(refs: TopologyRef[], body: BodyState): { index: number; point: Vec3 }[] {
+    const out = new Map<number, { index: number; point: Vec3 }>();
+    for (const ref of refs) {
+      const found = resolveEdgeRef(ref, body);
+      if (found) out.set(found.index, { index: found.index, point: ref.point });
+    }
+    return [...out.values()];
+  }
+
+  private faceSelection(refs: TopologyRef[], body: BodyState): { index: number; point: Vec3 }[] {
+    const out = new Map<number, { index: number; point: Vec3 }>();
+    for (const ref of refs) {
+      const found = resolveFaceRef(ref, body);
+      if (found) out.set(found.index, { index: found.index, point: ref.point });
+    }
+    return [...out.values()];
   }
 
   private async evaluate(
@@ -576,7 +661,23 @@ export class FeatureEngine {
               ? [-d, 0]
               : [0, d];
         const tool = kernel.extrude(profiles, sketch.plane, from, to);
-        this.applyOperation(feature, tool, bodies, entry);
+        const plane = sketch.plane;
+        // "start" is the end of the extrusion that lies on the sketch side.
+        const near = Math.abs(from) <= Math.abs(to) ? from : to;
+        const names = this.sweptNames(
+          feature.id,
+          sketch,
+          feature.sketchId,
+          (s, surface) => {
+            if (surface !== "plane") return null;
+            const along = dot3(s.normal, plane.normal);
+            if (Math.abs(along) < 0.999) return null;
+            const h = distanceToPlane(plane, s.point);
+            return Math.abs(h - near) < 1e-6 ? "start" : "end";
+          },
+          (p) => worldToPlane(plane, p),
+        );
+        this.applyOperation(feature, tool, names, bodies, entry);
         return;
       }
       case "revolve": {
@@ -597,48 +698,136 @@ export class FeatureEngine {
           direction = norm3(sub3(ends[1], ends[0]));
         }
         const tool = kernel.revolve(profiles, sketch.plane, origin, direction, angle);
-        this.applyOperation(feature, tool, bodies, entry);
+        const plane = sketch.plane;
+        const full = Math.abs(Math.abs(angle) - 360) < 1e-9;
+        // Side of the axis on which the profile lies, within the sketch plane.
+        const inside = profiles[0] ? curveStart(profiles[0].outer.curves[0]!) : { x: 0, y: 0 };
+        const reference = sub3(planeToWorld(plane, inside), origin);
+        const axial = dot3(reference, direction);
+        const radial = norm3(sub3(reference, scale3(direction, axial)));
+        const names = this.sweptNames(
+          feature.id,
+          sketch,
+          feature.sketchId,
+          (s, surface) => {
+            if (full || surface !== "plane") return null;
+            // The end faces contain the axis: their normal is perpendicular to it.
+            if (Math.abs(dot3(s.normal, direction)) > 1e-3) return null;
+            const inPlane = Math.abs(distanceToPlane(plane, s.point)) < 1e-6;
+            return inPlane && Math.abs(dot3(s.normal, plane.normal)) > 0.999 ? "start" : "end";
+          },
+          (p) => {
+            // Turn the point back about the axis into the sketch plane.
+            const rel = sub3(p, origin);
+            const a = dot3(rel, direction);
+            const r = len3(sub3(rel, scale3(direction, a)));
+            return worldToPlane(plane, add3(origin, add3(scale3(direction, a), scale3(radial, r))));
+          },
+        );
+        this.applyOperation(feature, tool, names, bodies, entry);
         return;
       }
       case "boolean": {
         const target = this.requireBody(bodies, feature.targetBodyId);
-        const tools = feature.toolBodyIds.map((id) => this.requireBody(bodies, id).shape);
-        const result = kernel.boolean(feature.operation, target.shape, tools);
+        const tools = feature.toolBodyIds.map((id) => this.requireBody(bodies, id));
+        const result = kernel.boolean(
+          feature.operation,
+          target.shape,
+          tools.map((t) => t.shape),
+        );
         entry.owned.push(result);
         if (!kernel.isValidSolid(result)) throw new Error("The result is empty.");
-        entry.outputs.set(feature.targetBodyId, { shape: result, hash: entry.hash });
+        entry.outputs.set(
+          feature.targetBodyId,
+          this.named(result, entry.hash, (g) => propagateNames([target, ...tools], g, feature.id)),
+        );
         return;
       }
-      case "fillet": {
-        const body = this.requireBody(bodies, feature.bodyId);
-        const radius = evaluateAs(feature.radius, "length", scope);
-        const result = kernel.fillet(body.shape, feature.edges, radius);
-        entry.owned.push(result);
-        entry.outputs.set(feature.bodyId, { shape: result, hash: entry.hash });
-        return;
-      }
+      case "fillet":
       case "chamfer": {
         const body = this.requireBody(bodies, feature.bodyId);
-        const distance = evaluateAs(feature.distance, "length", scope);
-        const result = kernel.chamfer(body.shape, feature.edges, distance);
+        const size =
+          feature.type === "fillet"
+            ? evaluateAs(feature.radius, "length", scope)
+            : evaluateAs(feature.distance, "length", scope);
+        const edges = this.edgeSelection(feature.edges, body);
+        if (edges.length === 0) throw new Error("The selected edge no longer exists.");
+        const result =
+          feature.type === "fillet"
+            ? kernel.fillet(body.shape, edges, size)
+            : kernel.chamfer(body.shape, edges, size);
         entry.owned.push(result);
-        entry.outputs.set(feature.bodyId, { shape: result, hash: entry.hash });
+        const indices = edges.map((e) => e.index);
+        entry.outputs.set(
+          feature.bodyId,
+          this.named(result, entry.hash, (g) =>
+            propagateNames([body], g, feature.id, (_i, samples) => {
+              const of = nearestNamedEdge(body, indices, samples);
+              return of ? { role: feature.type, of: [of] } : { role: feature.type };
+            }),
+          ),
+        );
         return;
       }
       case "shell": {
         const body = this.requireBody(bodies, feature.bodyId);
         const thickness = evaluateAs(feature.thickness, "length", scope);
-        const result = kernel.shell(body.shape, feature.faces, thickness);
+        const faces = this.faceSelection(feature.faces, body);
+        if (faces.length === 0) throw new Error("The selected face no longer exists.");
+        const result = kernel.shell(body.shape, faces, thickness);
         entry.owned.push(result);
-        entry.outputs.set(feature.bodyId, { shape: result, hash: entry.hash });
+        const removed = new Set(faces.map((f) => f.index));
+        entry.outputs.set(
+          feature.bodyId,
+          this.named(result, entry.hash, (g) =>
+            propagateNames(
+              [body],
+              g,
+              feature.id,
+              (_i, samples) => {
+              const s = samples[0];
+              if (!s) return null;
+              // The rim of an opening lies where the removed face was.
+              for (const k of removed) {
+                const hit = distanceToFace(body.geometry, k, s.point);
+                const name = body.names.faces[k]?.key;
+                if (name && hit.distance < 2e-3 && Math.abs(dot3(hit.normal, s.normal)) > 0.985) {
+                  return { role: "rim", of: [name] };
+                }
+              }
+              // An inner wall lies one wall thickness inside the outer face it follows.
+              const out = add3(s.point, scale3(s.normal, -thickness));
+              let best: string | null = null;
+              let bestD = Math.max(1e-3, thickness * 0.02);
+              body.geometry.faces.forEach((_f, k) => {
+                if (removed.has(k)) return;
+                const hit = distanceToFace(body.geometry, k, out);
+                if (hit.distance < bestD && Math.abs(dot3(hit.normal, s.normal)) > 0.985) {
+                  bestD = hit.distance;
+                  best = body.names.faces[k]?.key ?? null;
+                }
+              });
+              return best ? { role: "shell", of: [best] } : { role: "shell" };
+              },
+              (_input, k) => removed.has(k),
+            ),
+          ),
+        );
         return;
       }
       case "import": {
         const shapes = await kernel.importSTEP(decodeBase64(feature.data));
         entry.owned.push(...shapes);
-        const shape = shapes.length === 1 ? shapes[0]! : kernel.boolean("union", shapes[0]!, shapes.slice(1));
+        const shape =
+          shapes.length === 1 ? shapes[0]! : kernel.boolean("union", shapes[0]!, shapes.slice(1));
         if (shapes.length > 1) entry.owned.push(shape);
-        entry.outputs.set(feature.bodyId, { shape, hash: entry.hash });
+        // An imported body has no history: its faces are numbered as they come.
+        entry.outputs.set(
+          feature.bodyId,
+          this.named(shape, entry.hash, (g) =>
+            nameSolid(g, feature.id, (i) => ({ role: "import", entity: String(i) })),
+          ),
+        );
         return;
       }
     }

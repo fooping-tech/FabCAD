@@ -1,4 +1,6 @@
-import type { Vec3 } from "@fabcad/geometry";
+import type { GeometricSignature, TopologyRef } from "@fabcad/geometry";
+
+export type { GeometricSignature, TopologyRef };
 import type { ProfileRef, Sketch } from "@fabcad/sketch";
 
 /**
@@ -6,16 +8,8 @@ import type { ProfileRef, Sketch } from "@fabcad/sketch";
  * history; evaluating it is the job of the feature engine, not of this package.
  */
 
-/** Persistent reference to a B-Rep edge: a point on the edge, matched by proximity on recompute. */
-export interface EdgeRef {
-  point: Vec3;
-}
-
-/** Persistent reference to a B-Rep face: a point on the face and its normal there. */
-export interface FaceRef {
-  point: Vec3;
-  normal?: Vec3;
-}
+export type EdgeRef = TopologyRef;
+export type FaceRef = TopologyRef;
 
 export type BodyOperation = "new" | "join" | "cut" | "intersect";
 export type ExtrudeDirection = "positive" | "negative" | "symmetric";
