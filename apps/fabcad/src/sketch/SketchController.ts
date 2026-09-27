@@ -72,6 +72,14 @@ import {
  * explicitly through `cancel()`, so there is always exactly one active command.
  */
 
+/** Grid that free positions snap to, in mm. */
+const GRID = 1;
+const toGrid = (v: number): number => {
+  const r = Math.round(v / GRID) * GRID;
+  return Object.is(r, -0) ? 0 : r;
+};
+const snapToGrid = (p: Vec2): Vec2 => ({ x: toGrid(p.x), y: toGrid(p.y) });
+
 const HIT_PX = 7;
 const SNAP_PX = 9;
 const DRAG_START_PX = 4;
@@ -172,7 +180,14 @@ export class SketchController {
     const snap: SnapResult = p.meta
       ? { point: raw, kind: "none" }
       : snapPoint(sketch, raw, px * SNAP_PX * this.reach, exclude);
-    return { position: snap.kind === "none" ? raw : snap.point, snap };
+    if (snap.kind !== "none") return { position: snap.point, snap };
+    // Nothing to snap to: land on whole millimetres (Ctrl / Cmd switches all snapping off).
+    const position = this.gridSnap(p) ? snapToGrid(raw) : raw;
+    return { position, snap: { point: position, kind: "none" } };
+  }
+
+  private gridSnap(p: PointerInfo): boolean {
+    return !p.meta && appState.get().toolOptions.gridSnap;
   }
 
   private hitEntity(sketch: Sketch, p: PointerInfo, options?: { points?: boolean; curves?: boolean }): SketchEntity | null {
@@ -632,17 +647,28 @@ export class SketchController {
     if (drag.circle) {
       const c = drag.base.entities[drag.circle];
       if (!c || c.type !== "circle") return;
-      const radius = Math.max(dist2(now, getPoint(drag.base, c.center)), 1e-3);
+      const measured = dist2(now, getPoint(drag.base, c.center));
+      const radius = Math.max(this.gridSnap(p) ? toGrid(measured) : measured, 1e-3);
       const resized = editSketch(drag.base, (b) => b.updateEntity(c.id, { radius }));
       next = solveDrag(resized, []);
     } else {
-      const delta = sub2(now, drag.startSketch);
-      let targets = drag.points.map((pt) => ({ pointId: pt.id, target: add2(pt.start, delta) }));
+      const free = sub2(now, drag.startSketch);
+      const grid = this.gridSnap(p);
+      // One point lands on the grid itself; several points move together by whole millimetres.
+      const delta = grid && drag.points.length > 1 ? snapToGrid(free) : free;
+      let targets = drag.points.map((pt) => {
+        const target = add2(pt.start, delta);
+        return {
+          pointId: pt.id,
+          target: grid && drag.points.length === 1 ? snapToGrid(target) : target,
+        };
+      });
       // A single dragged point snaps to other geometry.
       if (targets.length === 1 && !p.meta) {
         const only = targets[0]!;
-        const px = this.projectorFor(drag.base).pixel(only.target);
-        const snap = snapPoint(drag.base, only.target, px * SNAP_PX * this.reach, [only.pointId]);
+        const at = add2(drag.points[0]!.start, free);
+        const px = this.projectorFor(drag.base).pixel(at);
+        const snap = snapPoint(drag.base, at, px * SNAP_PX * this.reach, [only.pointId]);
         if (snap.kind === "point" || snap.kind === "center") {
           targets = [{ pointId: only.pointId, target: snap.point }];
         }

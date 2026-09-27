@@ -278,6 +278,14 @@ function SketchRibbon(): ReactElement {
               Symmetry constraints
             </label>
           )}
+          <label title="Snap free positions to whole millimetres (hold Ctrl / Cmd to switch off)">
+            <input
+              type="checkbox"
+              checked={options.gridSnap}
+              onChange={(e) => setOptions({ gridSnap: e.target.checked })}
+            />
+            Snap 1 mm
+          </label>
           <label title="Show constraint glyphs">
             <input
               type="checkbox"

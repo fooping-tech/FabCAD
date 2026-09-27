@@ -124,6 +124,8 @@ export interface ToolOptions {
   patternSpacing: number;
   scaleFactor: number;
   mirrorSymmetry: boolean;
+  /** Snap picked and dragged sketch positions to whole millimetres. */
+  gridSnap: boolean;
 }
 
 export interface AppState {
@@ -169,6 +171,7 @@ export const appState = new TinyStore<AppState>({
     patternSpacing: 20,
     scaleFactor: 2,
     mirrorSymmetry: true,
+    gridSnap: true,
   },
   selection: [],
   hover: null,

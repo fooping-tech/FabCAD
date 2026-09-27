@@ -16,8 +16,11 @@ export interface ShortcutHooks {
 
 const isEditable = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
+  // A focused checkbox or radio button does not take text: shortcuts stay available.
+  if (target instanceof HTMLInputElement) {
+    return !["checkbox", "radio", "button", "range"].includes(target.type);
+  }
   return (
-    target.tagName === "INPUT" ||
     target.tagName === "TEXTAREA" ||
     target.tagName === "SELECT" ||
     target.isContentEditable
