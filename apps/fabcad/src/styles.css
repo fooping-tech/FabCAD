@@ -396,6 +396,11 @@ table.grid td input { padding: 2px 5px; }
 ::-webkit-scrollbar-thumb { background: #cfd6dc; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #b4bec7; background-clip: padding-box; border: 2px solid transparent; }
 
+.unit-field { position: relative; }
+.unit-field.has-unit input { padding-right: 34px; }
+.unit-field .unit { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 10.5px; color: var(--ink-faint); pointer-events: none; }
+.inline-editor .unit { align-self: center; padding: 0 6px 0 2px; font-size: 10.5px; color: var(--ink-faint); }
+
 /* ------------------------------------------------ touch and small screens */
 .side-backdrop, .side-grip, .touch-bar, .options-toggle { display: none; }
 

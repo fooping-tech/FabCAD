@@ -1008,6 +1008,11 @@ function DimensionEditor(): ReactElement | null {
   }, [edit?.dimensionId, edit?.value]);
 
   if (!edit) return null;
+  const editedType = (() => {
+    const f = documentStore.document.features[edit.sketchId];
+    return f?.type === "sketch" ? f.sketch.dimensions[edit.dimensionId]?.type : undefined;
+  })();
+  const unit = editedType === "angle" ? "deg" : "mm";
 
   const close = (): void => {
     done.current = true;
@@ -1066,6 +1071,7 @@ function DimensionEditor(): ReactElement | null {
         }}
         onBlur={apply}
       />
+      <span className="unit">{unit}</span>
     </div>
   );
 }

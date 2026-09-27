@@ -43,7 +43,7 @@ export function StatusBar(): ReactElement {
       )}
       {app.cursor && app.activeSketchId && (
         <span className="mono">
-          X {fmt(app.cursor.x)}  Y {fmt(app.cursor.y)}
+          X {fmt(app.cursor.x)} mm  Y {fmt(app.cursor.y)} mm
         </span>
       )}
       {app.selection.length > 0 && <span>{app.selection.length} selected</span>}

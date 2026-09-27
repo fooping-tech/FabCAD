@@ -64,8 +64,10 @@ function NumberOption({
   value,
   min,
   step = 1,
+  unit,
   onChange,
 }: {
+  unit?: string;
   label: string;
   value: number;
   min: number;
@@ -86,6 +88,7 @@ function NumberOption({
         }}
         onKeyDown={(e) => e.stopPropagation()}
       />
+      {unit}
     </label>
   );
 }
@@ -257,13 +260,13 @@ function SketchRibbon(): ReactElement {
             <NumberOption label="Sides" value={options.polygonSides} min={3} onChange={(v) => setOptions({ polygonSides: Math.round(v) })} />
           )}
           {tool === "fillet" && (
-            <NumberOption label="Radius" value={options.filletRadius} min={0.01} step={0.5} onChange={(v) => setOptions({ filletRadius: v })} />
+            <NumberOption unit="mm" label="Radius" value={options.filletRadius} min={0.01} step={0.5} onChange={(v) => setOptions({ filletRadius: v })} />
           )}
           {tool === "chamfer" && (
-            <NumberOption label="Distance" value={options.chamferDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ chamferDistance: v })} />
+            <NumberOption unit="mm" label="Distance" value={options.chamferDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ chamferDistance: v })} />
           )}
           {tool === "offset" && (
-            <NumberOption label="Distance" value={options.offsetDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ offsetDistance: v })} />
+            <NumberOption unit="mm" label="Distance" value={options.offsetDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ offsetDistance: v })} />
           )}
           {tool === "scale" && (
             <NumberOption label="Factor" value={options.scaleFactor} min={0.001} step={0.1} onChange={(v) => setOptions({ scaleFactor: v })} />

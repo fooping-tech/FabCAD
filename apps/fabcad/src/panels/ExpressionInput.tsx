@@ -48,8 +48,10 @@ export function ExpressionInput({
   useEffect(() => setDraft(value), [value]);
   const preview = previewExpression(draft, kind);
   const isPlain = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/.test(draft);
+  const unit = kind === "length" ? "mm" : kind === "angle" ? "deg" : "";
   return (
     <div>
+      <div className={`unit-field${unit ? " has-unit" : ""}`}>
       <input
         value={draft}
         aria-label={label}
@@ -78,6 +80,8 @@ export function ExpressionInput({
           }
         }}
       />
+      {unit && <span className="unit">{unit}</span>}
+      </div>
       {(preview.error || !isPlain) && (
         <div className={preview.error ? "field-error" : "value-preview"} style={{ marginTop: 2 }}>
           {preview.error ? preview.text : `= ${preview.text}`}

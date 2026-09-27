@@ -335,7 +335,7 @@ export function dimensionText(dim: SketchDimension, value: number | null, error?
   if (error) return `${dim.expression} ⚠`;
   const v = value === null ? "?" : trimNumber(value);
   const prefix = dim.type === "radius" ? "R" : dim.type === "diameter" ? "⌀" : "";
-  const suffix = dim.type === "angle" ? "°" : "";
+  const suffix = dim.type === "angle" ? "°" : " mm";
   const isNumber = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*(mm|deg)?\s*$/.test(dim.expression);
   const text = `${prefix}${v}${suffix}`;
   const body = isNumber ? text : `${text}  ƒ ${dim.expression.trim()}`;
