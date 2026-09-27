@@ -508,6 +508,17 @@ export class SketchController {
     if (!feature) return false;
     const { tool } = appState.get();
     const create = createTool(tool);
+    // Double-clicking a dimension edits it whatever the tool, unless a shape is being drawn.
+    // The first click of the double-click may have placed the first point of a shape.
+    if (this.picks.length <= 1 && this.entityPicks.length === 0) {
+      const label = this.hitLabel(p);
+      if (label?.kind === "dimension") {
+        this.picks = [];
+        this.preview = null;
+        this.openDimensionEditor(feature, label.id, false);
+        return true;
+      }
+    }
     if (create && create.clicks === "many") {
       // The second click of the double-click added a duplicate pick.
       const n = this.picks.length;
@@ -800,6 +811,14 @@ export class SketchController {
 
   private dimensionClick(feature: SketchFeature, p: PointerInfo): void {
     const sketch = feature.sketch;
+    // With nothing picked yet, clicking an existing dimension edits it (as in Fusion).
+    if (this.entityPicks.length === 0) {
+      const label = this.hitLabel(p);
+      if (label?.kind === "dimension") {
+        this.openDimensionEditor(feature, label.id, false);
+        return;
+      }
+    }
     const e = this.entityPicks.length < 2 ? this.hitEntity(sketch, p) : null;
     if (e && !this.entityPicks.includes(e.id)) {
       if (e.type === "ellipse" || e.type === "spline") {
