@@ -1,0 +1,15 @@
+{
+  "name": "@fabcad/features",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@fabcad/brep": "*",
+    "@fabcad/cad-document": "*",
+    "@fabcad/geometry": "*",
+    "@fabcad/sketch": "*",
+    "@fabcad/sketch-solver": "*"
+  }
+}

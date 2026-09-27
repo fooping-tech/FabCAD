@@ -1,0 +1,97 @@
+/* Fabrication workspace. Builds on the design system in styles.css. */
+
+/* ------------------------------------------------------------------ side panel */
+.fab-side { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.fab-side .panel { flex: none; }
+.fab-side .panel-body { overflow: visible; flex: none; }
+.fab-side .panel-title { padding: 0; }
+.fab-section-toggle {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  padding: 8px 10px 6px; border-radius: 0; text-align: left;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+}
+.fab-section-toggle svg { width: 10px; height: 10px; flex: none; transition: transform 0.12s; }
+.fab-section-toggle.open svg { transform: rotate(90deg); }
+.fab-section-toggle .fab-section-name { flex: 1; }
+.fab-section-toggle .badge { letter-spacing: 0; text-transform: none; }
+
+.fab-input { position: relative; display: block; }
+.fab-input input { padding-right: 28px; }
+.fab-input .fab-unit {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; color: var(--ink-faint); pointer-events: none;
+}
+.fab-input input::placeholder { color: var(--ink-faint); }
+
+.fab-check { display: flex; align-items: center; gap: 7px; min-height: 24px; cursor: pointer; }
+.fab-check span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fab-check .fab-check-note { margin-left: auto; color: var(--ink-faint); font-size: 10.5px; }
+.fab-check input:disabled + span { color: var(--ink-faint); }
+
+.fab-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fab-row.end { justify-content: flex-end; }
+.fab-row.spread { justify-content: space-between; }
+.fab-subform {
+  display: flex; flex-direction: column; gap: 5px;
+  margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel-alt);
+}
+.fab-note { color: var(--ink-faint); font-size: 10.5px; line-height: 1.45; }
+
+.fab-side .warning-item { font-size: 11px; width: 100%; text-align: left; white-space: normal; border: 0; }
+.fab-side button.warning-item { cursor: pointer; }
+.fab-side button.warning-item:hover { filter: brightness(0.97); }
+.fab-side .warning-item.selected { box-shadow: inset 2px 0 0 currentColor; }
+.fab-warning-more { color: var(--ink-faint); font-size: 10.5px; padding: 2px 2px 0; }
+
+/* ------------------------------------------------------------------- main area */
+.fab-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.fab-toolbar .fab-summary { color: var(--ink-soft); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fab-toolbar .segmented button { padding: 3px 10px; }
+.fab-zoom { display: flex; align-items: center; gap: 2px; }
+.fab-zoom .value-preview { min-width: 40px; text-align: center; }
+
+.fab-empty {
+  max-width: 380px; margin: 60px auto 0; padding: 18px 22px; text-align: center; line-height: 1.55;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft);
+}
+.fab-empty h3 { margin: 0 0 4px; font-size: 13px; color: var(--ink-strong); }
+.fab-empty p { margin: 0; }
+.fab-empty.error { border-color: #ecc2bd; }
+.fab-empty.error h3 { color: var(--danger); }
+
+.part-card { cursor: pointer; display: flex; flex-direction: column; }
+.part-card:hover { border-color: var(--line-strong); }
+.part-card.selected:hover { border-color: var(--accent); }
+.part-card header .fab-part-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-card .thumb svg { width: 100%; height: 134px; display: block; }
+.part-card .meta .kv { grid-template-columns: 76px minmax(0, 1fr); }
+.fab-links { list-style: none; margin: 6px 0 0; padding: 5px 0 0; border-top: 1px dashed var(--line); max-height: 96px; overflow: auto; scrollbar-width: thin; }
+.fab-links li { font-family: var(--mono); font-size: 10.5px; color: var(--ink-soft); line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fab-links-title { font-size: 9.5px; letter-spacing: 0.8px; font-weight: 680; color: var(--ink-faint); text-transform: uppercase; margin-top: 7px; }
+
+.fab-table-wrap { background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: auto; }
+.fab-table-wrap table.grid tr { cursor: pointer; }
+.fab-table-wrap td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.fab-table-wrap th.num { text-align: right; }
+
+.fab-sheets { align-items: safe center; }
+.fab-sheet { display: flex; flex-direction: column; max-width: none; }
+.fab-sheet .sheet-frame { position: relative; overflow: hidden; cursor: crosshair; }
+.fab-sheet-svg { position: absolute; inset: 0; }
+.fab-sheet-svg svg { width: 100%; height: 100%; display: block; }
+/* Same geometry as the exported file; only the stroke is made visible at screen scale. */
+.fab-sheet-svg path { vector-effect: non-scaling-stroke; stroke-width: 1.1px; }
+.fab-sheet-svg g[id="fold"] path { stroke-dasharray: 6 3; }
+.fab-sheet-svg g[id="labels"] { pointer-events: none; opacity: 0.85; }
+.fab-sheet-margin { position: absolute; border: 1px dashed #d5dce3; pointer-events: none; }
+.fab-sheet-highlight {
+  position: absolute; pointer-events: none; border-radius: 2px;
+  background: rgba(63, 133, 183, 0.14); outline: 1.5px solid var(--accent);
+}
+.fab-unplaced { background: var(--danger-soft); color: #8f2a22; border-radius: 6px; padding: 8px 12px; line-height: 1.5; max-width: 640px; }
+.fab-unplaced ul { margin: 2px 0 0; padding-left: 16px; }
+.fab-unplaced button { padding: 0 2px; color: inherit; text-decoration: underline; }

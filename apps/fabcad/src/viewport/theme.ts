@@ -1,0 +1,34 @@
+/** Colours shared by the WebGL scene and the 2D sketch layer. */
+export const COLORS = {
+  background: 0xeef1f4,
+  body: 0xb9c4ce,
+  bodyHover: 0xc9d6e2,
+  edge: 0x2b3d4e,
+  highlight: 0xe08a3c,
+  selected: 0x2f7fb8,
+  planeXY: 0x4b8bb9,
+  planeXZ: 0x5aa469,
+  planeYZ: 0xc7773b,
+  axisX: 0xd0453a,
+  axisY: 0x3d9a4a,
+  axisZ: 0x3a6fd0,
+};
+
+export const SKETCH_COLORS = {
+  curve: "#1f6fa8",
+  curveFull: "#1d2b38",
+  construction: "#c7773b",
+  inactive: "#6f8191",
+  point: "#1f6fa8",
+  selected: "#e0762a",
+  hover: "#f0a45c",
+  preview: "#2f9e6b",
+  conflict: "#d0453a",
+  dimension: "#4a5866",
+  constraint: "#7b61c4",
+  profile: "rgba(75, 139, 185, 0.16)",
+  profileHover: "rgba(240, 164, 92, 0.30)",
+  profileSelected: "rgba(47, 127, 184, 0.38)",
+  grid: "rgba(37, 55, 72, 0.07)",
+  gridMajor: "rgba(37, 55, 72, 0.14)",
+};

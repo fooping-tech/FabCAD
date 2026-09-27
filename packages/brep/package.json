@@ -1,0 +1,17 @@
+{
+  "name": "@fabcad/brep",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./replicad": "./src/replicadAdapter.ts"
+  },
+  "dependencies": {
+    "@fabcad/geometry": "*",
+    "replicad": "^1.1.0",
+    "replicad-opencascadejs": "^1.1.0"
+  }
+}

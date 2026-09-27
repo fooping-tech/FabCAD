@@ -1,0 +1,109 @@
+import { type ReactElement, useEffect } from "react";
+import { appState, toast } from "./app/appState";
+import { installShortcuts } from "./app/shortcuts";
+import { documentStore, startSession } from "./app/session";
+import { useStore } from "./app/tinyStore";
+import {
+  FabricationMain,
+  FabricationSidePanel,
+  FabricationTabs,
+  exportSheets,
+  useFabrication,
+} from "./fabrication";
+import { BrowserTree } from "./panels/BrowserTree";
+import { FeatureDialog } from "./panels/FeatureDialog";
+import { Header, openProject } from "./panels/Header";
+import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
+import { PropertiesPanel } from "./panels/PropertiesPanel";
+import { Ribbon } from "./panels/Ribbon";
+import { StatusBar } from "./panels/StatusBar";
+import { Timeline } from "./panels/Timeline";
+import { Toasts } from "./panels/Toasts";
+import { Viewport } from "./viewport/Viewport";
+
+/**
+ * Exporting manufacturing data works from any workspace, so the fabrication pipeline is kept
+ * alive by a component that renders nothing.
+ */
+function FabricationExportBridge({
+  register,
+}: {
+  register: (fn: (format: "svg" | "dxf") => void) => void;
+}): null {
+  const fabrication = useFabrication();
+  useEffect(() => {
+    register((format) => {
+      const { output, settings, status, stale } = fabrication;
+      if (!output || output.parts.length === 0) {
+        toast(
+          status === "loading"
+            ? "The parts are still being computed. Try again in a moment."
+            : "There are no parts to export. Design a body first.",
+          "warning",
+        );
+        return;
+      }
+      if (stale) {
+        toast("The model is still being recomputed. Try again in a moment.", "warning");
+        return;
+      }
+      exportSheets(format, output, documentStore.document.name, settings.exportLabels);
+    });
+  }, [fabrication, register]);
+  return null;
+}
+
+let exportHandler: (format: "svg" | "dxf") => void = () => undefined;
+const registerExport = (fn: (format: "svg" | "dxf") => void): void => {
+  exportHandler = fn;
+};
+
+export function App(): ReactElement {
+  const workspace = useStore(appState, (s) => s.workspace);
+  const fabricationTab = useStore(appState, (s) => s.fabricationTab);
+  const dialog = useStore(appState, (s) => s.dialog);
+
+  useEffect(() => {
+    startSession();
+    return installShortcuts({ openProject: () => void openProject() });
+  }, []);
+
+  const fabrication = workspace === "fabrication";
+  const showViewport = !fabrication || fabricationTab === "model";
+
+  return (
+    <div className={`app${fabrication ? " no-timeline" : ""}`}>
+      <Header onExportFabrication={(format) => exportHandler(format)} />
+      <Ribbon />
+      <aside className="side">
+        {fabrication ? (
+          <FabricationSidePanel />
+        ) : (
+          <>
+            <BrowserTree />
+            <PropertiesPanel />
+          </>
+        )}
+      </aside>
+      <main className="main">
+        {/* The viewport stays mounted so that the WebGL context and the camera survive. */}
+        <div style={{ position: "absolute", inset: 0, visibility: showViewport ? "visible" : "hidden" }}>
+          <Viewport />
+        </div>
+        {!fabrication && <FeatureDialog />}
+        {fabrication && (
+          <>
+            <FabricationMain />
+            <FabricationTabs />
+          </>
+        )}
+      </main>
+      {!fabrication && <Timeline />}
+      <StatusBar />
+      <Toasts />
+      {dialog?.type === "parameters" && <ParametersDialog />}
+      {dialog?.type === "about" && <AboutDialog />}
+      <FabricationExportBridge register={registerExport} />
+    </div>
+  );
+}

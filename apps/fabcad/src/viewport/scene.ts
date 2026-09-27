@@ -1,0 +1,790 @@
+import type { BodyGeometry } from "@fabcad/brep";
+import {
+  ORIGIN_PLANES,
+  type OriginPlaneName,
+  type Plane3,
+  type Vec2,
+  type Vec3,
+} from "@fabcad/geometry";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { COLORS } from "./theme";
+
+/**
+ * Imperative Three.js scene behind the 3D viewport. It knows nothing about documents or
+ * React: bodies come in as tessellated geometry, picks go out as plain data.
+ */
+
+export type ViewName = "front" | "back" | "left" | "right" | "top" | "bottom" | "iso";
+
+export type Pick3D =
+  | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean }
+  | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
+  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
+  | { kind: "origin-plane"; plane: OriginPlaneName };
+
+export interface PickOptions {
+  faces?: boolean;
+  edges?: boolean;
+  vertices?: boolean;
+  originPlanes?: boolean;
+}
+
+export type Highlight =
+  | { kind: "body"; bodyId: string }
+  | { kind: "face"; bodyId: string; faceIndex: number }
+  | { kind: "edge"; bodyId: string; edgeIndex: number }
+  | { kind: "vertex"; bodyId: string; point: Vec3 }
+  | { kind: "origin-plane"; plane: OriginPlaneName };
+
+interface BodyEntry {
+  id: string;
+  hash: string;
+  geometry: BodyGeometry;
+  group: THREE.Group;
+  mesh: THREE.Mesh;
+  edges: THREE.LineSegments;
+  material: THREE.MeshStandardMaterial;
+}
+
+const VIEW_DIRECTIONS: Record<ViewName, [number, number, number]> = {
+  front: [0, -1, 0],
+  back: [0, 1, 0],
+  left: [-1, 0, 0],
+  right: [1, 0, 0],
+  top: [0, 0, 1],
+  bottom: [0, 0, -1],
+  iso: [1, -1, 0.8],
+};
+
+const PLANE_COLORS: Record<OriginPlaneName, number> = {
+  XY: COLORS.planeXY,
+  XZ: COLORS.planeXZ,
+  YZ: COLORS.planeYZ,
+};
+
+const toV3 = (v: Vec3): THREE.Vector3 => new THREE.Vector3(v.x, v.y, v.z);
+const fromV3 = (v: THREE.Vector3): Vec3 => ({ x: v.x, y: v.y, z: v.z });
+
+export class ViewportScene {
+  readonly renderer: THREE.WebGLRenderer;
+  readonly scene = new THREE.Scene();
+  readonly perspective: THREE.PerspectiveCamera;
+  readonly orthographic: THREE.OrthographicCamera;
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
+  readonly controls: OrbitControls;
+
+  private bodies = new Map<string, BodyEntry>();
+  private bodyRoot = new THREE.Group();
+  private originRoot = new THREE.Group();
+  private highlightRoot = new THREE.Group();
+  private originPlanes = new Map<OriginPlaneName, THREE.Mesh>();
+  private originAxes = new Map<string, THREE.Object3D>();
+  private raycaster = new THREE.Raycaster();
+  private width = 1;
+  private height = 1;
+  private needsRender = true;
+  private frame = 0;
+  private disposed = false;
+  private animation: { start: number; duration: number; fromPos: THREE.Vector3; toPos: THREE.Vector3; fromTarget: THREE.Vector3; toTarget: THREE.Vector3; fromUp: THREE.Vector3; toUp: THREE.Vector3 } | null = null;
+  private listeners = new Set<() => void>();
+  private originSize = 60;
+
+  constructor(private canvas: HTMLCanvasElement) {
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(COLORS.background);
+
+    this.perspective = new THREE.PerspectiveCamera(35, 1, 0.1, 100000);
+    this.orthographic = new THREE.OrthographicCamera(-1, 1, 1, -1, -100000, 100000);
+    for (const cam of [this.perspective, this.orthographic]) {
+      cam.up.set(0, 0, 1);
+      cam.position.set(260, -320, 240);
+    }
+    this.camera = this.perspective;
+
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = false;
+    this.controls.zoomToCursor = true;
+    this.controls.zoomSpeed = 1.4;
+    this.controls.rotateSpeed = 0.9;
+    this.controls.screenSpacePanning = true;
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.ROTATE,
+    };
+    this.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    this.controls.target.set(0, 0, 0);
+    this.controls.addEventListener("change", () => {
+      this.syncOrthographic();
+      this.invalidate();
+      this.emit();
+    });
+    this.controls.update();
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x8d99a6, 1.15);
+    hemi.position.set(0, 0, 1);
+    const key = new THREE.DirectionalLight(0xffffff, 1.5);
+    key.position.set(1, -1.4, 2);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.55);
+    fill.position.set(-1.5, 1, 0.6);
+    // Lights follow the camera so that faces never go black while orbiting.
+    const rig = new THREE.Group();
+    rig.add(key, fill);
+    this.scene.add(hemi, rig);
+    this.lightRig = rig;
+
+    this.scene.add(this.originRoot, this.bodyRoot, this.highlightRoot);
+    this.buildOrigin();
+    this.loop();
+  }
+
+  private lightRig: THREE.Group;
+
+  // ---------------------------------------------------------------- lifecycle
+
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private emit(): void {
+    for (const l of this.listeners) l();
+  }
+
+  invalidate(): void {
+    this.needsRender = true;
+  }
+
+  private loop = (): void => {
+    if (this.disposed) return;
+    this.frame = requestAnimationFrame(this.loop);
+    if (this.animation) this.stepAnimation();
+    if (!this.needsRender) return;
+    this.needsRender = false;
+    this.lightRig.quaternion.copy(this.camera.quaternion);
+    this.renderer.render(this.scene, this.camera);
+  };
+
+  resize(width: number, height: number): void {
+    if (width <= 0 || height <= 0) return;
+    this.width = width;
+    this.height = height;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(width, height, false);
+    this.perspective.aspect = width / height;
+    this.perspective.updateProjectionMatrix();
+    this.syncOrthographic();
+    this.invalidate();
+    this.emit();
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    cancelAnimationFrame(this.frame);
+    this.controls.dispose();
+    for (const id of [...this.bodies.keys()]) this.removeBody(id);
+    this.renderer.dispose();
+    this.listeners.clear();
+  }
+
+  get size(): { width: number; height: number } {
+    return { width: this.width, height: this.height };
+  }
+
+  // ------------------------------------------------------------------ cameras
+
+  /** Keep the orthographic frustum equivalent to the perspective view at the target distance. */
+  private syncOrthographic(): void {
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    const aspect = this.width / this.height;
+    if (this.camera === this.perspective) {
+      const halfH = distance * Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2));
+      this.orthographic.top = halfH;
+      this.orthographic.bottom = -halfH;
+      this.orthographic.left = -halfH * aspect;
+      this.orthographic.right = halfH * aspect;
+      this.orthographic.zoom = 1;
+    } else {
+      const halfH = this.orthographic.top;
+      this.orthographic.left = -halfH * aspect;
+      this.orthographic.right = halfH * aspect;
+    }
+    this.orthographic.updateProjectionMatrix();
+  }
+
+  setProjection(mode: "perspective" | "orthographic"): void {
+    const next = mode === "perspective" ? this.perspective : this.orthographic;
+    if (next === this.camera) return;
+    const target = this.controls.target;
+    const dir = this.camera.position.clone().sub(target);
+    let distance = dir.length();
+    dir.normalize();
+    if (next === this.perspective) {
+      // Match the visible height of the orthographic view.
+      const halfH = this.orthographic.top / this.orthographic.zoom;
+      distance = halfH / Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2));
+    } else {
+      const halfH = distance * Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2));
+      this.orthographic.top = halfH;
+      this.orthographic.bottom = -halfH;
+      this.orthographic.zoom = 1;
+    }
+    next.position.copy(target).addScaledVector(dir, distance);
+    next.up.copy(this.camera.up);
+    next.lookAt(target);
+    this.camera = next;
+    this.controls.object = next;
+    this.syncOrthographic();
+    this.controls.update();
+    this.invalidate();
+    this.emit();
+  }
+
+  /** Left mouse button: orbit in the solid environment, reserved for tools while sketching. */
+  setLeftButtonOrbit(enabled: boolean): void {
+    this.controls.mouseButtons.LEFT = enabled ? THREE.MOUSE.ROTATE : (-1 as THREE.MOUSE);
+  }
+
+  private currentDistance(): number {
+    if (this.camera === this.orthographic) {
+      const halfH = this.orthographic.top / this.orthographic.zoom;
+      return halfH / Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2));
+    }
+    return this.camera.position.distanceTo(this.controls.target);
+  }
+
+  private animateTo(position: THREE.Vector3, target: THREE.Vector3, up: THREE.Vector3): void {
+    if (this.camera === this.orthographic) {
+      // Fold the orthographic zoom into the frustum so that distance alone defines the scale.
+      const d = position.distanceTo(target);
+      const halfH = d * Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2));
+      this.orthographic.top = halfH;
+      this.orthographic.bottom = -halfH;
+      this.orthographic.zoom = 1;
+      this.syncOrthographic();
+    }
+    this.animation = {
+      start: performance.now(),
+      duration: 260,
+      fromPos: this.camera.position.clone(),
+      toPos: position,
+      fromTarget: this.controls.target.clone(),
+      toTarget: target,
+      fromUp: this.camera.up.clone(),
+      toUp: up,
+    };
+  }
+
+  private stepAnimation(): void {
+    const a = this.animation;
+    if (!a) return;
+    const raw = Math.min(1, (performance.now() - a.start) / a.duration);
+    const t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
+    // Interpolate the view direction on a sphere so that the model stays in view.
+    const fromDir = a.fromPos.clone().sub(a.fromTarget);
+    const toDir = a.toPos.clone().sub(a.toTarget);
+    const fromLen = fromDir.length();
+    const toLen = toDir.length();
+    const q0 = new THREE.Quaternion();
+    const q1 = new THREE.Quaternion().setFromUnitVectors(
+      fromDir.clone().normalize(),
+      toDir.clone().normalize(),
+    );
+    const q = q0.slerp(q1, t);
+    const dir = fromDir.clone().normalize().applyQuaternion(q);
+    const target = a.fromTarget.clone().lerp(a.toTarget, t);
+    const len = fromLen + (toLen - fromLen) * t;
+    this.camera.position.copy(target).addScaledVector(dir, len);
+    this.camera.up.copy(a.fromUp).lerp(a.toUp, t).normalize();
+    this.controls.target.copy(target);
+    if (raw >= 1) {
+      this.camera.position.copy(a.toPos);
+      this.camera.up.copy(a.toUp);
+      this.animation = null;
+    }
+    this.camera.lookAt(this.controls.target);
+    this.controls.update();
+    this.syncOrthographic();
+    this.invalidate();
+    this.emit();
+  }
+
+  /** Snapshot of the camera, to return to after a temporary view such as a sketch. */
+  saveView(): { position: Vec3; target: Vec3; up: Vec3 } {
+    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
+    return {
+      position: fromV3(this.controls.target.clone().addScaledVector(dir, this.currentDistance())),
+      target: fromV3(this.controls.target),
+      up: fromV3(this.camera.up),
+    };
+  }
+
+  restoreView(view: { position: Vec3; target: Vec3; up: Vec3 }): void {
+    this.animateTo(toV3(view.position), toV3(view.target), toV3(view.up));
+  }
+
+  setView(view: ViewName): void {
+    const d = new THREE.Vector3(...VIEW_DIRECTIONS[view]).normalize();
+    const up =
+      view === "top"
+        ? new THREE.Vector3(0, 1, 0)
+        : view === "bottom"
+          ? new THREE.Vector3(0, -1, 0)
+          : new THREE.Vector3(0, 0, 1);
+    const target = this.controls.target.clone();
+    this.animateTo(target.clone().addScaledVector(d, this.currentDistance()), target, up);
+  }
+
+  /** Look straight at a plane (used when entering a sketch). */
+  lookAtPlane(plane: Plane3, fit?: { center: Vec3; radius: number }): void {
+    const normal = toV3(plane.normal);
+    const target = fit ? toV3(fit.center) : toV3(plane.origin);
+    const distance = fit ? this.fitDistance(fit.radius) : this.currentDistance();
+    this.animateTo(target.clone().addScaledVector(normal, distance), target, toV3(plane.yDir));
+  }
+
+  private fitDistance(radius: number): number {
+    const fov = THREE.MathUtils.degToRad(this.perspective.fov / 2);
+    const aspect = Math.min(1, this.width / this.height);
+    return (Math.max(radius, 1) / Math.sin(fov)) * (1 / aspect) * 1.05;
+  }
+
+  sceneBounds(extra: Vec3[] = []): { center: Vec3; radius: number } | null {
+    const box = new THREE.Box3();
+    for (const b of this.bodies.values()) {
+      if (!b.group.visible) continue;
+      box.expandByPoint(toV3(b.geometry.bounds.min));
+      box.expandByPoint(toV3(b.geometry.bounds.max));
+    }
+    for (const p of extra) box.expandByPoint(toV3(p));
+    if (box.isEmpty()) return null;
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    return { center: fromV3(sphere.center), radius: sphere.radius };
+  }
+
+  /** Fit the view when the model has drifted out of it or has become tiny on screen. */
+  ensureVisible(extra: Vec3[] = []): void {
+    if (this.animation) return;
+    const bounds = this.sceneBounds(extra);
+    if (!bounds) return;
+    const c = this.project(bounds.center);
+    const r = bounds.radius / Math.max(this.pixelSize(bounds.center), 1e-9);
+    const limit = Math.min(this.width, this.height);
+    const outside =
+      c.x < this.width * 0.1 ||
+      c.x > this.width * 0.9 ||
+      c.y < this.height * 0.1 ||
+      c.y > this.height * 0.9;
+    if (outside || r > limit * 0.7 || r < 24) this.fitAll(extra);
+  }
+
+  fitAll(extra: Vec3[] = []): void {
+    const bounds = this.sceneBounds(extra) ?? { center: { x: 0, y: 0, z: 0 }, radius: 80 };
+    const dir = this.camera.position.clone().sub(this.controls.target).normalize();
+    const target = toV3(bounds.center);
+    this.animateTo(
+      target.clone().addScaledVector(dir, this.fitDistance(bounds.radius)),
+      target,
+      this.camera.up.clone(),
+    );
+    this.setOriginSize(Math.max(40, bounds.radius * 0.6));
+  }
+
+  // ------------------------------------------------------------------- origin
+
+  private buildOrigin(): void {
+    for (const child of [...this.originRoot.children]) this.originRoot.remove(child);
+    this.originPlanes.clear();
+    this.originAxes.clear();
+    const s = this.originSize;
+    (Object.keys(ORIGIN_PLANES) as OriginPlaneName[]).forEach((name) => {
+      const plane = ORIGIN_PLANES[name];
+      const geometry = new THREE.PlaneGeometry(s, s);
+      const material = new THREE.MeshBasicMaterial({
+        color: PLANE_COLORS[name],
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      const basis = new THREE.Matrix4().makeBasis(
+        toV3(plane.xDir),
+        toV3(plane.yDir),
+        toV3(plane.normal),
+      );
+      mesh.quaternion.setFromRotationMatrix(basis);
+      mesh.position.copy(toV3(plane.xDir).multiplyScalar(s / 2).add(toV3(plane.yDir).multiplyScalar(s / 2)));
+      mesh.userData.plane = name;
+      mesh.renderOrder = 1;
+      const outline = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({ color: PLANE_COLORS[name], transparent: true, opacity: 0.55 }),
+      );
+      mesh.add(outline);
+      this.originRoot.add(mesh);
+      this.originPlanes.set(name, mesh);
+    });
+    const axes: [string, Vec3, number][] = [
+      ["X", { x: 1, y: 0, z: 0 }, COLORS.axisX],
+      ["Y", { x: 0, y: 1, z: 0 }, COLORS.axisY],
+      ["Z", { x: 0, y: 0, z: 1 }, COLORS.axisZ],
+    ];
+    for (const [name, dir, color] of axes) {
+      const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        toV3(dir).multiplyScalar(s * 1.25),
+      ]);
+      const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color }));
+      this.originRoot.add(line);
+      this.originAxes.set(name, line);
+    }
+  }
+
+  private originVisibility: { visible: boolean; hidden: string[] } = { visible: true, hidden: [] };
+  private originPlanesSuppressed = false;
+
+  /** Hide the origin planes (not the axes), e.g. while sketching. */
+  suppressOriginPlanes(suppressed: boolean): void {
+    this.originPlanesSuppressed = suppressed;
+    this.setOriginVisibility(this.originVisibility.visible, this.originVisibility.hidden);
+  }
+
+  setOriginSize(size: number): void {
+    if (Math.abs(size - this.originSize) / this.originSize < 0.25) return;
+    this.originSize = size;
+    this.buildOrigin();
+    this.setOriginVisibility(this.originVisibility.visible, this.originVisibility.hidden);
+  }
+
+  setOriginVisibility(visible: boolean, hidden: string[]): void {
+    this.originVisibility = { visible, hidden };
+    for (const [name, mesh] of this.originPlanes) {
+      mesh.visible = visible && !hidden.includes(name) && !this.originPlanesSuppressed;
+    }
+    for (const [name, line] of this.originAxes) line.visible = visible && !hidden.includes(name);
+    this.invalidate();
+  }
+
+  // ------------------------------------------------------------------- bodies
+
+  setBody(id: string, hash: string, geometry: BodyGeometry): void {
+    const existing = this.bodies.get(id);
+    if (existing && existing.hash === hash) return;
+    const visible = existing ? existing.group.visible : true;
+    if (existing) this.removeBody(id);
+
+    const meshGeometry = new THREE.BufferGeometry();
+    meshGeometry.setAttribute("position", new THREE.BufferAttribute(geometry.positions, 3));
+    meshGeometry.setAttribute("normal", new THREE.BufferAttribute(geometry.normals, 3));
+    meshGeometry.setIndex(new THREE.BufferAttribute(geometry.indices, 1));
+    meshGeometry.computeBoundingSphere();
+    const material = new THREE.MeshStandardMaterial({
+      color: COLORS.body,
+      metalness: 0.05,
+      roughness: 0.62,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    });
+    const mesh = new THREE.Mesh(meshGeometry, material);
+    mesh.userData.bodyId = id;
+
+    const edgeGeometry = new THREE.BufferGeometry();
+    edgeGeometry.setAttribute("position", new THREE.BufferAttribute(geometry.edgePositions, 3));
+    const edges = new THREE.LineSegments(
+      edgeGeometry,
+      new THREE.LineBasicMaterial({ color: COLORS.edge }),
+    );
+
+    const group = new THREE.Group();
+    group.add(mesh, edges);
+    group.visible = visible;
+    this.bodyRoot.add(group);
+    this.bodies.set(id, { id, hash, geometry, group, mesh, edges, material });
+    this.invalidate();
+  }
+
+  removeBody(id: string): void {
+    const b = this.bodies.get(id);
+    if (!b) return;
+    this.bodyRoot.remove(b.group);
+    b.mesh.geometry.dispose();
+    b.edges.geometry.dispose();
+    b.material.dispose();
+    (b.edges.material as THREE.Material).dispose();
+    this.bodies.delete(id);
+    this.invalidate();
+  }
+
+  /** Remove every body that is not in `ids`. */
+  retainBodies(ids: Set<string>): void {
+    for (const id of [...this.bodies.keys()]) if (!ids.has(id)) this.removeBody(id);
+  }
+
+  setBodyVisible(id: string, visible: boolean): void {
+    const b = this.bodies.get(id);
+    if (!b || b.group.visible === visible) return;
+    b.group.visible = visible;
+    this.invalidate();
+  }
+
+  setBodiesTransparent(transparent: boolean): void {
+    for (const b of this.bodies.values()) {
+      b.material.transparent = transparent;
+      b.material.opacity = transparent ? 0.45 : 1;
+      b.material.depthWrite = !transparent;
+      b.material.needsUpdate = true;
+    }
+    this.invalidate();
+  }
+
+  hasBodies(): boolean {
+    return this.bodies.size > 0;
+  }
+
+  // --------------------------------------------------------------- highlights
+
+  setHighlights(items: { highlight: Highlight; mode: "hover" | "selected" }[]): void {
+    for (const child of [...this.highlightRoot.children]) {
+      this.highlightRoot.remove(child);
+      const obj = child as THREE.Mesh | THREE.LineSegments | THREE.Points;
+      obj.geometry?.dispose();
+      const m = obj.material;
+      if (Array.isArray(m)) m.forEach((x) => x.dispose());
+      else m?.dispose();
+    }
+    for (const [name, mesh] of this.originPlanes) {
+      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.1;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(PLANE_COLORS[name]);
+    }
+    for (const b of this.bodies.values()) b.material.color.setHex(COLORS.body);
+
+    for (const { highlight: h, mode } of items) {
+      const color = mode === "selected" ? COLORS.selected : COLORS.highlight;
+      if (h.kind === "origin-plane") {
+        const mesh = this.originPlanes.get(h.plane);
+        if (mesh) {
+          (mesh.material as THREE.MeshBasicMaterial).opacity = 0.35;
+          (mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
+        }
+        continue;
+      }
+      const body = this.bodies.get(h.bodyId);
+      if (!body || !body.group.visible) continue;
+      if (h.kind === "body") {
+        body.material.color.setHex(mode === "selected" ? 0x9cc3e0 : COLORS.bodyHover);
+      } else if (h.kind === "face") {
+        const face = body.geometry.faces[h.faceIndex];
+        if (!face) continue;
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", body.mesh.geometry.getAttribute("position"));
+        g.setIndex(
+          new THREE.BufferAttribute(
+            body.geometry.indices.subarray(face.start, face.start + face.count),
+            1,
+          ),
+        );
+        const m = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: mode === "selected" ? 0.55 : 0.4,
+          side: THREE.DoubleSide,
+          depthTest: true,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        });
+        this.highlightRoot.add(new THREE.Mesh(g, m));
+      } else if (h.kind === "edge") {
+        const edge = body.geometry.edges[h.edgeIndex];
+        if (!edge) continue;
+        const positions = body.geometry.edgePositions.subarray(
+          edge.start * 3,
+          (edge.start + edge.count) * 3,
+        );
+        this.highlightRoot.add(this.thickLines(positions, color));
+      } else {
+        const g = new THREE.BufferGeometry().setFromPoints([toV3(h.point)]);
+        const m = new THREE.PointsMaterial({
+          color,
+          size: 10,
+          sizeAttenuation: false,
+          depthTest: false,
+        });
+        this.highlightRoot.add(new THREE.Points(g, m));
+      }
+    }
+    this.invalidate();
+  }
+
+  /** Lines drawn several times with small screen offsets: a cheap way to get thick lines. */
+  private thickLines(positions: Float32Array, color: number): THREE.Object3D {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(positions.slice(), 3));
+    const m = new THREE.LineBasicMaterial({ color, depthTest: false, linewidth: 3 });
+    const group = new THREE.Group();
+    const lines = new THREE.LineSegments(g, m);
+    lines.renderOrder = 5;
+    group.add(lines);
+    // Tube-like emphasis: small spheres are overkill; points at the segment ends fill the gaps.
+    const pm = new THREE.PointsMaterial({ color, size: 3.5, sizeAttenuation: false, depthTest: false });
+    const pts = new THREE.Points(g, pm);
+    pts.renderOrder = 5;
+    group.add(pts);
+    return group;
+  }
+
+  // ------------------------------------------------------------------ picking
+
+  /** Project a world point to viewport pixels. `visible` is false behind the camera. */
+  project(p: Vec3): { x: number; y: number; visible: boolean } {
+    const v = toV3(p).project(this.camera);
+    return {
+      x: (v.x * 0.5 + 0.5) * this.width,
+      y: (-v.y * 0.5 + 0.5) * this.height,
+      visible: v.z > -1 && v.z < 1,
+    };
+  }
+
+  private setRay(x: number, y: number): THREE.Ray {
+    const ndc = new THREE.Vector2((x / this.width) * 2 - 1, -(y / this.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    return this.raycaster.ray;
+  }
+
+  /** Intersect the view ray through a pixel with a plane; returns plane coordinates. */
+  pointOnPlane(x: number, y: number, plane: Plane3): Vec2 | null {
+    const ray = this.setRay(x, y);
+    const n = toV3(plane.normal);
+    const denom = ray.direction.dot(n);
+    if (Math.abs(denom) < 1e-9) return null;
+    const t = toV3(plane.origin).sub(ray.origin).dot(n) / denom;
+    const hit = ray.origin.clone().addScaledVector(ray.direction, t);
+    const d = hit.sub(toV3(plane.origin));
+    return { x: d.dot(toV3(plane.xDir)), y: d.dot(toV3(plane.yDir)) };
+  }
+
+  /** World units per pixel at a world position. */
+  pixelSize(at: Vec3): number {
+    if (this.camera === this.orthographic) {
+      return (this.orthographic.top - this.orthographic.bottom) / this.orthographic.zoom / this.height;
+    }
+    const d = this.camera.position.distanceTo(toV3(at));
+    return (2 * d * Math.tan(THREE.MathUtils.degToRad(this.perspective.fov / 2))) / this.height;
+  }
+
+  pick(x: number, y: number, options: PickOptions = {}): Pick3D | null {
+    const wantFaces = options.faces ?? true;
+    const wantEdges = options.edges ?? true;
+    const wantVertices = options.vertices ?? true;
+    this.setRay(x, y);
+    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
+    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    const hitDistance = hit ? hit.distance : Infinity;
+    // Anything more than this far behind the first surface hit is considered hidden.
+    const slack = hit ? Math.max(0.05, hitDistance * 0.004) : Infinity;
+    const cameraPos = this.camera.position;
+    const depthOf = (p: THREE.Vector3): number =>
+      this.camera === this.orthographic
+        ? p.clone().sub(this.raycaster.ray.origin).dot(this.raycaster.ray.direction)
+        : p.distanceTo(cameraPos);
+    const isVisible = (p: THREE.Vector3): boolean => depthOf(p) <= hitDistance + slack;
+
+    if (wantVertices) {
+      let best: Pick3D | null = null;
+      let bestD = 9;
+      for (const b of this.bodies.values()) {
+        if (!b.group.visible) continue;
+        const v = b.geometry.vertices;
+        for (let i = 0; i < v.length; i += 3) {
+          const p = new THREE.Vector3(v[i], v[i + 1], v[i + 2]);
+          const s = this.project(fromV3(p));
+          if (!s.visible) continue;
+          const d = Math.hypot(s.x - x, s.y - y);
+          if (d < bestD && isVisible(p)) {
+            bestD = d;
+            best = { kind: "vertex", bodyId: b.id, vertexIndex: i / 3, point: fromV3(p) };
+          }
+        }
+      }
+      if (best) return best;
+    }
+
+    if (wantEdges) {
+      let best: Pick3D | null = null;
+      let bestD = 7;
+      const a = new THREE.Vector3();
+      const c = new THREE.Vector3();
+      for (const b of this.bodies.values()) {
+        if (!b.group.visible) continue;
+        const pos = b.geometry.edgePositions;
+        for (const edge of b.geometry.edges) {
+          for (let k = edge.start; k + 1 < edge.start + edge.count; k += 2) {
+            a.set(pos[k * 3]!, pos[k * 3 + 1]!, pos[k * 3 + 2]!);
+            c.set(pos[k * 3 + 3]!, pos[k * 3 + 4]!, pos[k * 3 + 5]!);
+            const sa = this.project(fromV3(a));
+            const sc = this.project(fromV3(c));
+            if (!sa.visible || !sc.visible) continue;
+            const dx = sc.x - sa.x;
+            const dy = sc.y - sa.y;
+            const l2 = dx * dx + dy * dy;
+            const t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - sa.x) * dx + (y - sa.y) * dy) / l2));
+            const d = Math.hypot(sa.x + dx * t - x, sa.y + dy * t - y);
+            if (d >= bestD) continue;
+            const p = a.clone().lerp(c, t);
+            if (!isVisible(p)) continue;
+            bestD = d;
+            best = { kind: "edge", bodyId: b.id, edgeIndex: edge.edgeIndex, point: edge.midpoint };
+          }
+        }
+      }
+      if (best) return best;
+    }
+
+    if (wantFaces && hit && hit.faceIndex !== undefined && hit.faceIndex !== null) {
+      const bodyId = hit.object.userData.bodyId as string;
+      const body = this.bodies.get(bodyId);
+      if (body) {
+        const offset = hit.faceIndex * 3;
+        const face = body.geometry.faces.find((f) => offset >= f.start && offset < f.start + f.count);
+        if (face) {
+          return {
+            kind: "face",
+            bodyId,
+            faceIndex: face.faceIndex,
+            point: face.center,
+            normal: face.normal,
+            planar: face.surface === "plane",
+          };
+        }
+      }
+    }
+
+    if (options.originPlanes) {
+      const planes = [...this.originPlanes.values()].filter((m) => m.visible);
+      const planeHit = this.raycaster.intersectObjects(planes, false)[0];
+      if (planeHit && (!hit || planeHit.distance < hit.distance)) {
+        return { kind: "origin-plane", plane: planeHit.object.userData.plane as OriginPlaneName };
+      }
+    }
+    return null;
+  }
+
+  /** Body under the pixel, ignoring edges and vertices. */
+  pickBody(x: number, y: number): string | null {
+    this.setRay(x, y);
+    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
+    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    return hit ? (hit.object.userData.bodyId as string) : null;
+  }
+
+  bodyGeometry(id: string): BodyGeometry | undefined {
+    return this.bodies.get(id)?.geometry;
+  }
+}
