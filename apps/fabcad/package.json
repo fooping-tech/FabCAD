@@ -21,6 +21,8 @@
     "@fabcad/sketch": "*",
     "@fabcad/sketch-solver": "*",
     "@fabcad/svg": "*",
+    "@fabcad/typography": "*",
+    "harfbuzzjs": "^1.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.180.0"
