@@ -43,6 +43,10 @@ npm run build
 
 スケッチは 3D ビューの上に重ねた 2D キャンバスに、3D カメラで投影して描く。マウス位置は視線とスケッチ平面の交点でスケッチ座標に変換する。
 
+ポインタ入力は `Viewport.tsx` に集約している。タッチは `pointerType === "touch"` で判別し、スケッチのツールでは指を離したときに点を置く。2 本目の指が触れたら、1 本目が始めた操作は取り消す。Extrude の矢印（`extrudeManipulator.ts`）は capture フェーズで `pointerdown` を受け、OrbitControls より先に処理する。
+
+キーボードショートカットは `app/shortcuts.ts`。日本語入力がオンだと `key` が `Process` になるので、`code` から文字を求めている。
+
 Sketch の Create ツールを足すときは `packages/sketch/src/create.ts` に関数を、`apps/fabcad/src/sketch/createTools.ts` の `CREATE_TOOLS` に定義を 1 つ追加する。
 
 ## ブラウザでの確認

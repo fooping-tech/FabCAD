@@ -244,9 +244,99 @@ export class ViewportScene {
     this.emit();
   }
 
-  /** Left mouse button: orbit in the solid environment, reserved for tools while sketching. */
+  /**
+   * Left mouse button and one-finger touch: orbit in the solid environment, reserved for tools
+   * while sketching. Two fingers always pan and zoom.
+   */
   setLeftButtonOrbit(enabled: boolean): void {
     this.controls.mouseButtons.LEFT = enabled ? THREE.MOUSE.ROTATE : (-1 as THREE.MOUSE);
+    this.controls.touches.ONE = enabled ? THREE.TOUCH.ROTATE : (-1 as THREE.TOUCH);
+  }
+
+  /** Suspend camera control while something else owns the pointer (e.g. a manipulator). */
+  setControlsEnabled(enabled: boolean): void {
+    this.controls.enabled = enabled;
+  }
+
+  /**
+   * Parameter t of the point on the axis `origin + t · direction` that is closest to the view
+   * ray through a pixel. Null when the axis points straight at the camera.
+   */
+  axisParameter(x: number, y: number, origin: Vec3, direction: Vec3): number | null {
+    const ray = this.setRay(x, y);
+    const d = toV3(direction).normalize();
+    const w = toV3(origin).sub(ray.origin);
+    const b = d.dot(ray.direction);
+    const den = 1 - b * b;
+    if (den < 1e-4) return null;
+    // Closest approach of two lines.
+    return (b * w.dot(ray.direction) - w.dot(d)) / den;
+  }
+
+  // ------------------------------------------------------------------ preview
+
+  private previewRoot = new THREE.Group();
+
+  /** Translucent preview of a feature that has not been committed yet. */
+  setExtrudePreview(
+    preview: {
+      plane: Plane3;
+      regions: { outer: Vec2[]; holes: Vec2[][] }[];
+      from: number;
+      to: number;
+      removing: boolean;
+    } | null,
+  ): void {
+    if (!this.previewRoot.parent) this.scene.add(this.previewRoot);
+    for (const child of [...this.previewRoot.children]) {
+      this.previewRoot.remove(child);
+      const obj = child as THREE.Mesh | THREE.LineSegments;
+      obj.geometry.dispose();
+      (obj.material as THREE.Material).dispose();
+    }
+    this.invalidate();
+    if (!preview) return;
+    const depth = preview.to - preview.from;
+    if (Math.abs(depth) < 1e-6) return;
+    const lo = Math.min(preview.from, preview.to);
+    const basis = new THREE.Matrix4().makeBasis(
+      toV3(preview.plane.xDir),
+      toV3(preview.plane.yDir),
+      toV3(preview.plane.normal),
+    );
+    basis.setPosition(toV3(preview.plane.origin).addScaledVector(toV3(preview.plane.normal), lo));
+    const color = preview.removing ? 0xd0453a : COLORS.selected;
+    for (const region of preview.regions) {
+      if (region.outer.length < 3) continue;
+      const shape = new THREE.Shape(region.outer.map((p) => new THREE.Vector2(p.x, p.y)));
+      for (const hole of region.holes) {
+        shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))));
+      }
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: Math.abs(depth),
+        bevelEnabled: false,
+        curveSegments: 1,
+      });
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.28,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      mesh.applyMatrix4(basis);
+      mesh.renderOrder = 3;
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry, 30),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, depthTest: false }),
+      );
+      edges.applyMatrix4(basis);
+      edges.renderOrder = 4;
+      this.previewRoot.add(mesh, edges);
+    }
   }
 
   private currentDistance(): number {
@@ -350,7 +440,7 @@ export class ViewportScene {
   private fitDistance(radius: number): number {
     const fov = THREE.MathUtils.degToRad(this.perspective.fov / 2);
     const aspect = Math.min(1, this.width / this.height);
-    return (Math.max(radius, 1) / Math.sin(fov)) * (1 / aspect) * 1.05;
+    return (Math.max(radius, 1) / Math.sin(fov)) * (1 / aspect) * 1.35;
   }
 
   sceneBounds(extra: Vec3[] = []): { center: Vec3; radius: number } | null {

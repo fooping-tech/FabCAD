@@ -129,6 +129,10 @@ export class SketchController {
   private labelHits: LabelHit[] = [];
   private hoverProfile: HoverProfile | null = null;
   private raf = 0;
+  /** Tolerance multiplier: fingers are less precise than a mouse. */
+  private reach = 1;
+  /** Drawn on top of everything, after the sketches (e.g. the extrude manipulator). */
+  overlayPainter: ((ctx: CanvasRenderingContext2D) => void) | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -137,6 +141,11 @@ export class SketchController {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D canvas is not available");
     this.ctx = ctx;
+  }
+
+  /** Touch input gets larger pick and snap tolerances. */
+  setCoarse(coarse: boolean): void {
+    this.reach = coarse ? 2.4 : 1;
   }
 
   // ------------------------------------------------------------------ helpers
@@ -162,7 +171,7 @@ export class SketchController {
     const px = projector.pixel(raw);
     const snap: SnapResult = p.meta
       ? { point: raw, kind: "none" }
-      : snapPoint(sketch, raw, px * SNAP_PX, exclude);
+      : snapPoint(sketch, raw, px * SNAP_PX * this.reach, exclude);
     return { position: snap.kind === "none" ? raw : snap.point, snap };
   }
 
@@ -170,14 +179,22 @@ export class SketchController {
     const projector = this.projectorFor(sketch);
     const raw = projector.toSketch(p.x, p.y);
     if (!raw) return null;
-    const hit = hitTestSketch(sketch, raw, projector.pixel(raw) * HIT_PX, options);
+    const hit = hitTestSketch(sketch, raw, projector.pixel(raw) * HIT_PX * this.reach, options);
     return hit ? (sketch.entities[hit.id] ?? null) : null;
   }
 
   private hitLabel(p: PointerInfo): LabelHit | null {
     for (let i = this.labelHits.length - 1; i >= 0; i--) {
       const h = this.labelHits[i]!;
-      if (p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h) return h;
+      const pad = (this.reach - 1) * 6;
+      if (
+        p.x >= h.x - pad &&
+        p.x <= h.x + h.w + pad &&
+        p.y >= h.y - pad &&
+        p.y <= h.y + h.h + pad
+      ) {
+        return h;
+      }
     }
     return null;
   }
@@ -238,6 +255,23 @@ export class SketchController {
     this.refreshHint();
     this.requestDraw();
     return had;
+  }
+
+  /** Forget the pointer position (a lifted finger leaves no cursor behind). */
+  clearCursor(): void {
+    this.cursor = null;
+    this.preview = null;
+    this.previewSketch = null;
+    appState.set({ cursor: null, hover: null });
+    this.requestDraw();
+  }
+
+  /** Abort a drag in progress without touching the picks of the running command. */
+  cancelDrag(): void {
+    if (!this.drag) return;
+    if (documentStore.inTransaction) documentStore.cancel();
+    this.drag = null;
+    this.requestDraw();
   }
 
   /** Called when the tool changes. */
@@ -326,7 +360,7 @@ export class SketchController {
     const previous = this.picks[this.picks.length - 1];
     if (infer && previous && pick.snap.kind === "none" && !p.meta) {
       const px = this.projectorFor(sketch).pixel(pick.position);
-      const inferred = inferAxis(previous.position, pick.position, px * 6);
+      const inferred = inferAxis(previous.position, pick.position, px * 6 * this.reach);
       pick.position = inferred.position;
       if (inferred.inferred) pick.inferred = inferred.inferred;
     }
@@ -399,7 +433,12 @@ export class SketchController {
     if (documentStore.inTransaction) documentStore.cancel();
     // A click without movement selects.
     if (drag.kind === "label") {
-      select({ kind: "dimension", sketchId: feature.id, id: drag.dimensionId }, p.shift || p.meta);
+      const item: Selection = { kind: "dimension", sketchId: feature.id, id: drag.dimensionId };
+      const { selection } = appState.get();
+      const already = selection.length === 1 && selectionKey(selection[0]!) === selectionKey(item);
+      // Clicking a dimension that is already selected edits it (double-click works as well).
+      if (already && !p.shift && !p.meta) this.openDimensionEditor(feature, drag.dimensionId, false);
+      else select(item, p.shift || p.meta);
     } else {
       select(drag.hit, p.shift || p.meta);
     }
@@ -566,7 +605,7 @@ export class SketchController {
     const drag = this.drag;
     if (!drag) return;
     if (!drag.started) {
-      if (Math.hypot(p.x - drag.startScreen.x, p.y - drag.startScreen.y) < DRAG_START_PX) return;
+      if (Math.hypot(p.x - drag.startScreen.x, p.y - drag.startScreen.y) < DRAG_START_PX * this.reach) return;
       drag.started = true;
       documentStore.begin(drag.kind === "label" ? "Move dimension" : "Drag sketch");
     }
@@ -603,7 +642,7 @@ export class SketchController {
       if (targets.length === 1 && !p.meta) {
         const only = targets[0]!;
         const px = this.projectorFor(drag.base).pixel(only.target);
-        const snap = snapPoint(drag.base, only.target, px * SNAP_PX, [only.pointId]);
+        const snap = snapPoint(drag.base, only.target, px * SNAP_PX * this.reach, [only.pointId]);
         if (snap.kind === "point" || snap.kind === "center") {
           targets = [{ pointId: only.pointId, target: snap.point }];
         }
@@ -1126,6 +1165,12 @@ export class SketchController {
         );
       }
     }
+    this.overlayPainter?.(ctx);
+  }
+
+  /** True while a command has picks that Enter could finish or Esc would cancel. */
+  get hasPicks(): boolean {
+    return this.picks.length > 0 || this.entityPicks.length > 0;
   }
 }
 

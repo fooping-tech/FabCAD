@@ -19,6 +19,7 @@ import { Ribbon } from "./panels/Ribbon";
 import { StatusBar } from "./panels/StatusBar";
 import { Timeline } from "./panels/Timeline";
 import { Toasts } from "./panels/Toasts";
+import { TouchBar } from "./viewport/TouchBar";
 import { Viewport } from "./viewport/Viewport";
 
 /**
@@ -62,6 +63,7 @@ export function App(): ReactElement {
   const workspace = useStore(appState, (s) => s.workspace);
   const fabricationTab = useStore(appState, (s) => s.fabricationTab);
   const dialog = useStore(appState, (s) => s.dialog);
+  const sidePanelOpen = useStore(appState, (s) => s.sidePanelOpen);
 
   useEffect(() => {
     startSession();
@@ -75,7 +77,15 @@ export function App(): ReactElement {
     <div className={`app${fabrication ? " no-timeline" : ""}`}>
       <Header onExportFabrication={(format) => exportHandler(format)} />
       <Ribbon />
-      <aside className="side">
+      {sidePanelOpen && (
+        <div className="side-backdrop" onPointerDown={() => appState.set({ sidePanelOpen: false })} />
+      )}
+      <aside className={`side${sidePanelOpen ? " open" : ""}`}>
+        <button
+          className="side-grip"
+          aria-label="Close panel"
+          onClick={() => appState.set({ sidePanelOpen: false })}
+        />
         {fabrication ? (
           <FabricationSidePanel />
         ) : (
@@ -90,6 +100,7 @@ export function App(): ReactElement {
         <div style={{ position: "absolute", inset: 0, visibility: showViewport ? "visible" : "hidden" }}>
           <Viewport />
         </div>
+        <TouchBar />
         {!fabrication && <FeatureDialog />}
         {fabrication && (
           <>

@@ -23,6 +23,16 @@ import { SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
+import {
+  type ExtrudeDialog,
+  type ExtrudeManipulator,
+  distanceForOffset,
+  dragStep,
+  drawManipulator,
+  extrudeManipulator,
+  formatDistance,
+  manipulatorScreen,
+} from "./extrudeManipulator";
 import { type Highlight, type Pick3D, type ViewName, ViewportScene } from "./scene";
 
 const VIEWS: { id: ViewName; label: string }[] = [
@@ -287,34 +297,170 @@ export function Viewport(): ReactElement {
       }
     };
 
+    // ------------------------------------------------ extrude manipulator
+    let manipulator: {
+      pointerId: number;
+      grabT: number;
+      startOffset: number;
+      direction: ExtrudeDialog["direction"];
+      base: ExtrudeManipulator["base"];
+      normal: ExtrudeManipulator["normal"];
+    } | null = null;
+    let manipulatorHover = false;
+
+    const currentManipulator = (): ExtrudeManipulator | null => {
+      const state = appState.get();
+      if (state.activeSketchId || state.workspace !== "design") return null;
+      const dialog = state.dialog;
+      if (dialog?.type !== "extrude") return null;
+      return extrudeManipulator(documentStore.document, dialog);
+    };
+
+    const overManipulator = (x: number, y: number, reach: number): ExtrudeManipulator | null => {
+      const m = currentManipulator();
+      if (!m) return null;
+      const s = manipulatorScreen(scene, m);
+      return Math.hypot(s.handle.x - x, s.handle.y - y) <= reach ? m : null;
+    };
+
+    controller.overlayPainter = (ctx) => {
+      const m = currentManipulator();
+      if (m) drawManipulator(ctx, scene, m, manipulator ? "drag" : manipulatorHover ? "hover" : "idle");
+    };
+
+    // ---------------------------------------------------------- pointers
+    const touches = new Set<number>();
+    /** A touch that places a point when the finger is lifted, so that it can be aimed first. */
+    let touchPick: { id: number; aborted: boolean } | null = null;
+
     const onPointerDown = (e: PointerEvent): void => {
+      const touch = e.pointerType === "touch";
+      controller.setCoarse(touch);
+      if (touch) touches.add(e.pointerId);
       down = { x: e.clientX, y: e.clientY, button: e.button };
       if (e.button !== 0) return;
-      if (appState.get().activeSketchId) controller.pointerDown(info(e));
+      const p = info(e);
+
+      if (touch && touches.size > 1) {
+        // A second finger means pan / zoom: whatever the first finger started is called off.
+        if (touchPick) touchPick.aborted = true;
+        controller.cancelDrag();
+        controller.clearCursor();
+        down = null;
+        return;
+      }
+
+      const hit = overManipulator(p.x, p.y, touch ? 34 : 18);
+      if (hit) {
+        const t = scene.axisParameter(p.x, p.y, hit.base, hit.normal);
+        const dialog = appState.get().dialog;
+        if (t !== null && dialog?.type === "extrude") {
+          // The manipulator owns this gesture: keep the camera controls out of it.
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          webgl.setPointerCapture(e.pointerId);
+          scene.setControlsEnabled(false);
+          manipulator = {
+            pointerId: e.pointerId,
+            grabT: t,
+            startOffset: hit.offset,
+            direction: dialog.direction,
+            base: hit.base,
+            normal: hit.normal,
+          };
+          down = null;
+          controller.requestDraw();
+          return;
+        }
+      }
+
+      if (!appState.get().activeSketchId) return;
+      if (touch && appState.get().tool !== "select") {
+        touchPick = { id: e.pointerId, aborted: false };
+        controller.pointerMove(p);
+        return;
+      }
+      controller.pointerDown(p);
     };
+
     const onPointerMove = (e: PointerEvent): void => {
       const p = info(e);
+      if (manipulator) {
+        if (e.pointerId !== manipulator.pointerId) return;
+        const t = scene.axisParameter(p.x, p.y, manipulator.base, manipulator.normal);
+        if (t === null) return;
+        const offset = manipulator.startOffset + (t - manipulator.grabT);
+        const step = e.altKey ? 0.001 : dragStep(scene.pixelSize(manipulator.base));
+        const snapped = Math.round(offset / step) * step;
+        patchDialog({
+          distance: formatDistance(distanceForOffset(manipulator.direction, snapped)),
+        });
+        return;
+      }
       if (appState.get().activeSketchId) {
+        if (e.pointerType === "touch") {
+          if (touches.size > 1) return;
+          if (touchPick && (touchPick.aborted || touchPick.id !== e.pointerId)) return;
+        }
         if (e.buttons === 0 || e.buttons === 1) controller.pointerMove(p);
         return;
       }
       if (e.buttons !== 0) return;
       if (appState.get().workspace !== "design") return;
+      const over = overManipulator(p.x, p.y, 18) !== null;
+      if (over !== manipulatorHover) {
+        manipulatorHover = over;
+        webgl.style.cursor = over ? "grab" : "";
+        controller.requestDraw();
+      }
+      if (over) {
+        controller.setHoverProfile(null);
+        if (appState.get().hover) appState.set({ hover: null });
+        return;
+      }
       hover3d(p.x, p.y);
     };
+
     const onPointerUp = (e: PointerEvent): void => {
+      const touch = e.pointerType === "touch";
+      if (touch) touches.delete(e.pointerId);
+      if (manipulator) {
+        if (e.pointerId !== manipulator.pointerId) return;
+        manipulator = null;
+        scene.setControlsEnabled(true);
+        if (webgl.hasPointerCapture(e.pointerId)) webgl.releasePointerCapture(e.pointerId);
+        controller.requestDraw();
+        return;
+      }
       const start = down;
       down = null;
       if (e.button !== 0) return;
       const p = info(e);
       if (appState.get().activeSketchId) {
+        if (touchPick) {
+          const pick = touchPick;
+          touchPick = null;
+          if (pick.id !== e.pointerId || pick.aborted) return;
+          controller.pointerDown(p);
+        }
         controller.pointerUp(p);
+        if (touch) controller.clearCursor();
         return;
       }
       if (!start || start.button !== 0) return;
-      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4) return;
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > (touch ? 12 : 4)) return;
       if (appState.get().workspace !== "design") return;
       click3d(p.x, p.y, p.shift || p.meta);
+    };
+    const onPointerCancel = (e: PointerEvent): void => {
+      touches.delete(e.pointerId);
+      if (touchPick?.id === e.pointerId) touchPick = null;
+      if (manipulator?.pointerId === e.pointerId) {
+        manipulator = null;
+        scene.setControlsEnabled(true);
+      }
+      controller.cancelDrag();
+      down = null;
     };
     const onDoubleClick = (e: MouseEvent): void => {
       if (appState.get().activeSketchId) controller.doubleClick(info(e));
@@ -326,9 +472,11 @@ export function Viewport(): ReactElement {
     };
     const onContextMenu = (e: MouseEvent): void => e.preventDefault();
 
-    webgl.addEventListener("pointerdown", onPointerDown);
+    // Capture phase: the manipulator must see the event before the camera controls do.
+    webgl.addEventListener("pointerdown", onPointerDown, { capture: true });
     webgl.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerCancel);
     webgl.addEventListener("dblclick", onDoubleClick);
     webgl.addEventListener("pointerleave", onLeave);
     webgl.addEventListener("contextmenu", onContextMenu);
@@ -346,6 +494,16 @@ export function Viewport(): ReactElement {
           const r = webgl.getBoundingClientRect();
           const s = scene.project(planeToWorld(resolveSketchPlane(f.sketch.plane), { x, y }));
           return { x: s.x + r.left, y: s.y + r.top };
+        },
+        manipulatorHandle: () => {
+          const m = currentManipulator();
+          if (!m) return null;
+          const r = webgl.getBoundingClientRect();
+          const h = manipulatorScreen(scene, m);
+          return {
+            handle: { x: h.handle.x + r.left, y: h.handle.y + r.top },
+            direction: h.direction,
+          };
         },
         worldToScreen: (x: number, y: number, z: number) => {
           const r = webgl.getBoundingClientRect();
@@ -365,9 +523,10 @@ export function Viewport(): ReactElement {
     return () => {
       off();
       observer.disconnect();
-      webgl.removeEventListener("pointerdown", onPointerDown);
+      webgl.removeEventListener("pointerdown", onPointerDown, { capture: true });
       webgl.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       webgl.removeEventListener("dblclick", onDoubleClick);
       webgl.removeEventListener("pointerleave", onLeave);
       webgl.removeEventListener("contextmenu", onContextMenu);
@@ -425,6 +584,23 @@ export function Viewport(): ReactElement {
     scene.setHighlights(items);
     controllerRef.current?.requestDraw();
   }, [app.selection, app.hover, app.dialog, model.bodies, doc.bodies, ready]);
+
+  // ---------------------------------------------------- extrude preview
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const dialog = app.dialog;
+    const m =
+      dialog?.type === "extrude" && !app.activeSketchId && app.workspace === "design"
+        ? extrudeManipulator(doc, dialog)
+        : null;
+    scene.setExtrudePreview(
+      m && m.distance !== null
+        ? { plane: m.plane, regions: m.regions, from: m.from, to: m.to, removing: m.removing }
+        : null,
+    );
+    controllerRef.current?.requestDraw();
+  }, [app.dialog, app.activeSketchId, app.workspace, doc, ready]);
 
   // -------------------------------------------------------- sketch redraws
   useEffect(() => {

@@ -393,3 +393,105 @@ table.grid td input { padding: 2px 5px; }
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: #cfd6dc; border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-thumb:hover { background: #b4bec7; background-clip: padding-box; border: 2px solid transparent; }
+
+/* ------------------------------------------------ touch and small screens */
+.side-backdrop, .side-grip, .touch-bar, .options-toggle { display: none; }
+
+.touch-bar {
+  position: absolute; z-index: 7; left: 8px; right: 8px; bottom: 8px;
+  gap: 6px; flex-wrap: wrap; pointer-events: none;
+}
+.touch-btn {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 38px; padding: 0 12px; border-radius: 19px;
+  background: rgba(255, 255, 255, 0.96); border: 1px solid var(--line-strong);
+  box-shadow: 0 2px 8px rgba(29, 43, 56, 0.14);
+  font-weight: 600; color: var(--ink);
+}
+.touch-btn.on { background: var(--active); color: var(--accent-strong); }
+.touch-btn.primary { background: var(--ok); border-color: var(--ok); color: #fff; }
+.touch-btn.danger { color: var(--danger); }
+
+@media (pointer: coarse) {
+  .touch-bar { display: flex; }
+  .tool { min-width: 42px; height: 42px; }
+  .tree-row { height: 32px; }
+  .tree-eye { opacity: 1; width: 30px; height: 30px; }
+  .icon-btn { width: 34px; height: 34px; }
+  .timeline-controls .icon-btn { width: 30px; }
+  /* iOS zooms the page when a focused field has a smaller font. */
+  input, select, textarea { font-size: 16px; }
+  .view-grid button, .view-row button { padding: 7px 8px; min-width: 44px; font-size: 11px; }
+}
+
+@media (max-width: 860px) {
+  :root { --header-h: 46px; --ribbon-h: 64px; --timeline-h: 52px; --status-h: 0px; }
+  html, body, #root { height: 100dvh; }
+  body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+
+  .app, .app.no-timeline {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "header" "ribbon" "main" "timeline" "status";
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .status { display: none; }
+  .touch-bar { display: flex; }
+
+  .header { gap: 6px; padding: 0 8px; }
+  .brand { font-size: 0; gap: 0; }
+  .brand-tag, .doc-name, .header-sep, .header > .btn { display: none; }
+  .workspace-tabs button { padding: 6px 9px; font-size: 10px; letter-spacing: 0.4px; }
+  .header .menu-wrap > .btn { padding: 6px 8px; }
+
+  .ribbon { padding: 0 2px; -webkit-overflow-scrolling: touch; }
+  .ribbon-group { padding: 5px 5px 3px; }
+  .tool.wide span { display: none; }
+  .tool.wide.finish span { display: inline; }
+  .menu { position: fixed; top: calc(var(--header-h) + var(--ribbon-h) + 4px); left: 8px; right: 8px; max-height: 60dvh; overflow: auto; }
+  .header .menu { top: calc(var(--header-h) + 4px); }
+  .menu button { padding: 10px; }
+
+  .side {
+    position: fixed; z-index: 70; left: 0; right: 0; bottom: 0;
+    height: min(66dvh, 560px);
+    border-right: 0; border-top: 1px solid var(--line-strong);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -10px 40px rgba(29, 43, 56, 0.22);
+    transform: translateY(105%);
+    transition: transform 0.22s ease;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .side.open { transform: none; }
+  .side-grip {
+    display: block; flex: none; width: 100%; height: 22px; padding: 0; border-radius: 14px 14px 0 0;
+    background: transparent;
+  }
+  .side-grip::after { content: ""; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto; }
+  .side-backdrop { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(29, 43, 56, 0.28); }
+
+  .floating { left: 8px; right: 8px; top: auto; bottom: 100px; width: auto; max-height: 52dvh; overflow: auto; }
+  .floating:not(.expanded) .field.secondary { display: none; }
+  .floating .options-toggle { display: inline-flex; margin-left: auto; margin-right: 4px; }
+  .floating-title { padding: 5px 8px; }
+  .floating-body { padding: 7px 8px 8px; }
+  .floating .form-actions { margin-top: 5px; }
+  .view-tools { right: 6px; top: auto; bottom: 54px; gap: 4px; flex-direction: row; align-items: center; }
+  .view-grid { display: none; }
+  .view-card { padding: 2px; }
+  .view-row { margin-top: 0 !important; }
+  .view-grid button, .view-row button { min-width: 0; padding: 7px 7px; }
+  .header .menu-wrap > .btn.primary { font-size: 0; gap: 0 !important; padding: 7px 9px; }
+  .touch-bar { right: 170px; }
+  .sketch-banner { top: 6px; left: 6px; transform: none; max-width: calc(100% - 12px); padding: 3px 5px 3px 9px; gap: 6px; overflow: hidden; }
+  .sketch-banner .btn { display: none; }
+  .fab-tabs { top: 6px; }
+  .fab-view.padded { padding: 50px 10px 60px; }
+  .part-cards { grid-template-columns: minmax(0, 1fr); }
+  .toasts { bottom: 110px; left: 12px; right: 12px; transform: none; }
+  .modal { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); }
+  .modal-body { padding: 10px; overflow-x: auto; }
+  table.grid { min-width: 560px; }
+  .timeline { padding: 0 6px; gap: 4px; }
+  .timeline-controls button:nth-child(2), .timeline-controls button:nth-child(3) { display: none; }
+}

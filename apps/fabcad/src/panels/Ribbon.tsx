@@ -324,7 +324,7 @@ function SolidRibbon(): ReactElement {
           title="Create Sketch — pick a plane or planar face"
           wide
           active={is("pick-sketch-plane")}
-          onClick={beginSketchPlanePick}
+          onClick={() => beginSketchPlanePick(null)}
         />
       </Group>
       <Group label="Create">

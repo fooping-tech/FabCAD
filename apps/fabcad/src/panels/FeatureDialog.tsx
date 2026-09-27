@@ -1,5 +1,5 @@
 import { type BodyOperation, FEATURE_LABELS } from "@fabcad/cad-document";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import { closeDialog, commitDialog, dialogProblem, patchDialog } from "../app/actions";
 import { type Dialog, appState } from "../app/appState";
 import { useDocument } from "../app/session";
@@ -14,9 +14,18 @@ const OPERATIONS: { id: BodyOperation; label: string }[] = [
   { id: "intersect", label: "Intersect" },
 ];
 
-function Field({ label, children }: { label: string; children: ReactNode }): ReactElement {
+/** `secondary` fields are folded away on small screens until "Options" is opened. */
+function Field({
+  label,
+  children,
+  secondary,
+}: {
+  label: string;
+  children: ReactNode;
+  secondary?: boolean;
+}): ReactElement {
   return (
-    <div className="field" style={{ alignItems: "start" }}>
+    <div className={`field${secondary ? " secondary" : ""}`} style={{ alignItems: "start" }}>
       <span className="label" style={{ paddingTop: 5 }}>
         {label}
       </span>
@@ -73,7 +82,7 @@ function OperationFields({
   const bodies = Object.values(doc.bodies);
   return (
     <>
-      <Field label="Operation">
+      <Field label="Operation" secondary>
         <select
           value={dialog.operation}
           aria-label="Operation"
@@ -96,7 +105,7 @@ function OperationFields({
         </select>
       </Field>
       {dialog.operation !== "new" && (
-        <Field label="Bodies">
+        <Field label="Bodies" secondary>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }}>
             {bodies.map((b) => (
               <label key={b.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -153,7 +162,7 @@ function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
               onEnter={commitDialog}
             />
           </Field>
-          <Field label="Direction">
+          <Field label="Direction" secondary>
             <div className="segmented">
               {(
                 [
@@ -318,7 +327,7 @@ function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
               }
             />
           </Field>
-          <Field label="Operation">
+          <Field label="Operation" secondary>
             <div className="segmented">
               {(
                 [
@@ -337,7 +346,7 @@ function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
               ))}
             </div>
           </Field>
-          <Field label="Keep tools">
+          <Field label="Keep tools" secondary>
             <div style={{ paddingTop: 6 }}>
               <input
                 type="checkbox"
@@ -366,15 +375,23 @@ const TITLES: Partial<Record<Dialog["type"], string>> = {
 /** Floating dialog of the running solid feature command. */
 export function FeatureDialog(): ReactElement | null {
   const dialog = useStore(appState, (s) => s.dialog);
+  const [expanded, setExpanded] = useState(false);
   if (!dialog) return null;
   const title = TITLES[dialog.type];
   if (!title) return null;
   const problem = dialogProblem(dialog);
   const editing = "editing" in dialog && dialog.editing !== null;
   return (
-    <div className="floating" role="dialog" aria-label={title}>
+    <div className={`floating${expanded ? " expanded" : ""}`} role="dialog" aria-label={title}>
       <div className="floating-title">
         <span>{editing ? `Edit ${title}` : title}</span>
+        <button
+          className="btn small options-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "Less" : "Options"}
+        </button>
         <button className="icon-btn" aria-label="Cancel" title="Cancel (Esc)" onClick={closeDialog}>
           <Icon name="close" size={13} />
         </button>

@@ -147,6 +147,10 @@ export interface AppState {
   hint: string;
   showConstraints: boolean;
   showDimensions: boolean;
+  /** Sketch tool to start as soon as a sketch plane has been picked. */
+  pendingSketchTool: string | null;
+  /** Small screens: whether the side panel sheet is open. */
+  sidePanelOpen: boolean;
 }
 
 export const appState = new TinyStore<AppState>({
@@ -177,6 +181,8 @@ export const appState = new TinyStore<AppState>({
   hint: "",
   showConstraints: true,
   showDimensions: true,
+  pendingSketchTool: null,
+  sidePanelOpen: false,
 });
 
 let toastId = 1;

@@ -18,7 +18,7 @@ import {
   updateFeature,
 } from "@fabcad/cad-document";
 import { type OriginPlaneName, type Vec3, makePlane } from "@fabcad/geometry";
-import { type SketchPlaneRef, editSketch } from "@fabcad/sketch";
+import { type SketchPlaneRef, editSketch, profileRefOf } from "@fabcad/sketch";
 import {
   type Dialog,
   type Selection,
@@ -34,6 +34,7 @@ import {
   fileToBase64,
   pickFile,
   run,
+  sketchView,
 } from "./session";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
@@ -52,7 +53,12 @@ export function setWorkspace(workspace: "design" | "fabrication"): void {
 
 // ------------------------------------------------------------------- sketches
 
-export function beginSketchPlanePick(): void {
+/**
+ * Start a sketch. `tool` is the sketch tool to activate once the plane is known, so that a
+ * shortcut such as L works from the solid environment as well.
+ */
+export function beginSketchPlanePick(tool: string | null = null): void {
+  appState.set({ pendingSketchTool: tool });
   const { selection } = appState.get();
   // A plane or planar face that is already selected is used directly.
   const first = selection[0];
@@ -95,10 +101,12 @@ export function enterSketch(sketchId: string): void {
     workspace: "design",
     activeSketchId: sketchId,
     dialog: null,
-    tool: "select",
+    tool: appState.get().pendingSketchTool ?? "select",
+    pendingSketchTool: null,
     selection: [],
     hover: null,
     dimensionEdit: null,
+    sidePanelOpen: false,
   });
 }
 
@@ -134,6 +142,8 @@ function defaultTargets(): string[] {
 
 export function openDialog(type: Dialog["type"]): void {
   const state = appState.get();
+  // Profiles picked inside the sketch carry over into the command started from it.
+  const picked = selectedProfiles();
   if (state.activeSketchId) finishSketch();
   const selection = appState.get().selection;
   const doc = documentStore.document;
@@ -141,14 +151,18 @@ export function openDialog(type: Dialog["type"]): void {
   switch (type) {
     case "extrude":
     case "revolve": {
-      let { sketchId, profiles } = selectedProfiles();
+      let { sketchId } = picked;
+      let refs = picked.profiles.map((p) => p.ref);
       // Coming straight from a sketch: preselect it when it has exactly one profile.
       const sketchSel = selection.find((s) => s.kind === "feature");
       if (!sketchId && sketchSel?.kind === "feature") {
         const f = doc.features[sketchSel.featureId];
-        if (f?.type === "sketch") sketchId = f.id;
+        if (f?.type === "sketch") {
+          sketchId = f.id;
+          const regions = sketchView(f.sketch, doc).regions;
+          if (regions.length === 1) refs = [profileRefOf(regions[0]!)];
+        }
       }
-      const refs = profiles.map((p) => p.ref);
       const hasBodies = Object.keys(doc.bodies).length > 0;
       dialog =
         type === "extrude"
@@ -218,7 +232,7 @@ export function openDialog(type: Dialog["type"]): void {
       break;
     }
     case "pick-sketch-plane":
-      beginSketchPlanePick();
+      beginSketchPlanePick(null);
       return;
     default:
       dialog = { type } as Dialog;
@@ -231,7 +245,14 @@ export function openDialog(type: Dialog["type"]): void {
         : type === "combine"
           ? "body"
           : state.selectionFilter;
-  appState.set({ dialog, tool: "select", selection: [], hover: null, selectionFilter: filter });
+  appState.set({
+    dialog,
+    tool: "select",
+    selection: [],
+    hover: null,
+    selectionFilter: filter,
+    sidePanelOpen: false,
+  });
 }
 
 /** Open the dialog of an existing feature to edit it. */
@@ -306,7 +327,13 @@ export function editFeature(featureId: string): void {
 
 export function closeDialog(): void {
   if (!appState.get().dialog) return;
-  appState.set({ dialog: null, hover: null, selectionFilter: "auto", hint: "" });
+  appState.set({
+    dialog: null,
+    hover: null,
+    selectionFilter: "auto",
+    hint: "",
+    pendingSketchTool: null,
+  });
 }
 
 export function patchDialog(patch: Partial<Dialog>): void {

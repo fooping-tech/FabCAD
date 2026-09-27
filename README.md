@@ -22,7 +22,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Dimensions | Distance、Horizontal / Vertical Distance、Angle、Radius、Diameter。値にはパラメータ式を入力できます |
 | 拘束状態 | Under-constrained（残り自由度を表示）/ Fully constrained / Over-constrained。過剰拘束になる操作は拒否します |
 | Profile | 交点を含めて閉領域を自動検出し、クリックで選択（複数選択可） |
-| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
+| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
 | 入出力 | STEP import / export、STL export、プロジェクト保存・読み込み、IndexedDB への自動保存 |
@@ -78,11 +78,32 @@ npm run preview
 | `Ctrl/Cmd + S`、`Ctrl/Cmd + O` | 保存 / 開く |
 | `F` | 全体表示 |
 | スケッチ中 `L` `R` `C` `A` `D` `T` `O` `M` `P` `S` `X` | Line、Rectangle、Circle、Arc、Dimension、Trim、Offset、Move、Point、Spline、Construction |
+| スケッチ中 `E` | スケッチを終了して Extrude を開始。閉領域が 1 つならそのまま選択されます |
 | 3D `E` `S` | Extrude、Create Sketch |
+| 3D `L` `R` `C` `A` `P` など | 平面を選ぶと、そのツールでスケッチを開始 |
 | ホイール | ズーム |
 | 中ボタンドラッグ | パン |
 | 右ドラッグ（3D では左ドラッグも） | オービット |
 | `Ctrl/Cmd` を押しながらクリック | スナップを無効化（スケッチ）、追加選択 |
+| Extrude の矢印をドラッグ | 距離を変更。`Alt` を押している間は刻みなし |
+
+ショートカットは日本語入力がオンのままでも使えます。
+
+### スマートフォン・タブレット
+
+幅 860 px 以下ではスマートフォン用のレイアウトになります。
+
+| 操作 | 内容 |
+| --- | --- |
+| 1 本指ドラッグ | 3D ではオービット。スケッチでは描画とドラッグ |
+| 2 本指 | パンとズーム |
+| タップ | 選択。スケッチのツールでは点を置きます |
+| 指を置いてからずらして離す | 離した位置に点を置きます（狙いを定められます） |
+| 画面下の **Browser** / **Settings** | ブラウザとプロパティ、または Fabrication の設定を下から開きます |
+| 画面下の **Cancel** / **Done** / **Delete** / **Finish** | `Esc`、`Enter`、`Delete`、スケッチ終了の代わり |
+| 選択済みの寸法をもう一度タップ | 寸法値を編集 |
+
+Extrude などのダイアログは主要な項目だけを表示し、**Options** で残りを開きます。
 
 ## アーキテクチャ
 
@@ -179,6 +200,7 @@ SPA ルーティングは使っていません。WebAssembly（約 23 MB、gzip 
 | Nesting | 外接矩形による row / shelf packing のみ |
 | 凹角 | Board のパネルは線で接するだけで、内側に隙間が残ります（警告を出します） |
 | 範囲選択 | 未実装 |
+| スマートフォン | Chrome のスマートフォン表示とタッチ入力のエミュレーションで確認しました。実機では未検証です |
 | 実機での加工 | 未検証です。kerf と fit offset は材料と加工機に合わせて調整してください |
 
 ## ライセンスについて
