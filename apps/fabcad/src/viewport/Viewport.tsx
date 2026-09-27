@@ -4,7 +4,9 @@ import { profileRefOf, sketchBounds } from "@fabcad/sketch";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import {
   closeDialog,
+  discardAutoSketch,
   enterSketch,
+  faceAsProfile,
   finishSketch,
   patchDialog,
   startSketchOnFace,
@@ -21,6 +23,7 @@ import {
 import { openContextMenu } from "../app/contextMenu";
 import { documentStore, editSketchSolved, modelState, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { useNumericKeypad } from "../panels/ExpressionInput";
 import { projectPick } from "../sketch/projectTool";
 import { SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
@@ -167,10 +170,18 @@ export function Viewport(): ReactElement {
           }
           return;
         }
-        controller.setHoverProfile(
-          controller.profileAt(x, y, { visibleOnly: true }) ?? controller.profileAt(x, y),
-        );
-        if (state.hover) appState.set({ hover: null });
+        const profile =
+          controller.profileAt(x, y, { visibleOnly: true }) ?? controller.profileAt(x, y);
+        controller.setHoverProfile(profile);
+        // Without a profile under the pointer, a planar face of a body can be extruded too.
+        let face: Selection | null = null;
+        if (!profile && dialog.type === "extrude" && !dialog.editing) {
+          const pick = scene.pick(x, y, { faces: true, edges: false, vertices: false });
+          if (pick?.kind === "face" && pick.planar) face = pickToSelection(pick);
+        }
+        if ((state.hover ? selectionKey(state.hover) : "") !== (face ? selectionKey(face) : "")) {
+          appState.set({ hover: face });
+        }
         return;
       }
       controller.setHoverProfile(null);
@@ -232,7 +243,22 @@ export function Viewport(): ReactElement {
           }
           return;
         }
-        if (!profile) return;
+        if (!profile) {
+          if (dialog.type !== "extrude" || hover?.kind !== "face") return;
+          const made = faceAsProfile(hover.bodyId, hover.point, hover.normal, hover.faceIndex);
+          if (!made) return;
+          // The face replaces what was picked before.
+          discardAutoSketch(dialog.autoSketch);
+          patchDialog({
+            sketchId: made.sketchId,
+            profiles: made.profiles,
+            autoSketch: made.sketchId,
+            operation: dialog.operation === "new" ? "join" : dialog.operation,
+            targetBodyIds: [hover.bodyId],
+          });
+          appState.set({ hover: null });
+          return;
+        }
         const ref = profileRefOf(profile.region);
         if (dialog.sketchId !== profile.sketchId) {
           patchDialog({ sketchId: profile.sketchId, profiles: [ref], ...(dialog.type === "revolve" ? { axis: null } : {}) });
@@ -1013,6 +1039,7 @@ function DimensionEditor(): ReactElement | null {
     return f?.type === "sketch" ? f.sketch.dimensions[edit.dimensionId]?.type : undefined;
   })();
   const unit = editedType === "angle" ? "deg" : "mm";
+  const keypad = useNumericKeypad(edit.value);
 
   const close = (): void => {
     done.current = true;
@@ -1062,6 +1089,8 @@ function DimensionEditor(): ReactElement | null {
         ref={inputRef}
         value={value}
         aria-label="Dimension value or expression"
+        inputMode={keypad.inputMode}
+        enterKeyHint="done"
         spellCheck={false}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
@@ -1072,6 +1101,17 @@ function DimensionEditor(): ReactElement | null {
         onBlur={apply}
       />
       <span className="unit">{unit}</span>
+      {keypad.touch && (
+        <button
+          type="button"
+          className="keys-toggle"
+          aria-label={keypad.text ? "Switch to number keys" : "Switch to letter keys"}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={keypad.toggle}
+        >
+          {keypad.text ? "123" : "abc"}
+        </button>
+      )}
     </div>
   );
 }

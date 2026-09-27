@@ -23,6 +23,26 @@ export function previewExpression(
 }
 
 /**
+ * On touch devices value fields bring up the number keys; a button switches to the letter keys
+ * for parameters and expressions. A field that already holds an expression starts with letters.
+ */
+export function useNumericKeypad(value: string): {
+  touch: boolean;
+  text: boolean;
+  inputMode: "decimal" | "text" | undefined;
+  toggle: () => void;
+} {
+  const touch = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const [text, setText] = useState(() => /[A-Za-z_(]/.test(value));
+  return {
+    touch,
+    text,
+    inputMode: touch ? (text ? "text" : "decimal") : undefined,
+    toggle: () => setText((t) => !t),
+  };
+}
+
+/**
  * Text field for a value or parameter expression ("50", "width / 2", "t + 0.1 mm").
  * `live` reports every keystroke; otherwise the value is committed on Enter or blur.
  */
@@ -49,11 +69,14 @@ export function ExpressionInput({
   const preview = previewExpression(draft, kind);
   const isPlain = /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/.test(draft);
   const unit = kind === "length" ? "mm" : kind === "angle" ? "deg" : "";
+  const keypad = useNumericKeypad(draft);
   return (
     <div>
-      <div className={`unit-field${unit ? " has-unit" : ""}`}>
+      <div className={`unit-field${unit ? " has-unit" : ""}${keypad.touch ? " has-keys" : ""}`}>
       <input
         value={draft}
+        inputMode={keypad.inputMode}
+        enterKeyHint="done"
         aria-label={label}
         aria-invalid={preview.error}
         className={preview.error ? "invalid" : ""}
@@ -81,6 +104,18 @@ export function ExpressionInput({
         }}
       />
       {unit && <span className="unit">{unit}</span>}
+      {keypad.touch && (
+        <button
+          type="button"
+          className="keys-toggle"
+          title={keypad.text ? "Number keys" : "Letter keys, for parameters and expressions"}
+          aria-label={keypad.text ? "Switch to number keys" : "Switch to letter keys"}
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={keypad.toggle}
+        >
+          {keypad.text ? "123" : "abc"}
+        </button>
+      )}
       </div>
       {(preview.error || !isPlain) && (
         <div className={preview.error ? "field-error" : "value-preview"} style={{ marginTop: 2 }}>

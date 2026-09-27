@@ -59,6 +59,11 @@ export type Dialog =
       editing: string | null;
       sketchId: string | null;
       profiles: ProfileRef[];
+      /**
+       * Sketch that was created for this command from a face of a body. It is taken back when
+       * the command is cancelled.
+       */
+      autoSketch?: string | null;
       distance: string;
       direction: ExtrudeDirection;
       operation: BodyOperation;

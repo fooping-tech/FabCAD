@@ -79,6 +79,7 @@ function NumberOption({
       {label}
       <input
         type="number"
+        inputMode="decimal"
         value={value}
         min={min}
         step={step}

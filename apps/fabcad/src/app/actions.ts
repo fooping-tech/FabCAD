@@ -26,7 +26,13 @@ import {
   norm3,
   scale3,
 } from "@fabcad/geometry";
-import { type Sketch, type SketchPlaneRef, editSketch, profileRefOf } from "@fabcad/sketch";
+import {
+  type ProfileRef,
+  type Sketch,
+  type SketchPlaneRef,
+  editSketch,
+  profileRefOf,
+} from "@fabcad/sketch";
 import { projectInto } from "../sketch/projectTool";
 import {
   type Dialog,
@@ -149,6 +155,63 @@ export function startSketchOnFace(
   );
 }
 
+const FACE_PROFILE = "Face profile";
+
+/**
+ * Use a planar face of a body as a profile (Fusion lets you extrude a face directly). The
+ * outline of the face is projected into a new sketch on that face; the regions that make up
+ * the face itself, not its holes, are returned as the profiles.
+ */
+export function faceAsProfile(
+  bodyId: string,
+  point: Vec3,
+  normal: Vec3,
+  faceIndex: number,
+): { sketchId: string; profiles: ProfileRef[] } | null {
+  const geometry = modelState.get().bodies[bodyId]?.geometry;
+  if (!geometry) return null;
+  const xHint = Math.abs(normal.x) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+  const n = norm3(normal);
+  const plane = makePlane(scale3(n, dot3(n, point)), n, xHint);
+  const out: CreatedRef = {};
+  const create = addSketch({ type: "face", bodyId, hint: point, plane }, out);
+  const ok = run(
+    command(FACE_PROFILE, (doc) => {
+      const next = create.apply(doc);
+      return out.id
+        ? applySketchEdit(next, out.id, (sketch) =>
+            projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }).sketch,
+          )
+        : next;
+    }),
+  );
+  const f = out.id ? documentStore.document.features[out.id] : undefined;
+  if (!ok || !out.id || f?.type !== "sketch") return null;
+  const regions = sketchView(f.sketch).regions;
+  // A region bounded by the hole of another region is a hole of the face, not the face.
+  const holes = new Set(
+    regions.flatMap((r) => r.holeEntityIds.map((ids) => ids.slice().sort().join(","))),
+  );
+  const faceRegions = regions.filter((r) => !holes.has(r.entityIds.slice().sort().join(",")));
+  if (faceRegions.length === 0) {
+    discardAutoSketch(out.id);
+    return null;
+  }
+  return { sketchId: out.id, profiles: faceRegions.map(profileRefOf) };
+}
+
+/** Take back a sketch made by `faceAsProfile` that ended up unused. */
+export function discardAutoSketch(sketchId: string | null | undefined): void {
+  if (!sketchId || !documentStore.document.features[sketchId]) return;
+  const used = Object.values(documentStore.document.features).some(
+    (f) => (f.type === "extrude" || f.type === "revolve") && f.sketchId === sketchId,
+  );
+  if (used) return;
+  const last = documentStore.document.timeline[documentStore.document.timeline.length - 1];
+  if (documentStore.undoLabel === FACE_PROFILE && last === sketchId) documentStore.undo();
+  else run(removeFeatures([sketchId]));
+}
+
 export function enterSketch(sketchId: string): void {
   const f = documentStore.document.features[sketchId];
   if (!f || f.type !== "sketch") return;
@@ -220,6 +283,19 @@ export function openDialog(type: Dialog["type"]): void {
         }
       }
       const hasBodies = Object.keys(doc.bodies).length > 0;
+      // A selected planar face is extruded as it is.
+      let autoSketch: string | null = null;
+      let faceBody: string | null = null;
+      const face = selection.find((s) => s.kind === "face" && s.planar);
+      if (type === "extrude" && refs.length === 0 && face?.kind === "face") {
+        const made = faceAsProfile(face.bodyId, face.point, face.normal, face.faceIndex);
+        if (made) {
+          sketchId = made.sketchId;
+          refs = made.profiles;
+          autoSketch = made.sketchId;
+          faceBody = face.bodyId;
+        }
+      }
       dialog =
         type === "extrude"
           ? {
@@ -227,10 +303,11 @@ export function openDialog(type: Dialog["type"]): void {
               editing: null,
               sketchId,
               profiles: refs,
+              autoSketch,
               distance: "10",
               direction: "positive",
               operation: hasBodies ? "join" : "new",
-              targetBodyIds: defaultTargets(),
+              targetBodyIds: faceBody ? [faceBody] : defaultTargets(),
             }
           : {
               type,
@@ -385,7 +462,9 @@ export function editFeature(featureId: string): void {
 }
 
 export function closeDialog(): void {
-  if (!appState.get().dialog) return;
+  const dialog = appState.get().dialog;
+  if (!dialog) return;
+  if (dialog.type === "extrude") discardAutoSketch(dialog.autoSketch);
   appState.set({
     dialog: null,
     hover: null,
