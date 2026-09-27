@@ -2,7 +2,7 @@
 
 ブラウザだけで動く、汎用パラメトリック 3D CAD です。設計した形状を、そのまま加工可能な部品データへ変換する **Fabrication Compiler** を備えています。
 
-公開 URL: https://fooping-tech.github.io/FabCAD/
+公開 URL: https://fooping-tech.github.io/FabCAD/ （紹介ページ）、CAD 本体は https://fooping-tech.github.io/FabCAD/app/
 
 ```
 Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG / DXF
@@ -50,7 +50,7 @@ npm install
 npm run dev
 ```
 
-開発サーバーは http://127.0.0.1:5173/FabCAD/ で起動します。
+開発サーバーは http://127.0.0.1:5173/FabCAD/ で起動します。`/FabCAD/` が紹介ページ、`/FabCAD/app/` が CAD 本体です。
 
 ```sh
 npm test
@@ -235,7 +235,7 @@ Vite の `base` は `/FabCAD/` です。別のパスで公開する場合は環�
 FABCAD_BASE=/ npm run build
 ```
 
-SPA ルーティングは使っていません。WebAssembly（約 23 MB、gzip で約 7 MB）は Vite がハッシュ付きのアセットとして出力し、Worker から相対 URL で読み込みます。
+SPA ルーティングは使っていません。Vite のマルチページ構成で、`index.html`（紹介ページ）と `app/index.html`（CAD 本体）をビルドします。WebAssembly（約 23 MB、gzip で約 7 MB）は Vite がハッシュ付きのアセットとして出力し、Worker から相対 URL で読み込みます。
 
 ## 未実装・制限
 

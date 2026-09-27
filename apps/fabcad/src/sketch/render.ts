@@ -176,7 +176,7 @@ export function drawSketchGeometry(
   state: SketchDrawState,
 ): void {
   const px = projector.pixel();
-  const tolerance = Math.max(px * 0.4, 1e-4);
+  const tolerance = Math.max(px * 0.08, 1e-4);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 

@@ -1,15 +1,263 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="description" content="FabCAD — parametric 3D CAD in the browser with a fabrication compiler for laser cutting." />
-    <meta name="theme-color" content="#23384a" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d1216" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>FabCAD</title>
+    <title>FabCAD — Parametric 3D CAD with a Fabrication Compiler</title>
+    <meta name="description" content="ブラウザで動くパラメトリック3D CAD。設計した立体を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
+    <link rel="canonical" href="https://fooping-tech.github.io/FabCAD/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FabCAD" />
+    <meta property="og:title" content="FabCAD — Parametric 3D CAD with a Fabrication Compiler" />
+    <meta property="og:description" content="ブラウザで動くパラメトリック3D CAD。設計した立体を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
+    <meta property="og:url" content="https://fooping-tech.github.io/FabCAD/" />
+    <meta property="og:image" content="https://fooping-tech.github.io/FabCAD/landing/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="/src/landing/landing.css" />
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body class="landing">
+    <a class="skip" href="#hero">本文へ</a>
+    <header class="nav" id="top">
+      <div class="wrap nav-inner">
+        <a class="brand" href="./" aria-label="FabCAD">
+          <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="#263b4d" />
+            <path d="M8 22.5 16 27l8-4.5V13l-8-4.5L8 13z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round" />
+            <path d="M8 13l8 4.5 8-4.5M16 17.5V27" fill="none" stroke="#efa562" stroke-width="1.8" stroke-linejoin="round" />
+          </svg>
+          <span>FabCAD</span>
+          <span class="beta">BETA</span>
+        </a>
+        <nav class="nav-links" aria-label="ページ内">
+          <a href="#design">Design</a>
+          <a href="#fabrication">Fabrication</a>
+          <a href="#workflow">How it works</a>
+          <a href="https://github.com/fooping-tech/FabCAD" rel="noopener">GitHub</a>
+        </nav>
+        <a class="button primary small" href="./app/">FabCADを開く</a>
+      </div>
+    </header>
+
+    <div class="welcome-back" id="welcome-back" hidden>
+      <div class="wrap">
+        このブラウザにはFabCADで編集中のプロジェクトが保存されています。CADは <a href="./app/">/app/</a> に移動しました（データはそのまま使えます）。
+      </div>
+    </div>
+
+    <main>
+      <section class="hero" id="hero">
+        <div class="wrap">
+          <p class="eyebrow">PARAMETRIC 3D CAD · FABRICATION COMPILER · BROWSER-BASED</p>
+          <h1>Design it. Then make it <em>cuttable</em>.</h1>
+          <p class="lede">
+            <strong>設計から、切れるデータまで。</strong>
+            スケッチを描き、拘束と寸法で形を決め、押し出して立体にする。材料を選ぶと、その立体がレーザーで切れる部品になります。すべてブラウザの中で動きます。
+          </p>
+          <div class="cta-row">
+            <a class="button primary" href="./app/">FabCADを開く <span aria-hidden="true">→</span></a>
+            <a class="button ghost" href="https://github.com/fooping-tech/FabCAD" rel="noopener">View on GitHub</a>
+          </div>
+          <p class="hero-note">インストール不要・無料。設計データは外部に送信しません。</p>
+        </div>
+        <div class="wrap wide">
+          <figure class="shot hero-shot reveal">
+            <img src="./landing/hero.png" width="2880" height="1800" alt="FabCADの画面。星形の立体を押し出しの矢印で引き出している" />
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="pipeline">
+        <div class="wrap">
+          <p class="eyebrow center">ONE PIPELINE</p>
+          <h2 class="center">CAD and manufacturing, not two separate tools.</h2>
+          <p class="sub center">
+            形を作るところと、作れる形に直すところを分けません。ただし中身は分かれています。CADは材料を知らず、加工側は立体の面と稜線だけを見ます。
+          </p>
+          <ol class="pipeline reveal" aria-label="FabCADの処理の流れ">
+            <li><span>Sketch</span></li>
+            <li><span>Constraints</span></li>
+            <li><span>Feature</span></li>
+            <li><span>B-Rep Solid</span></li>
+            <li class="accent"><span>Fabrication</span></li>
+            <li class="accent"><span>Parts</span></li>
+            <li class="accent"><span>Sheet</span></li>
+            <li class="accent"><span>SVG / DXF</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section" id="design">
+        <div class="wrap">
+          <p class="eyebrow">DESIGN</p>
+          <h2>A real parametric CAD, in a browser tab.</h2>
+          <p class="sub">幾何カーネルはOpenCASCADE（WebAssembly）。フィレットもブーリアンも、本物のB-Repで計算します。</p>
+        </div>
+        <div class="wrap wide">
+          <div class="split reveal">
+            <figure class="shot"><img loading="lazy" src="./landing/sketch.png" width="2880" height="1800" alt="拘束と、パラメータ式の寸法が付いたスケッチ" /></figure>
+            <div class="split-text">
+              <h3>スケッチと拘束</h3>
+              <p>線・矩形・円・円弧・楕円・多角形・スロット・スプライン。12種類の拘束と6種類の寸法を、独立した拘束ソルバーが解きます。ドラッグしても拘束は保たれ、残りの自由度と過剰拘束がその場で分かります。</p>
+              <ul class="ticks">
+                <li>何もない場所は1 mm単位にスナップ</li>
+                <li>閉じた領域を自動で検出し、クリックで選択</li>
+                <li>立体の稜線や面をスケッチへ投影（Project）</li>
+              </ul>
+            </div>
+          </div>
+          <div class="split flip reveal">
+            <figure class="shot"><img loading="lazy" src="./landing/solid.png" width="2880" height="1800" alt="穴とフィレットのある立体と、操作が並んだタイムライン" /></figure>
+            <div class="split-text">
+              <h3>履歴のある立体</h3>
+              <p>Extrude、Revolve、Combine、Fillet、Chamfer、Shell。操作はタイムラインに並び、上流を変えると下流だけが再計算されます。寸法には <code>width / 2</code> や <code>material + 0.1 mm</code> のような式が書けます。</p>
+              <ul class="ticks">
+                <li>すべての操作をUndo / Redo</li>
+                <li>STEPの読み込みと書き出し、STLの書き出し</li>
+                <li>スケッチはSVG / DXFで書き出し</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="wrap">
+          <div class="cards reveal">
+            <article class="card">
+              <h3>Fusionに近い操作</h3>
+              <p><code>L</code> <code>R</code> <code>C</code> <code>D</code> <code>T</code> <code>O</code> <code>E</code> <code>F</code> <code>Q</code> <code>P</code>。面を選んで <code>R</code> を押せば、その面で矩形を描き始めます。右クリックで、選択に合ったメニューが開きます。</p>
+            </article>
+            <article class="card">
+              <h3>矢印で押し出す</h3>
+              <p>Extrudeでは矢印をドラッグして距離を決められます。結果は半透明でプレビューされ、Cutは赤で表示されます。</p>
+            </article>
+            <article class="card">
+              <h3>プロジェクトはファイルで</h3>
+              <p><code>.fabcad.json</code> として保存します。パラメータ、スケッチ、拘束、履歴、材料の設定が1つのファイルに入ります。編集中の内容はブラウザに自動保存されます。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section alt" id="fabrication">
+        <div class="wrap">
+          <p class="eyebrow">FABRICATION</p>
+          <h2>Pick a material. Get parts you can cut.</h2>
+          <p class="sub">箱の展開図ジェネレータではありません。どんな立体でも、面・稜線・二面角から部品を作ります。星形も、角錐も、同じ処理を通ります。</p>
+        </div>
+        <div class="wrap wide">
+          <div class="split reveal">
+            <figure class="shot"><img loading="lazy" src="./landing/sheet.png" width="2880" height="1800" alt="星形の立体をMDFのパネルに分解し、シートに並べた画面" /></figure>
+            <div class="split-text">
+              <h3>MDF・アクリル：パネルに分解</h3>
+              <p>面ごとにパネルを作り、板厚のぶんだけ辺を詰めます。上下の板にはスロット、側板にはタブ。タブとスロットは立体の稜線から対応づけるので、位置がずれません。</p>
+              <ul class="ticks">
+                <li>Tab &amp; Slot / Finger / Flat を選択</li>
+                <li>切り幅（kerf）と、はめ合いの余裕を補正</li>
+                <li>斜めの角に直角の組み継ぎは使いません</li>
+              </ul>
+            </div>
+          </div>
+          <div class="split flip reveal">
+            <figure class="shot"><img loading="lazy" src="./landing/paper.png" width="2880" height="1800" alt="箱を紙の展開図にした画面。折り線とのりしろ" /></figure>
+            <div class="split-text">
+              <h3>紙：展開図とのりしろ</h3>
+              <p>立体を1枚につながった展開図に開きます。折り線は青、切り線は赤。切り離された辺には、のりしろを自動で付けます。面が重なる開き方は選びません。</p>
+              <ul class="ticks">
+                <li>のりしろの幅・角度・インセットを調整</li>
+                <li>円柱などの曲面は細い帯として展開</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="wrap">
+          <div class="cards reveal">
+            <article class="card">
+              <h3>作れない形は、先に知らせる</h3>
+              <p>凹んだ角、鋭い角、短い辺、細いタブ。板厚のせいで正確に再現できない箇所を警告します。</p>
+              <p class="quote">This corner cannot be reproduced accurately with 5.5 mm MDF.</p>
+            </article>
+            <article class="card">
+              <h3>部品と接続の一覧</h3>
+              <p>部品ごとの寸法・板厚・材料に加えて、どの辺がどの辺と、どの継ぎ方で合うのかを一覧できます。</p>
+            </article>
+            <article class="card">
+              <h3>見たままを書き出す</h3>
+              <p>プレビューと書き出しは同じ形状データを使います。SVGはmm単位で、<code>cut</code> / <code>fold</code> / <code>engrave</code> をグループに分けます。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="workflow">
+        <div class="wrap">
+          <p class="eyebrow center">HOW IT WORKS</p>
+          <h2 class="center">Five steps from a sketch to a cut file.</h2>
+          <ol class="steps reveal">
+            <li><span class="num">01</span><h3>SKETCH</h3><p>平面を選び、形を描く</p></li>
+            <li><span class="num">02</span><h3>CONSTRAIN</h3><p>拘束と寸法で形を決める</p></li>
+            <li><span class="num">03</span><h3>EXTRUDE</h3><p>押し出して立体にする</p></li>
+            <li><span class="num">04</span><h3>MATERIAL</h3><p>FABRICATIONで材料を選ぶ</p></li>
+            <li><span class="num">05</span><h3>EXPORT</h3><p>SVG / DXFを書き出す</p></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section alt" id="mobile">
+        <div class="wrap">
+          <div class="split phone reveal">
+            <figure class="shot phone-shot"><img loading="lazy" src="./landing/mobile.png" width="780" height="1328" alt="スマートフォンでスケッチを編集している画面" /></figure>
+            <div class="split-text">
+              <p class="eyebrow">TOUCH</p>
+              <h2>Works on a phone, too.</h2>
+              <p>スワイプで移動、ピンチでズーム。指を置いてずらし、離した位置に点を置きます。長押しでメニューが開き、押し出しの矢印も指で引けます。</p>
+              <p class="fine">スマートフォンでの動作は、ブラウザのエミュレーションで確認しています。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="open-source">
+        <div class="wrap">
+          <p class="eyebrow center">IN THE OPEN</p>
+          <h2 class="center">Runs on your machine. Built in the open.</h2>
+          <div class="cards reveal">
+            <article class="card">
+              <h3>サーバーなし</h3>
+              <p>静的なWebアプリです。幾何カーネルもブラウザの中のWeb Workerで動き、設計データはどこにも送信しません。</p>
+            </article>
+            <article class="card">
+              <h3>ベータ版です</h3>
+              <p>Sweep、Loft、アセンブリの操作などは未実装です。切り幅やはめ合いの値は、お使いの材料と加工機に合わせて調整してください。実機での加工は未検証です。</p>
+            </article>
+            <article class="card">
+              <h3>ソースコード</h3>
+              <p>TypeScriptのモノレポです。スケッチ、拘束ソルバー、履歴、加工の各部分を独立したパッケージに分けています。</p>
+              <p><a class="link" href="https://github.com/fooping-tech/FabCAD" rel="noopener">github.com/fooping-tech/FabCAD →</a></p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section final" id="start">
+        <div class="wrap center">
+          <h2>Sketch something. Then cut it.</h2>
+          <div class="cta-row center">
+            <a class="button primary" href="./app/">FabCADを開く <span aria-hidden="true">→</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <span>FabCAD</span>
+        <span class="dim">Geometry kernel: OpenCASCADE / Replicad (LGPL-2.1) · Rendering: Three.js</span>
+        <a href="https://github.com/fooping-tech/FabCAD" rel="noopener">GitHub</a>
+      </div>
+    </footer>
+    <script type="module" src="/src/landing/landing.ts"></script>
   </body>
 </html>
