@@ -4,6 +4,7 @@ import { profileRefOf, sketchBounds } from "@fabcad/sketch";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import {
   closeDialog,
+  enterSketch,
   finishSketch,
   patchDialog,
   startSketchOnFace,
@@ -189,11 +190,19 @@ export function Viewport(): ReactElement {
       }
       // A sketch drawn on a face lies on top of it: its profiles win over the face below.
       // Edges and vertices keep their priority, and so does an explicit selection filter.
+      // Sketches lie on top of the face or origin plane they were drawn on: their curves and
+      // profiles win over what is below. Edges and vertices of bodies keep their priority,
+      // and so does an explicit selection filter.
       const below = hover?.kind === "face" || hover?.kind === "origin-plane";
       if (!dialog && (hover === null || (below && filter === "auto"))) {
-        const profile = controller.profileAt(x, y, { visibleOnly: true });
-        controller.setHoverProfile(profile);
-        if (profile) hover = null;
+        const entity = controller.entityAt(x, y);
+        if (entity) {
+          hover = { kind: "entity", sketchId: entity.sketchId, entityId: entity.entityId };
+        } else {
+          const profile = controller.profileAt(x, y, { visibleOnly: true });
+          controller.setHoverProfile(profile);
+          if (profile) hover = null;
+        }
       }
       if ((state.hover ? selectionKey(state.hover) : "") !== (hover ? selectionKey(hover) : "")) {
         appState.set({ hover });
@@ -210,7 +219,7 @@ export function Viewport(): ReactElement {
       if (dialog?.type === "pick-sketch-plane") {
         if (hover?.kind === "origin-plane") startSketchOnOrigin(hover.plane);
         else if (hover?.kind === "face" && hover.planar) {
-          startSketchOnFace(hover.bodyId, hover.point, hover.normal);
+          startSketchOnFace(hover.bodyId, hover.point, hover.normal, hover.faceIndex);
         } else if (hover?.kind === "face") {
           toast("Sketches need a planar face.", "warning");
         }
@@ -607,7 +616,17 @@ export function Viewport(): ReactElement {
       down = null;
     };
     const onDoubleClick = (e: MouseEvent): void => {
-      if (appState.get().activeSketchId) controller.doubleClick(info(e));
+      const state = appState.get();
+      if (state.activeSketchId) {
+        controller.doubleClick(info(e));
+        return;
+      }
+      if (state.workspace !== "design" || state.dialog) return;
+      // Double-clicking sketch geometry in the solid environment opens its sketch.
+      const p = info(e);
+      const target = controller.entityAt(p.x, p.y)?.sketchId ??
+        controller.profileAt(p.x, p.y, { visibleOnly: true })?.sketchId;
+      if (target) enterSketch(target);
     };
     const onLeave = (): void => {
       controller.setHoverProfile(null);

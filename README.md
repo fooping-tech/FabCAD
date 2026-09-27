@@ -27,7 +27,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
-| 入出力 | STEP import / export、STL export、プロジェクト保存・読み込み、IndexedDB への自動保存 |
+| 入出力 | STEP import / export、STL export、スケッチの SVG 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
 
 ### FABRICATION ワークスペース（Laser）
 
@@ -97,7 +97,13 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 | `Ctrl/Cmd + Z`、`Ctrl/Cmd + Shift + Z` | Undo / Redo | 同左 |
 | `Ctrl/Cmd + S`、`Ctrl/Cmd + O` | 保存 / 開く | 同左 |
 
-3D で原点平面か平らな面を選んでから `L` `R` `C` などを押すと、その面ですぐにスケッチが始まります。立体の面に描いたスケッチの閉領域は、下の面より優先して選択できます。
+3D で原点平面か平らな面を選んでから `L` `R` `C` などを押すと、その面ですぐにスケッチが始まります。立体の面にスケッチを作ると、その面の輪郭（穴を含む）が自動で投影されます。スケッチの原点は、ワールド原点をその面に下ろした位置です。
+
+3D では、スケッチの線と閉領域を、その下にある面や原点平面より優先して選択できます。スケッチの線や閉領域をダブルクリックすると、そのスケッチの編集に入ります。
+
+### スケッチの SVG 書き出し
+
+スケッチを選択（または編集中に）して、右クリックメニューの **Export Sketch as SVG**、または右上の **Export → SVG — selected sketch** を選びます。単位は mm で、線・円弧・楕円・スプラインを近似せずに書き出します。Construction の線は含みません。
 
 Fusion 360 のショートカットのうち、対応するコマンドがないもの（`H` Hole、`J` Joint、`I` Measure、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
 
@@ -111,7 +117,7 @@ Fusion 360 のショートカットのうち、対応するコマンドがない
 | 直前にコマンドを使った | Repeat（直前のコマンドをもう一度） |
 | 稜線 | Fillet、Chamfer |
 | 平らな面・原点平面 | Create Sketch、Shell |
-| スケッチの閉領域 | Extrude、Revolve、Edit Sketch |
+| スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG |
 | Body | Show / Hide、Combine、Delete |
 | タイムライン・ブラウザの項目 | Edit Feature / Edit Sketch、Suppress、Show / Hide、Delete |
 | スケッチ中の線や円 | Normal / Construction、Move、Copy、Delete |

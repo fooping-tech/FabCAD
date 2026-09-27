@@ -16,7 +16,7 @@ import {
   toggleConstruction,
 } from "@fabcad/sketch";
 import type { ReactElement, ReactNode } from "react";
-import { deleteSelection, editFeature, openDialog } from "../app/actions";
+import { deleteSelection, editFeature, enterSketch, openDialog } from "../app/actions";
 import { type Selection, appState } from "../app/appState";
 import {
   editSketchSolved,
@@ -28,6 +28,7 @@ import {
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
+import { exportSketchSvg } from "../sketch/exportSketch";
 import { ExpressionInput } from "./ExpressionInput";
 
 const n = (v: number, digits = 3): string => {
@@ -345,6 +346,11 @@ function FeatureProperties({ feature }: { feature: Feature }): ReactElement {
         </div>
       ))}
       <div className="form-actions">
+        {feature.type === "sketch" && (
+          <button className="btn small" onClick={() => exportSketchSvg(feature.id)}>
+            Export SVG
+          </button>
+        )}
         <button
           className="btn small"
           onClick={() => run(setFeatureSuppressed(feature.id, !feature.suppressed))}
@@ -376,6 +382,21 @@ function ModelSelection({ selection }: { selection: Selection }): ReactElement {
         <div className="form-actions">
           <button className="btn small accent" onClick={() => openDialog("pick-sketch-plane")}>
             Create Sketch
+          </button>
+        </div>
+      </>
+    );
+  }
+  if (selection.kind === "entity") {
+    const f = doc.features[selection.sketchId];
+    const e = f?.type === "sketch" ? f.sketch.entities[selection.entityId] : undefined;
+    if (f?.type !== "sketch" || !e) return <p className="empty">Nothing to show.</p>;
+    return (
+      <>
+        <KV rows={[["Sketch", f.name], ...entityRows(f.sketch, e)]} />
+        <div className="form-actions">
+          <button className="btn small accent" onClick={() => enterSketch(f.id)}>
+            Edit Sketch
           </button>
         </div>
       </>

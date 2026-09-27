@@ -6,6 +6,7 @@ import {
 import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS, createTool } from "../sketch/createTools";
+import { exportSketchSvg } from "../sketch/exportSketch";
 import type { MenuItem } from "../ui/Menu";
 import { viewportApi } from "../viewport/api";
 import {
@@ -149,6 +150,7 @@ export function buildContextMenu(): MenuItem[] {
     sep();
     undoRedo();
     sep();
+    items.push({ label: "Export Sketch as SVG", icon: "export", onSelect: () => exportSketchSvg(sketchId) });
     items.push({ label: "Finish Sketch", icon: "finish", onSelect: finishSketch });
     return items;
   }
@@ -179,6 +181,7 @@ export function buildContextMenu(): MenuItem[] {
           onSelect: () => run(setSketchVisible(f.id, !f.visible)),
         });
         items.push({ label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") });
+        items.push({ label: "Export Sketch as SVG", icon: "export", onSelect: () => exportSketchSvg(f.id) });
       }
       items.push({
         label: f.suppressed ? "Unsuppress Features" : "Suppress Features",
@@ -188,11 +191,36 @@ export function buildContextMenu(): MenuItem[] {
       items.push({ label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection });
       sep();
     }
+  } else if (every("entity") && first?.kind === "entity") {
+    const f = doc.features[first.sketchId];
+    items.push({ label: "Edit Sketch", icon: "sketch", onSelect: () => enterSketch(first.sketchId) });
+    items.push({
+      label: "Export Sketch as SVG",
+      icon: "export",
+      onSelect: () => exportSketchSvg(first.sketchId),
+    });
+    if (f?.type === "sketch") {
+      items.push({
+        label: "Hide Sketch",
+        icon: "eye-off",
+        kbd: "V",
+        onSelect: () => {
+          run(setSketchVisible(f.id, false));
+          setSelection([]);
+        },
+      });
+    }
+    sep();
   } else if (every("profile") && first?.kind === "profile") {
     items.push(
       { label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") },
       { label: "Revolve", icon: "revolve", onSelect: () => openDialog("revolve") },
       { label: "Edit Sketch", icon: "sketch", onSelect: () => enterSketch(first.sketchId) },
+      {
+        label: "Export Sketch as SVG",
+        icon: "export",
+        onSelect: () => exportSketchSvg(first.sketchId),
+      },
     );
     sep();
   } else if (every("edge")) {

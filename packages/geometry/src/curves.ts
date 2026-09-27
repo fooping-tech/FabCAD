@@ -239,7 +239,22 @@ export function curveLength(c: Curve2): number {
 }
 
 export function curveBounds(c: Curve2): Bounds2 {
-  return boundsOfPoints(c.type === "line" ? [c.a, c.b] : flattenCurve(c, 0.01));
+  if (c.type === "line") return boundsOfPoints([c.a, c.b]);
+  if (c.type === "arc") {
+    // Exact: the ends plus every axis direction that the arc sweeps over.
+    const pts = [curveStart(c), curveEnd(c)];
+    for (let k = 0; k < 4; k++) {
+      const angle = (k * Math.PI) / 2;
+      if (Math.abs(c.sweep) >= 2 * Math.PI - 1e-12 || angleToArcParam(c, angle) !== null) {
+        pts.push({
+          x: c.center.x + c.radius * Math.cos(angle),
+          y: c.center.y + c.radius * Math.sin(angle),
+        });
+      }
+    }
+    return boundsOfPoints(pts);
+  }
+  return boundsOfPoints(flattenCurve(c, 1e-4));
 }
 
 export function reverseLoop(loop: Loop2): Loop2 {

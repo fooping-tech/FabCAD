@@ -1063,6 +1063,27 @@ export class SketchController {
     return best;
   }
 
+  /**
+   * Geometry of a visible sketch under the pointer, seen from the solid environment. Geometry
+   * hidden behind a body is skipped.
+   */
+  entityAt(x: number, y: number): { sketchId: string; entityId: EntityId } | null {
+    let best: { sketchId: string; entityId: EntityId; distance: number } | null = null;
+    for (const f of Object.values(this.doc.features)) {
+      if (f.type !== "sketch" || !f.visible || f.suppressed) continue;
+      const projector = this.projectorFor(f.sketch);
+      const at = projector.toSketch(x, y);
+      if (!at) continue;
+      const px = projector.pixel(at);
+      const hit = hitTestSketch(f.sketch, at, px * HIT_PX * this.reach);
+      if (!hit || hit.id === f.sketch.originId) continue;
+      if (!this.scene.isPointVisible(x, y, planeToWorld(projector.plane, at))) continue;
+      const distance = hit.distance / Math.max(px, 1e-12);
+      if (!best || distance < best.distance) best = { sketchId: f.id, entityId: hit.id, distance };
+    }
+    return best ? { sketchId: best.sketchId, entityId: best.entityId } : null;
+  }
+
   /** Sketch line of a visible sketch under the pointer (revolve axis). */
   lineAt(x: number, y: number, sketchId: string): EntityId | null {
     const f = this.doc.features[sketchId];

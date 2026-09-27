@@ -2,6 +2,7 @@ import {
   type Command,
   type CreatedRef,
   type Feature,
+  applySketchEdit,
   command,
   setSketchVisible,
   addBoolean,
@@ -17,8 +18,16 @@ import {
   removeFeatures,
   updateFeature,
 } from "@fabcad/cad-document";
-import { type OriginPlaneName, type Vec3, makePlane } from "@fabcad/geometry";
-import { type SketchPlaneRef, editSketch, profileRefOf } from "@fabcad/sketch";
+import {
+  type OriginPlaneName,
+  type Vec3,
+  dot3,
+  makePlane,
+  norm3,
+  scale3,
+} from "@fabcad/geometry";
+import { type Sketch, type SketchPlaneRef, editSketch, profileRefOf } from "@fabcad/sketch";
+import { projectInto } from "../sketch/projectTool";
 import {
   type Dialog,
   type Selection,
@@ -32,6 +41,7 @@ import {
   documentStore,
   editSketchSolved,
   fileToBase64,
+  modelState,
   pickFile,
   run,
   sketchView,
@@ -85,7 +95,7 @@ export function beginSketchPlanePick(tool: string | null = null): void {
     return;
   }
   if (first?.kind === "face" && first.planar) {
-    startSketchOnFace(first.bodyId, first.point, first.normal);
+    startSketchOnFace(first.bodyId, first.point, first.normal, first.faceIndex);
     return;
   }
   appState.set({
@@ -96,9 +106,17 @@ export function beginSketchPlanePick(tool: string | null = null): void {
   });
 }
 
-export function startSketch(plane: SketchPlaneRef): void {
+export function startSketch(plane: SketchPlaneRef, prepare?: (sketch: Sketch) => Sketch): void {
   const out: CreatedRef = {};
-  if (!run(addSketch(plane, out)) || !out.id) return;
+  const create = addSketch(plane, out);
+  // Whatever the sketch starts with belongs to the same undo step as its creation.
+  const cmd = prepare
+    ? command(create.label, (doc) => {
+        const next = create.apply(doc);
+        return out.id ? applySketchEdit(next, out.id, prepare) : next;
+      })
+    : create;
+  if (!run(cmd) || !out.id) return;
   enterSketch(out.id);
 }
 
@@ -106,10 +124,29 @@ export function startSketchOnOrigin(plane: OriginPlaneName): void {
   startSketch({ type: "origin", plane });
 }
 
-export function startSketchOnFace(bodyId: string, point: Vec3, normal: Vec3): void {
+/**
+ * Sketch on a planar face of a body. As in Fusion, the outline of the face is projected into
+ * the new sketch, so that there is something to dimension and constrain against right away.
+ */
+export function startSketchOnFace(
+  bodyId: string,
+  point: Vec3,
+  normal: Vec3,
+  faceIndex?: number,
+): void {
   // Keep the sketch axes aligned with the world axes where the face allows it.
   const xHint = Math.abs(normal.x) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-  startSketch({ type: "face", bodyId, hint: point, plane: makePlane(point, normal, xHint) });
+  // The sketch origin is the world origin dropped onto the face, so coordinates stay familiar.
+  const n = norm3(normal);
+  const origin = scale3(n, dot3(n, point));
+  const plane = makePlane(origin, n, xHint);
+  const geometry = modelState.get().bodies[bodyId]?.geometry;
+  startSketch(
+    { type: "face", bodyId, hint: point, plane },
+    geometry && faceIndex !== undefined
+      ? (sketch) => projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }).sketch
+      : undefined,
+  );
 }
 
 export function enterSketch(sketchId: string): void {
@@ -172,9 +209,10 @@ export function openDialog(type: Dialog["type"]): void {
       let { sketchId } = picked;
       let refs = picked.profiles.map((p) => p.ref);
       // Coming straight from a sketch: preselect it when it has exactly one profile.
-      const sketchSel = selection.find((s) => s.kind === "feature");
-      if (!sketchId && sketchSel?.kind === "feature") {
-        const f = doc.features[sketchSel.featureId];
+      // A selected sketch, or any of its curves, stands for the sketch.
+      const sketchSel = selection.find((s) => s.kind === "feature" || s.kind === "entity");
+      if (!sketchId && (sketchSel?.kind === "feature" || sketchSel?.kind === "entity")) {
+        const f = doc.features[sketchSel.kind === "feature" ? sketchSel.featureId : sketchSel.sketchId];
         if (f?.type === "sketch") {
           sketchId = f.id;
           const regions = sketchView(f.sketch, doc).regions;

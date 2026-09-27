@@ -16,6 +16,7 @@ import {
   documentStore,
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { exportSketchSvg } from "../sketch/exportSketch";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 
@@ -160,6 +161,9 @@ export function Header({ onExportFabrication }: { onExportFabrication: (format: 
           { title: "Fabrication" },
           { label: "SVG — laser cutting", icon: "laser", onSelect: () => onExportFabrication("svg") },
           { label: "DXF — laser cutting", icon: "laser", onSelect: () => onExportFabrication("dxf") },
+          { separator: true },
+          { title: "Sketch" },
+          { label: "SVG — selected sketch", icon: "sketch", onSelect: () => exportSketchSvg() },
           { separator: true },
           { title: "3D model" },
           { label: "STEP", icon: "body", onSelect: () => void exportModel("step") },

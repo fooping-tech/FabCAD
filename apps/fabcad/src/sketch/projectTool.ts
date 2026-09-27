@@ -1,6 +1,6 @@
-import { type MeshEdgeGroup, edgePolyline, faceEdges } from "@fabcad/brep";
+import { type BodyGeometry, type MeshEdgeGroup, edgePolyline, faceEdges } from "@fabcad/brep";
 import { resolveSketchPlane } from "@fabcad/features";
-import type { Vec3 } from "@fabcad/geometry";
+import type { Plane3, Vec3 } from "@fabcad/geometry";
 import { type Sketch, addProjection, projectPolyline } from "@fabcad/sketch";
 import { appState, toast } from "../app/appState";
 import { documentStore, editSketchSolved, modelState } from "../app/session";
@@ -10,6 +10,45 @@ export type ProjectPick =
   | { kind: "edge"; bodyId: string; edgeIndex: number }
   | { kind: "face"; bodyId: string; faceIndex: number }
   | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 };
+
+/** Add the projection of the picked geometry to a sketch. Pure: nothing is committed. */
+export function projectInto(
+  sketch: Sketch,
+  plane: Plane3,
+  geometry: BodyGeometry,
+  pick: ProjectPick,
+): { sketch: Sketch; added: number; edges: number } {
+  let edges: MeshEdgeGroup[] = [];
+  if (pick.kind === "edge") {
+    const e = geometry.edges[pick.edgeIndex];
+    if (e) edges = [e];
+  } else if (pick.kind === "face") {
+    edges = faceEdges(geometry, pick.faceIndex);
+  }
+  let current = sketch;
+  let added = 0;
+  const add = (
+    points: Vec3[],
+    source: "edge" | "vertex",
+    hint: Vec3,
+    index: number,
+    count: number,
+  ): void => {
+    const shape = projectPolyline(plane, points);
+    if (!shape) return;
+    const result = addProjection(current, shape, { bodyId: pick.bodyId, source, hint, index, count });
+    if (!result) return;
+    current = result.sketch;
+    added += 1;
+  };
+  if (pick.kind === "vertex") {
+    add([pick.point], "vertex", pick.point, pick.vertexIndex, geometry.vertices.length / 3);
+  }
+  for (const e of edges) {
+    add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length);
+  }
+  return { sketch: current, added, edges: edges.length };
+}
 
 /**
  * Project: put the picked edge, vertex or the outline of the picked face onto the plane of the
@@ -21,49 +60,17 @@ export function projectPick(pick: ProjectPick): number {
   const geometry = modelState.get().bodies[pick.bodyId]?.geometry;
   if (!sketchId || feature?.type !== "sketch" || !geometry) return 0;
   const plane = resolveSketchPlane(feature.sketch.plane);
-
-  let edges: MeshEdgeGroup[] = [];
-  if (pick.kind === "edge") {
-    const e = geometry.edges[pick.edgeIndex];
-    if (e) edges = [e];
-  } else if (pick.kind === "face") {
-    edges = faceEdges(geometry, pick.faceIndex);
-  }
-
   let added = 0;
+  let edges = 0;
   const ok = editSketchSolved(sketchId, "Project", (sketch) => {
-    let current: Sketch = sketch;
-    const add = (
-      points: Vec3[],
-      source: "edge" | "vertex",
-      hint: Vec3,
-      index: number,
-      count: number,
-    ): void => {
-      const shape = projectPolyline(plane, points);
-      if (!shape) return;
-      const result = addProjection(current, shape, {
-        bodyId: pick.bodyId,
-        source,
-        hint,
-        index,
-        count,
-      });
-      if (!result) return;
-      current = result.sketch;
-      added += 1;
-    };
-    if (pick.kind === "vertex") {
-      add([pick.point], "vertex", pick.point, pick.vertexIndex, geometry.vertices.length / 3);
-    }
-    for (const e of edges) {
-      add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length);
-    }
-    return current;
+    const result = projectInto(sketch, plane, geometry, pick);
+    added = result.added;
+    edges = result.edges;
+    return result.sketch;
   });
   if (!ok || added === 0) {
     toast(
-      pick.kind === "face" && edges.length === 0
+      pick.kind === "face" && edges === 0
         ? "The outline of this face could not be determined."
         : "This geometry is already projected.",
       "warning",

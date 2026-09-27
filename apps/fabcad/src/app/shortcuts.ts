@@ -79,7 +79,7 @@ function toggleVisibility(): boolean {
   const bodies = new Set<string>();
   for (const s of selection) {
     if ("bodyId" in s) bodies.add(s.bodyId);
-    if (s.kind === "feature" || s.kind === "profile") {
+    if (s.kind === "feature" || s.kind === "profile" || s.kind === "entity") {
       const id = s.kind === "feature" ? s.featureId : s.sketchId;
       const f = doc.features[id];
       if (f?.type === "sketch") done = run(setSketchVisible(id, !f.visible)) || done;

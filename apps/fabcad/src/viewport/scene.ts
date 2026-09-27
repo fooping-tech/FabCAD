@@ -870,7 +870,10 @@ export class ViewportScene {
     if (options.originPlanes) {
       const planes = [...this.originPlanes.values()].filter((m) => m.visible);
       const planeHit = this.raycaster.intersectObjects(planes, false)[0];
-      if (planeHit && (!hit || planeHit.distance < hit.distance)) {
+      // An origin plane only wins when it is clearly in front: a face lying in the plane
+      // (e.g. the bottom of a body on XY) is what the user is pointing at.
+      const margin = hit ? Math.max(0.05, hit.distance * 0.004) : 0;
+      if (planeHit && (!hit || planeHit.distance < hit.distance - margin)) {
         return { kind: "origin-plane", plane: planeHit.object.userData.plane as OriginPlaneName };
       }
     }

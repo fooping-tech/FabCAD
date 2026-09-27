@@ -128,3 +128,4 @@ export function renderPartsSvg(parts: FlatPart[], options: PartsSvgOptions = {})
   });
   return renderSheetSvg(resolveSheetGeometry(parts, layout, { labels: options.labels }), options);
 }
+export * from "./curves";
