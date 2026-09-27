@@ -27,7 +27,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
-| 入出力 | STEP import / export、STL export、スケッチの SVG 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
+| 入出力 | STEP import / export、STL export、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
 
 ### FABRICATION ワークスペース（Laser）
 
@@ -101,9 +101,11 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 
 3D では、スケッチの線と閉領域を、その下にある面や原点平面より優先して選択できます。スケッチの線や閉領域をダブルクリックすると、そのスケッチの編集に入ります。
 
-### スケッチの SVG 書き出し
+### スケッチの SVG / DXF 書き出し
 
 スケッチを選択（または編集中に）して、右クリックメニューの **Export Sketch as SVG**、または右上の **Export → SVG — selected sketch** を選びます。単位は mm で、線・円弧・楕円・スプラインを近似せずに書き出します。Construction の線は含みません。
+
+DXF は **Save As DXF**（右クリックメニュー）または **Export → DXF — selected sketch** です。どのソフトでも読めるように R12 形式で書き出します。線・円・円弧は `LINE` `CIRCLE` `ARC` としてそのまま、楕円とスプラインは誤差 0.01 mm 以内のポリラインになります。座標はスケッチの座標のままです。
 
 Fusion 360 のショートカットのうち、対応するコマンドがないもの（`H` Hole、`J` Joint、`I` Measure、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
 
@@ -117,7 +119,7 @@ Fusion 360 のショートカットのうち、対応するコマンドがない
 | 直前にコマンドを使った | Repeat（直前のコマンドをもう一度） |
 | 稜線 | Fillet、Chamfer |
 | 平らな面・原点平面 | Create Sketch、Shell |
-| スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG |
+| スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG、Save As DXF |
 | Body | Show / Hide、Combine、Delete |
 | タイムライン・ブラウザの項目 | Edit Feature / Edit Sketch、Suppress、Show / Hide、Delete |
 | スケッチ中の線や円 | Normal / Construction、Move、Copy、Delete |

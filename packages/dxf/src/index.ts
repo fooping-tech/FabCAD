@@ -128,3 +128,4 @@ export function renderSheetDxf(geometry: SheetGeometry, options: DxfOptions = {}
   pair(0, "EOF");
   return `${out.join("\n")}\n`;
 }
+export * from "./curves";

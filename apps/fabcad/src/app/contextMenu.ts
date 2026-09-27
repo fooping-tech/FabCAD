@@ -6,7 +6,7 @@ import {
 import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS, createTool } from "../sketch/createTools";
-import { exportSketchSvg } from "../sketch/exportSketch";
+import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import type { MenuItem } from "../ui/Menu";
 import { viewportApi } from "../viewport/api";
 import {
@@ -151,6 +151,7 @@ export function buildContextMenu(): MenuItem[] {
     undoRedo();
     sep();
     items.push({ label: "Export Sketch as SVG", icon: "export", onSelect: () => exportSketchSvg(sketchId) });
+    items.push({ label: "Save As DXF", icon: "export", onSelect: () => exportSketchDxf(sketchId) });
     items.push({ label: "Finish Sketch", icon: "finish", onSelect: finishSketch });
     return items;
   }
@@ -182,6 +183,7 @@ export function buildContextMenu(): MenuItem[] {
         });
         items.push({ label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") });
         items.push({ label: "Export Sketch as SVG", icon: "export", onSelect: () => exportSketchSvg(f.id) });
+        items.push({ label: "Save As DXF", icon: "export", onSelect: () => exportSketchDxf(f.id) });
       }
       items.push({
         label: f.suppressed ? "Unsuppress Features" : "Suppress Features",
@@ -198,6 +200,11 @@ export function buildContextMenu(): MenuItem[] {
       label: "Export Sketch as SVG",
       icon: "export",
       onSelect: () => exportSketchSvg(first.sketchId),
+    });
+    items.push({
+      label: "Save As DXF",
+      icon: "export",
+      onSelect: () => exportSketchDxf(first.sketchId),
     });
     if (f?.type === "sketch") {
       items.push({
@@ -221,6 +228,7 @@ export function buildContextMenu(): MenuItem[] {
         icon: "export",
         onSelect: () => exportSketchSvg(first.sketchId),
       },
+      { label: "Save As DXF", icon: "export", onSelect: () => exportSketchDxf(first.sketchId) },
     );
     sep();
   } else if (every("edge")) {

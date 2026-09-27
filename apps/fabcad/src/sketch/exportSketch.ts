@@ -1,4 +1,5 @@
 import { entityToCurves, isCurve } from "@fabcad/sketch";
+import { renderCurvesDxf } from "@fabcad/dxf";
 import { type CurveSvgInput, renderCurvesSvg } from "@fabcad/svg";
 import { appState, toast } from "../app/appState";
 import { documentStore, downloadBlob, safeFileName } from "../app/session";
@@ -20,10 +21,10 @@ export function sketchForExport(): string | null {
   return null;
 }
 
-/** SVG of the geometry of a sketch, in millimetres. Construction geometry is left out. */
-export function sketchSvg(sketchId: string): string | null {
+/** Curves of a sketch, entity by entity. Construction geometry is left out. */
+function sketchCurves(sketchId: string): CurveSvgInput[] {
   const f = documentStore.document.features[sketchId];
-  if (!f || f.type !== "sketch") return null;
+  if (!f || f.type !== "sketch") return [];
   const inputs: CurveSvgInput[] = [];
   for (const e of Object.values(f.sketch.entities)) {
     if (!isCurve(e) || e.construction) continue;
@@ -33,7 +34,35 @@ export function sketchSvg(sketchId: string): string | null {
       // Geometry that cannot be evaluated is skipped.
     }
   }
+  return inputs;
+}
+
+/** SVG of the geometry of a sketch, in millimetres. */
+export function sketchSvg(sketchId: string): string | null {
+  const inputs = sketchCurves(sketchId);
   return inputs.length > 0 ? renderCurvesSvg(inputs) : null;
+}
+
+/** DXF of the geometry of a sketch, in millimetres and in sketch coordinates. */
+export function sketchDxf(sketchId: string): string | null {
+  const inputs = sketchCurves(sketchId);
+  return inputs.length > 0 ? renderCurvesDxf(inputs) : null;
+}
+
+export function exportSketchDxf(sketchId: string | null = sketchForExport()): void {
+  if (!sketchId) {
+    toast("Select a sketch first, or open one.", "warning");
+    return;
+  }
+  const f = documentStore.document.features[sketchId];
+  const dxf = sketchDxf(sketchId);
+  if (!f || !dxf) {
+    toast("This sketch has no geometry to export.", "warning");
+    return;
+  }
+  const name = `${safeFileName(documentStore.document.name)}-${safeFileName(f.name)}.dxf`;
+  downloadBlob(dxf, name, "image/vnd.dxf");
+  toast(`Exported ${name}.`);
 }
 
 export function exportSketchSvg(sketchId: string | null = sketchForExport()): void {

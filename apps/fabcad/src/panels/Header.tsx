@@ -16,7 +16,7 @@ import {
   documentStore,
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
-import { exportSketchSvg } from "../sketch/exportSketch";
+import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 
@@ -164,6 +164,7 @@ export function Header({ onExportFabrication }: { onExportFabrication: (format: 
           { separator: true },
           { title: "Sketch" },
           { label: "SVG — selected sketch", icon: "sketch", onSelect: () => exportSketchSvg() },
+          { label: "DXF — selected sketch", icon: "sketch", onSelect: () => exportSketchDxf() },
           { separator: true },
           { title: "3D model" },
           { label: "STEP", icon: "body", onSelect: () => void exportModel("step") },

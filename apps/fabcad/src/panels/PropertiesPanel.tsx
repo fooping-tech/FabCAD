@@ -28,7 +28,7 @@ import {
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
-import { exportSketchSvg } from "../sketch/exportSketch";
+import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import { ExpressionInput } from "./ExpressionInput";
 
 const n = (v: number, digits = 3): string => {
@@ -347,9 +347,14 @@ function FeatureProperties({ feature }: { feature: Feature }): ReactElement {
       ))}
       <div className="form-actions">
         {feature.type === "sketch" && (
-          <button className="btn small" onClick={() => exportSketchSvg(feature.id)}>
-            Export SVG
-          </button>
+          <>
+            <button className="btn small" onClick={() => exportSketchSvg(feature.id)}>
+              SVG
+            </button>
+            <button className="btn small" onClick={() => exportSketchDxf(feature.id)}>
+              DXF
+            </button>
+          </>
         )}
         <button
           className="btn small"
