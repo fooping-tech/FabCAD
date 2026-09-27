@@ -7,7 +7,8 @@
   "types": "src/index.ts",
   "dependencies": {
     "@fabcad/fabrication-core": "*",
-    "@fabcad/geometry": "*"
+    "@fabcad/geometry": "*",
+    "@fabcad/sketch": "*"
   },
   "devDependencies": {
     "@fabcad/fabrication-laser": "*"
