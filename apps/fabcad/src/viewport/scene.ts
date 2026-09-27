@@ -253,6 +253,17 @@ export class ViewportScene {
     this.controls.touches.ONE = enabled ? THREE.TOUCH.ROTATE : (-1 as THREE.TOUCH);
   }
 
+  /** What a one-finger drag does for the gesture that is about to start. */
+  setOneFingerGesture(mode: "rotate" | "pan" | "none"): void {
+    this.controls.touches.ONE =
+      mode === "rotate" ? THREE.TOUCH.ROTATE : mode === "pan" ? THREE.TOUCH.PAN : (-1 as THREE.TOUCH);
+  }
+
+  /** Pinch zoom follows the fingers one to one; the mouse wheel is a little faster. */
+  setTouchInput(touch: boolean): void {
+    this.controls.zoomSpeed = touch ? 1 : 1.4;
+  }
+
   /** Suspend camera control while something else owns the pointer (e.g. a manipulator). */
   setControlsEnabled(enabled: boolean): void {
     this.controls.enabled = enabled;
@@ -864,6 +875,20 @@ export class ViewportScene {
       }
     }
     return null;
+  }
+
+  /**
+   * True when nothing lies in front of a world point as seen through a pixel. Points on a
+   * surface (e.g. a sketch drawn on a face) count as visible.
+   */
+  isPointVisible(x: number, y: number, point: Vec3): boolean {
+    const ray = this.setRay(x, y);
+    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
+    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    if (!hit) return true;
+    const depth = toV3(point).sub(ray.origin).dot(ray.direction);
+    const hitDepth = hit.point.clone().sub(ray.origin).dot(ray.direction);
+    return depth <= hitDepth + Math.max(0.05, Math.abs(hitDepth) * 0.004);
   }
 
   /** Body under the pixel, ignoring edges and vertices. */

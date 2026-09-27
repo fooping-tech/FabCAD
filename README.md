@@ -70,18 +70,37 @@ npm run preview
 
 ### キーボードとマウス
 
-| 操作 | 内容 |
+Fusion 360 に同じコマンドがあるものは、同じキーにしています。
+
+| キー | スケッチ中 | 3D（スケッチの外） |
+| --- | --- | --- |
+| `L` | Line | 平面を選んで Line でスケッチ開始 |
+| `R` | 2-Point Rectangle | 平面を選んで Rectangle でスケッチ開始 |
+| `C` | Center Diameter Circle | 平面を選んで Circle でスケッチ開始 |
+| `D` | Sketch Dimension | 平面を選んで Dimension でスケッチ開始 |
+| `T` | Trim | 同上 |
+| `O` | Offset | 同上 |
+| `X` | Normal / Construction | — |
+| `E` | スケッチを終了して Extrude | Extrude |
+| `Q` | スケッチを終了して Extrude | Press Pull（稜線を選択中は Fillet、それ以外は Extrude） |
+| `F` | Sketch Fillet | Fillet |
+| `M` | Move | — |
+| `V` | — | 選択した Body / Sketch の表示・非表示 |
+| `S` | Fit Point Spline | Create Sketch |
+| `A` `P` | 3-Point Arc、Point（FabCAD 独自） | 平面を選んでそのツールでスケッチ開始 |
+| `F6` | 全体表示 | 全体表示 |
+| `Esc` | 実行中のコマンドをキャンセル | 同左 |
+| `Enter` | Polyline / Spline の終了 | ダイアログの確定 |
+| `Delete` | 選択したオブジェクトを削除 | 同左 |
+| `Ctrl/Cmd + Z`、`Ctrl/Cmd + Shift + Z` | Undo / Redo | 同左 |
+| `Ctrl/Cmd + S`、`Ctrl/Cmd + O` | 保存 / 開く | 同左 |
+
+3D で原点平面か平らな面を選んでから `L` `R` `C` などを押すと、その面ですぐにスケッチが始まります。立体の面に描いたスケッチの閉領域は、下の面より優先して選択できます。
+
+Fusion 360 のショートカットのうち、対応するコマンドがないもの（`H` Hole、`J` Joint、`I` Measure、`P` Project、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
+
+| マウス | 内容 |
 | --- | --- |
-| `Esc` | 実行中のコマンドをキャンセル |
-| `Enter` | ダイアログの確定、Polyline / Spline の終了 |
-| `Delete` | 選択したオブジェクトを削除 |
-| `Ctrl/Cmd + Z`、`Ctrl/Cmd + Shift + Z` | Undo / Redo |
-| `Ctrl/Cmd + S`、`Ctrl/Cmd + O` | 保存 / 開く |
-| `F` | 全体表示 |
-| スケッチ中 `L` `R` `C` `A` `D` `T` `O` `M` `P` `S` `X` | Line、Rectangle、Circle、Arc、Dimension、Trim、Offset、Move、Point、Spline、Construction |
-| スケッチ中 `E` | スケッチを終了して Extrude を開始。閉領域が 1 つならそのまま選択されます |
-| 3D `E` `S` | Extrude、Create Sketch |
-| 3D `L` `R` `C` `A` `P` など | 平面を選ぶと、そのツールでスケッチを開始 |
 | ホイール | ズーム |
 | 中ボタンドラッグ | パン |
 | 右ドラッグ（3D では左ドラッグも） | オービット |
@@ -96,8 +115,9 @@ npm run preview
 
 | 操作 | 内容 |
 | --- | --- |
-| 1 本指ドラッグ | 3D ではオービット。スケッチでは描画とドラッグ |
-| 2 本指 | パンとズーム |
+| 1 本指スワイプ | 3D ではオービット。スケッチでは、何もない場所なら移動、図形の上ならドラッグ |
+| 2 本指スワイプ | 移動 |
+| ピンチ | ズーム（指の動きと同じ倍率） |
 | タップ | 選択。スケッチのツールでは点を置きます |
 | 指を置いてからずらして離す | 離した位置に点を置きます（狙いを定められます） |
 | 画面下の **Browser** / **Settings** | ブラウザとプロパティ、または Fabrication の設定を下から開きます |

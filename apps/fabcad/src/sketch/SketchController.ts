@@ -1,6 +1,14 @@
 import { applySketchEdit, type CadDocument, type SketchFeature } from "@fabcad/cad-document";
 import { resolveSketchPlane } from "@fabcad/features";
-import { type Vec2, add2, cross2, dist2, pointInPolygon, sub2 } from "@fabcad/geometry";
+import {
+  type Vec2,
+  add2,
+  cross2,
+  dist2,
+  planeToWorld,
+  pointInPolygon,
+  sub2,
+} from "@fabcad/geometry";
 import {
   type EntityId,
   type Sketch,
@@ -270,6 +278,13 @@ export class SketchController {
     this.refreshHint();
     this.requestDraw();
     return had;
+  }
+
+  /** True when the pointer is on sketch geometry, a dimension or a constraint glyph. */
+  hitsSomething(p: PointerInfo): boolean {
+    const feature = this.activeFeature();
+    if (!feature) return false;
+    return this.hitLabel(p) !== null || this.hitEntity(feature.sketch, p) !== null;
   }
 
   /** Forget the pointer position (a lifted finger leaves no cursor behind). */
@@ -563,7 +578,9 @@ export class SketchController {
   // -------------------------------------------------------- selection / drag
 
   private beginDrag(feature: SketchFeature, p: PointerInfo): void {
-    const label = this.hitLabel(p);
+    // A point under the pointer wins over the glyphs and labels drawn next to it.
+    const onPoint = this.hitEntity(feature.sketch, p, { curves: false }) !== null;
+    const label = onPoint ? null : this.hitLabel(p);
     if (label?.kind === "dimension") {
       this.drag = {
         kind: "label",
@@ -993,15 +1010,28 @@ export class SketchController {
   // ----------------------------------------------------- profiles in 3D mode
 
   /** Closed profile of any visible sketch under the pointer (for Extrude / Revolve). */
-  profileAt(x: number, y: number, onlySketch?: string | null): HoverProfile | null {
+  profileAt(
+    x: number,
+    y: number,
+    options: { onlySketch?: string | null; visibleOnly?: boolean } = {},
+  ): HoverProfile | null {
     let best: HoverProfile | null = null;
     for (const f of Object.values(this.doc.features)) {
       if (f.type !== "sketch" || !f.visible || f.suppressed) continue;
-      if (onlySketch && f.id !== onlySketch) continue;
-      const at = this.projectorFor(f.sketch).toSketch(x, y);
+      if (options.onlySketch && f.id !== options.onlySketch) continue;
+      const projector = this.projectorFor(f.sketch);
+      const at = projector.toSketch(x, y);
       if (!at) continue;
       const region = this.regionAt(f.sketch, at);
-      if (region && (!best || region.area < best.region.area)) best = { sketchId: f.id, region };
+      if (!region) continue;
+      // Profiles hidden behind a body are not what the user is pointing at.
+      if (
+        options.visibleOnly &&
+        !this.scene.isPointVisible(x, y, planeToWorld(projector.plane, at))
+      ) {
+        continue;
+      }
+      if (!best || region.area < best.region.area) best = { sketchId: f.id, region };
     }
     return best;
   }

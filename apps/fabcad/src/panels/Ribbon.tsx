@@ -340,7 +340,7 @@ function SolidRibbon(): ReactElement {
         <Tool icon="revolve" label="Revolve" title="Revolve" active={is("revolve")} onClick={() => openDialog("revolve")} />
       </Group>
       <Group label="Modify">
-        <Tool icon="fillet-3d" label="Fillet" title="Fillet edges" active={is("fillet")} onClick={() => openDialog("fillet")} />
+        <Tool icon="fillet-3d" label="Fillet" title="Fillet edges (F)" active={is("fillet")} onClick={() => openDialog("fillet")} />
         <Tool icon="chamfer-3d" label="Chamfer" title="Chamfer edges" active={is("chamfer")} onClick={() => openDialog("chamfer")} />
         <Tool icon="shell" label="Shell" title="Shell — hollow a body" active={is("shell")} onClick={() => openDialog("shell")} />
         <Tool icon="combine" label="Combine" title="Combine — union, cut or intersect bodies" active={is("combine")} onClick={() => openDialog("combine")} />

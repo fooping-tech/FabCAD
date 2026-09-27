@@ -1,6 +1,7 @@
 import { evaluateExpression, formatQuantity } from "@fabcad/cad-document";
 import { type ReactElement, useEffect, useState } from "react";
 import { currentScope, useDocument } from "../app/session";
+import { pressEscape } from "../app/shortcuts";
 
 /** Evaluate for display: returns the formatted value or the error. */
 export function previewExpression(
@@ -72,6 +73,8 @@ export function ExpressionInput({
           } else if (e.key === "Escape") {
             setDraft(value);
             (e.target as HTMLInputElement).blur();
+            // In a command dialog Esc cancels the command, not just the typing.
+            if (live) pressEscape();
           }
         }}
       />

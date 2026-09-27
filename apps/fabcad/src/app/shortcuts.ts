@@ -8,7 +8,8 @@ import {
   setTool,
 } from "./actions";
 import { appState, setSelection } from "./appState";
-import { redo, saveProject, undo } from "./session";
+import { setBodyVisible, setSketchVisible } from "@fabcad/cad-document";
+import { documentStore, redo, run, saveProject, undo } from "./session";
 
 export interface ShortcutHooks {
   openProject(): void;
@@ -58,10 +59,40 @@ export function pressEnter(): boolean {
   return false;
 }
 
-/** Shortcuts that start a solid feature; they also work while a sketch is open. */
-const FEATURE_KEYS: Record<string, "extrude"> = {
-  e: "extrude",
-};
+/**
+ * Keys follow Fusion 360 where FabCAD has the command: L R C D T O X (sketch), E Q F (solid),
+ * M, V, Delete and F6. A (arc), P (point) and S (spline) are FabCAD's own.
+ */
+
+/** Q, Press Pull: fillet when edges are selected, extrude otherwise. */
+function pressPull(): void {
+  const { selection } = appState.get();
+  const edges = selection.length > 0 && selection.every((s) => s.kind === "edge");
+  openDialog(edges ? "fillet" : "extrude");
+}
+
+/** V: show or hide the selected bodies and sketches. */
+function toggleVisibility(): boolean {
+  const { selection } = appState.get();
+  const doc = documentStore.document;
+  let done = false;
+  const bodies = new Set<string>();
+  for (const s of selection) {
+    if ("bodyId" in s) bodies.add(s.bodyId);
+    if (s.kind === "feature" || s.kind === "profile") {
+      const id = s.kind === "feature" ? s.featureId : s.sketchId;
+      const f = doc.features[id];
+      if (f?.type === "sketch") done = run(setSketchVisible(id, !f.visible)) || done;
+      for (const b of Object.values(doc.bodies)) if (b.createdBy === id) bodies.add(b.id);
+    }
+  }
+  for (const id of bodies) {
+    const b = doc.bodies[id];
+    if (b) done = run(setBodyVisible(id, !b.visible)) || done;
+  }
+  if (done) appState.set({ selection: [], hover: null });
+  return done;
+}
 
 const SKETCH_KEYS: Record<string, string> = {
   l: "line",
@@ -74,6 +105,7 @@ const SKETCH_KEYS: Record<string, string> = {
   m: "move",
   p: "point",
   s: "spline-fit",
+  f: "fillet",
 };
 
 /** Global keyboard handling. There is always exactly one running command to cancel. */
@@ -139,8 +171,13 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
 
     if (state.workspace !== "design" || e.altKey) return;
 
-    if (key === "f") {
+    if (key === "F6") {
+      e.preventDefault();
       viewportApi()?.fit();
+      return;
+    }
+    if (key === "v" && !state.dialog) {
+      toggleVisibility();
       return;
     }
     if (state.activeSketchId) {
@@ -151,10 +188,9 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
         return;
       }
       // Like Fusion: a feature shortcut finishes the sketch and starts the feature on it.
-      const feature = FEATURE_KEYS[key];
-      if (feature) {
+      if (key === "e" || key === "q") {
         e.preventDefault();
-        openDialog(feature);
+        openDialog("extrude");
         return;
       }
       const tool = SKETCH_KEYS[key];
@@ -162,11 +198,19 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       return;
     }
     if (state.dialog && state.dialog.type !== "pick-sketch-plane") return;
-    const feature = FEATURE_KEYS[key];
-    if (feature) {
-      openDialog(feature);
+    if (key === "e") {
+      openDialog("extrude");
       return;
     }
+    if (key === "q") {
+      pressPull();
+      return;
+    }
+    if (key === "f") {
+      openDialog("fillet");
+      return;
+    }
+    if (key === "m") return;
     if (key === "s") {
       beginSketchPlanePick(null);
       return;

@@ -164,7 +164,9 @@ export function Viewport(): ReactElement {
           }
           return;
         }
-        controller.setHoverProfile(controller.profileAt(x, y));
+        controller.setHoverProfile(
+          controller.profileAt(x, y, { visibleOnly: true }) ?? controller.profileAt(x, y),
+        );
         if (state.hover) appState.set({ hover: null });
         return;
       }
@@ -183,9 +185,12 @@ export function Viewport(): ReactElement {
         });
         if (pick) hover = pickToSelection(pick);
       }
-      if (!hover && !dialog) {
-        const profile = controller.profileAt(x, y);
+      // A sketch drawn on a face lies on top of it: its profiles win over the face below.
+      // Edges and vertices keep their priority, and so does an explicit selection filter.
+      if (!dialog && (hover === null || (hover.kind === "face" && filter === "auto"))) {
+        const profile = controller.profileAt(x, y, { visibleOnly: true });
         controller.setHoverProfile(profile);
+        if (profile) hover = null;
       }
       if ((state.hover ? selectionKey(state.hover) : "") !== (hover ? selectionKey(hover) : "")) {
         appState.set({ hover });
@@ -332,11 +337,18 @@ export function Viewport(): ReactElement {
     const touches = new Set<number>();
     /** A touch that places a point when the finger is lifted, so that it can be aimed first. */
     let touchPick: { id: number; aborted: boolean } | null = null;
+    /** A one-finger swipe over empty sketch space that moves the view. */
+    let touchPan: { id: number; x: number; y: number } | null = null;
 
     const onPointerDown = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
       controller.setCoarse(touch);
-      if (touch) touches.add(e.pointerId);
+      scene.setTouchInput(touch);
+      if (touch) {
+        // The primary pointer starts a new gesture: forget fingers whose release was missed.
+        if (e.isPrimary) touches.clear();
+        touches.add(e.pointerId);
+      }
       down = { x: e.clientX, y: e.clientY, button: e.button };
       if (e.button !== 0) return;
       const p = info(e);
@@ -344,6 +356,7 @@ export function Viewport(): ReactElement {
       if (touch && touches.size > 1) {
         // A second finger means pan / zoom: whatever the first finger started is called off.
         if (touchPick) touchPick.aborted = true;
+        touchPan = null;
         controller.cancelDrag();
         controller.clearCursor();
         down = null;
@@ -374,12 +387,23 @@ export function Viewport(): ReactElement {
         }
       }
 
-      if (!appState.get().activeSketchId) return;
+      if (!appState.get().activeSketchId) {
+        if (touch) scene.setOneFingerGesture("rotate");
+        return;
+      }
       if (touch && appState.get().tool !== "select") {
+        scene.setOneFingerGesture("none");
         touchPick = { id: e.pointerId, aborted: false };
         controller.pointerMove(p);
         return;
       }
+      if (touch && !controller.hitsSomething(p)) {
+        // Swiping over empty space moves the view; a tap still selects.
+        scene.setOneFingerGesture("pan");
+        touchPan = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        return;
+      }
+      if (touch) scene.setOneFingerGesture("none");
       controller.pointerDown(p);
     };
 
@@ -399,7 +423,7 @@ export function Viewport(): ReactElement {
       }
       if (appState.get().activeSketchId) {
         if (e.pointerType === "touch") {
-          if (touches.size > 1) return;
+          if (touches.size > 1 || touchPan) return;
           if (touchPick && (touchPick.aborted || touchPick.id !== e.pointerId)) return;
         }
         if (e.buttons === 0 || e.buttons === 1) controller.pointerMove(p);
@@ -437,6 +461,13 @@ export function Viewport(): ReactElement {
       if (e.button !== 0) return;
       const p = info(e);
       if (appState.get().activeSketchId) {
+        if (touchPan) {
+          const pan = touchPan;
+          touchPan = null;
+          if (pan.id !== e.pointerId) return;
+          if (Math.hypot(e.clientX - pan.x, e.clientY - pan.y) > 12) return;
+          controller.pointerDown(p);
+        }
         if (touchPick) {
           const pick = touchPick;
           touchPick = null;
@@ -455,6 +486,7 @@ export function Viewport(): ReactElement {
     const onPointerCancel = (e: PointerEvent): void => {
       touches.delete(e.pointerId);
       if (touchPick?.id === e.pointerId) touchPick = null;
+      if (touchPan?.id === e.pointerId) touchPan = null;
       if (manipulator?.pointerId === e.pointerId) {
         manipulator = null;
         scene.setControlsEnabled(true);
@@ -471,6 +503,10 @@ export function Viewport(): ReactElement {
       appState.set({ cursor: null });
     };
     const onContextMenu = (e: MouseEvent): void => e.preventDefault();
+    // iOS Safari: keep the page itself from zooming while the view is pinched.
+    const onGesture = (e: Event): void => e.preventDefault();
+    host.addEventListener("gesturestart", onGesture);
+    host.addEventListener("gesturechange", onGesture);
 
     // Capture phase: the manipulator must see the event before the camera controls do.
     webgl.addEventListener("pointerdown", onPointerDown, { capture: true });
@@ -495,6 +531,10 @@ export function Viewport(): ReactElement {
           const s = scene.project(planeToWorld(resolveSketchPlane(f.sketch.plane), { x, y }));
           return { x: s.x + r.left, y: s.y + r.top };
         },
+        view: () => ({
+          ...scene.saveView(),
+          pixel: scene.pixelSize(scene.saveView().target),
+        }),
         manipulatorHandle: () => {
           const m = currentManipulator();
           if (!m) return null;
@@ -530,6 +570,8 @@ export function Viewport(): ReactElement {
       webgl.removeEventListener("dblclick", onDoubleClick);
       webgl.removeEventListener("pointerleave", onLeave);
       webgl.removeEventListener("contextmenu", onContextMenu);
+      host.removeEventListener("gesturestart", onGesture);
+      host.removeEventListener("gesturechange", onGesture);
       registerViewport(null);
       controller.dispose();
       scene.dispose();
@@ -761,7 +803,7 @@ export function Viewport(): ReactElement {
             <button
               style={{ flex: 1 }}
               onClick={() => sceneRef.current?.fitAll(sketchExtents())}
-              title="Fit all (F)"
+              title="Fit all (F6)"
             >
               Fit
             </button>
