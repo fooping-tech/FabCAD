@@ -32,11 +32,11 @@ npm run build
 9. **Feature を増やすときは 1 つのパラメトリックな Feature にする。** Pattern をコピーの集まりとして保存しない。数値はすべて式（文字列）で持ち、`featureExpressions` に載せる。
 10. **`packages/typography` は CAD を知らない。** 依存してよいのは `packages/geometry` だけ。ドキュメントと文字組みが出会うのは `apps/fabcad/src/text/derive.ts` だけ。Fabrication にテキスト専用の処理を書かない。
 11. **ユーザーが読み込んだフォントをプロジェクトに埋め込まない。送信もしない。**
-12. **アプリ内ヘルプを実装と一緒に更新する。** ヘルプの本文は `apps/fabcad/src/help/content.ts` の `HELP` に集約している。
-    - 利用者が使う機能・ツールを足すときは、そのヘルプ（`HELP` の項目）を同じ変更で足し、リボンやメニューの `help` に ID を渡す。
-    - 既存の機能の動作、パラメータ、前提となる選択、制限を変えるときは、そのヘルプを同じ変更で直す。
+12. **アプリ内ヘルプを実装と一緒に更新する。** ヘルプの本文は `apps/fabcad/src/help/content.ts` の `HELP` に集約している。ヘルプは英語と日本語の併記で、英語は `content.ts`、日本語は `content.ja.ts` の `HELP_JA` に同じ ID・同じ構成（項目の数と順番、パラメータ名）で書く。日本語の文中でも、ツール名・入力欄・ボタンの名前は画面の表記（英語）のまま書く。
+    - 利用者が使う機能・ツールを足すときは、そのヘルプ（`HELP` と `HELP_JA` の項目）を同じ変更で足し、リボンやメニューの `help` に ID を渡す。
+    - 既存の機能の動作、パラメータ、前提となる選択、制限を変えるときは、そのヘルプを英語・日本語とも同じ変更で直す。
     - ヘルプがない、または内容が古いままの機能は、実装が終わっていない。
-    - `apps/fabcad/test/help.test.ts` が、Create / Modify ツール、拘束、Feature、リボンに書いた ID のすべてに項目があることを確認する。
+    - `apps/fabcad/test/help.test.ts` が、Create / Modify ツール、拘束、Feature、リボンに書いた ID のすべてに項目があること、英語と日本語の構成が一致することを確認する。
 13. **メニューは `ui/Popover` で出す。** 位置を CSS や座標の計算で個別に決めない。`Popover` は `document.body` の直下に描き、見えている範囲（visual viewport と safe area）に収まる位置を `ui/placement.ts` の `placeMenu()` で決める。
 14. **タッチのジェスチャーは `ui/gestures.ts` で判定する。** ダブルタップ（エディタのコンテキストメニュー）と長押し（ツールアイコンのヘルプ）を、ツールやコンポーネントごとに実装しない。
 15. **クリックで選択するところは `isAdditiveClick()`（`app/appState.ts`）で追加選択かどうかを決める。** 修飾キーを個別に調べない。Multi-Select（`appState.multiSelect`）が効かなくなる。
@@ -57,7 +57,7 @@ npm run build
 | `apps/fabcad/public/fonts/` | 標準搭載のフォントと OFL の本文。追加・更新したら `packages/typography/src/catalog.ts` と `THIRD_PARTY_FONTS.md` も直す |
 | `apps/fabcad/src/print/` | FABRICATION ワークスペースの 3D Print。設定は `extensions["fabrication.print"]`。受け取るのは Body のメッシュ（`modelState` の tessellation）だけ |
 | `apps/fabcad/src/fabrication/` | FABRICATION ワークスペース。`pipeline.ts` は React に依存しない純粋な関数。Body ごとの判定結果は `FabricationOutput.detections` |
-| `apps/fabcad/src/help/` | アプリ内ヘルプ。`content.ts`（本文のレジストリ `HELP` と、項目がないときの `helpFor()`）、`useHelpTrigger.ts`（右クリックと長押し）、`HelpMenu.tsx`（短い説明）、`HelpOverlay.tsx`（詳細）。状態は `appState.help` だけで、ドキュメントにもコマンドにも触れない |
+| `apps/fabcad/src/help/` | アプリ内ヘルプ。`content.ts`（英語の本文のレジストリ `HELP` と、項目がないときの `helpFor()`）、`content.ja.ts`（日本語の本文 `HELP_JA`）、`useHelpTrigger.ts`（右クリックと長押し）、`HelpMenu.tsx`（短い説明）、`HelpOverlay.tsx`（詳細）。状態は `appState.help` だけで、ドキュメントにもコマンドにも触れない |
 | `apps/fabcad/src/ui/` | `Icon.tsx`、`Menu.tsx`、`Popover.tsx`（画面内に収まるメニュー）、`placement.ts`（位置の計算。純粋な関数）、`gestures.ts`（ダブルタップと長押し。純粋な関数） |
 
 スケッチは 3D ビューの上に重ねた 2D キャンバスに、3D カメラで投影して描く。マウス位置は視線とスケッチ平面の交点でスケッチ座標に変換する。

@@ -1,3 +1,4 @@
+import { HELP_JA } from "./content.ja";
 import type { HelpEntry, HelpFallback } from "./types";
 
 /**
@@ -9,8 +10,11 @@ import type { HelpEntry, HelpFallback } from "./types";
  * - `solid.<dialog type>`: features of the solid environment (`DIALOG_COMMANDS`)
  * - `fabrication.<process>`, `select`, `measure`, `selection.multi`
  *
- * Adding a tool, or changing what a tool does, takes or needs, means editing its entry here in
- * the same change (see CLAUDE.md). `apps/fabcad/test/help.test.ts` fails when a tool of one of
+ * The help is shown in two languages: English from here, Japanese from `content.ja.ts`, which
+ * has an entry of the same shape for every id.
+ *
+ * Adding a tool, or changing what a tool does, takes or needs, means editing its entry here
+ * and in `content.ja.ts` in the same change (see CLAUDE.md). `apps/fabcad/test/help.test.ts` fails when a tool of one of
  * the registries above has no entry.
  */
 
@@ -747,5 +751,13 @@ export function helpFor(id: string, fallback?: HelpFallback): HelpEntry {
     ],
   };
 }
+
+/** The Japanese text of an entry, shown next to the English; undefined when there is none. */
+export const helpJaFor = (id: string): HelpEntry | undefined => HELP_JA[id];
+
+const FALLBACK_JA = "このツールの詳しいヘルプは、まだ書かれていません。";
+
+/** Japanese for the last line of the fallback entry (see `helpFor`). */
+export const fallbackJa = (): string => FALLBACK_JA;
 
 export const hasHelp = (id: string): boolean => HELP[id] !== undefined;

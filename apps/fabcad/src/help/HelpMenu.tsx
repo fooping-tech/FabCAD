@@ -3,7 +3,7 @@ import { appState } from "../app/appState";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
 import { Popover } from "../ui/Popover";
-import { helpFor } from "./content";
+import { helpFor, helpJaFor } from "./content";
 import { closeHelpMenu, openHelpTopic } from "./helpState";
 
 /** The small help menu of a tool: what it does in a sentence, and the way to the details. */
@@ -47,6 +47,7 @@ export function HelpMenu(): ReactElement | null {
 
   if (!request) return null;
   const entry = helpFor(request.id, request);
+  const ja = helpJaFor(request.id);
   return (
     <Popover
       anchor={{ x: request.x, y: request.y }}
@@ -62,6 +63,11 @@ export function HelpMenu(): ReactElement | null {
         {entry.shortcut && <span className="kbd">{entry.shortcut}</span>}
       </div>
       <p className="help-menu-text">{entry.summary}</p>
+      {ja && (
+        <p className="help-menu-text help-ja" lang="ja">
+          {ja.summary}
+        </p>
+      )}
       <button
         role="menuitem"
         onClick={() => {
@@ -74,7 +80,7 @@ export function HelpMenu(): ReactElement | null {
         }}
       >
         <Icon name="info" size={16} />
-        Details
+        Details · 詳しく見る
       </button>
     </Popover>
   );

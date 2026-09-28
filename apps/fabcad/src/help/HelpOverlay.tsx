@@ -2,22 +2,49 @@ import { type ReactElement, type ReactNode, useEffect } from "react";
 import { appState } from "../app/appState";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
-import { helpFor } from "./content";
+import { fallbackJa, helpFor, helpJaFor } from "./content";
 import { closeHelpTopic } from "./helpState";
 
-function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
+function Section({
+  title,
+  titleJa,
+  children,
+}: {
+  title: string;
+  titleJa: string;
+  children: ReactNode;
+}): ReactElement {
   return (
     <section className="help-section">
-      <h3>{title}</h3>
+      <h3>
+        {title}
+        <span lang="ja"> · {titleJa}</span>
+      </h3>
       {children}
     </section>
   );
 }
 
-const List = ({ items }: { items: string[] }): ReactElement => (
+/** A text in English with its Japanese below it. */
+function Both({ en, ja }: { en: string; ja: string | undefined }): ReactElement {
+  return (
+    <>
+      <span className="help-en">{en}</span>
+      {ja !== undefined && (
+        <span className="help-ja" lang="ja">
+          {ja}
+        </span>
+      )}
+    </>
+  );
+}
+
+const List = ({ items, ja }: { items: string[]; ja: string[] | undefined }): ReactElement => (
   <ul>
     {items.map((text, i) => (
-      <li key={i}>{text}</li>
+      <li key={i}>
+        <Both en={text} ja={ja?.[i]} />
+      </li>
     ))}
   </ul>
 );
@@ -45,6 +72,9 @@ export function HelpOverlay(): ReactElement | null {
 
   if (!topic) return null;
   const entry = helpFor(topic.id, topic);
+  // Without a Japanese entry there is no English entry either: the fallback says so in both.
+  const ja = helpJaFor(topic.id);
+  const whatJa = ja?.what ?? entry.what.map((_t, i) => (i === entry.what.length - 1 ? fallbackJa() : undefined));
   return (
     <div
       className="modal-backdrop help-backdrop"
@@ -61,48 +91,54 @@ export function HelpOverlay(): ReactElement | null {
           </button>
         </div>
         <div className="modal-body help-body">
-          <p className="help-summary">{entry.summary}</p>
-          <Section title="What it does">
+          <p className="help-summary">
+            <Both en={entry.summary} ja={ja?.summary} />
+          </p>
+          <Section title="What it does" titleJa="できること">
             {entry.what.map((text, i) => (
-              <p key={i}>{text}</p>
+              <p key={i}>
+                <Both en={text} ja={whatJa[i]} />
+              </p>
             ))}
           </Section>
           {entry.when && (
-            <Section title="When to use it">
-              <List items={entry.when} />
+            <Section title="When to use it" titleJa="使う場面">
+              <List items={entry.when} ja={ja?.when} />
             </Section>
           )}
           {entry.requires && (
-            <Section title="What it needs">
-              <List items={entry.requires} />
+            <Section title="What it needs" titleJa="必要なもの">
+              <List items={entry.requires} ja={ja?.requires} />
             </Section>
           )}
           {entry.parameters && (
-            <Section title="Parameters">
+            <Section title="Parameters" titleJa="パラメータ">
               <dl>
-                {entry.parameters.map((p) => (
+                {entry.parameters.map((p, i) => (
                   <div key={p.name}>
                     <dt>{p.name}</dt>
-                    <dd>{p.text}</dd>
+                    <dd>
+                      <Both en={p.text} ja={ja?.parameters?.[i]?.text} />
+                    </dd>
                   </div>
                 ))}
               </dl>
             </Section>
           )}
           {entry.limitations && (
-            <Section title="Limitations">
-              <List items={entry.limitations} />
+            <Section title="Limitations" titleJa="制限">
+              <List items={entry.limitations} ja={ja?.limitations} />
             </Section>
           )}
           {entry.examples && (
-            <Section title="Examples">
-              <List items={entry.examples} />
+            <Section title="Examples" titleJa="使用例">
+              <List items={entry.examples} ja={ja?.examples} />
             </Section>
           )}
         </div>
         <div className="modal-footer">
           <button className="btn primary" onClick={closeHelpTopic}>
-            Close
+            Close · 閉じる
           </button>
         </div>
       </div>

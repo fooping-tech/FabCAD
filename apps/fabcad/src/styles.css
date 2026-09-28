@@ -197,6 +197,10 @@ select { padding-right: 4px; }
 .help-menu-title { display: flex; align-items: center; gap: 8px; font-weight: 680; font-size: 12.5px; color: var(--ink-strong); padding: 2px 4px 0; }
 .help-menu-text { margin: 4px 4px 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-soft); }
 .menu.help-menu button { border-top: 1px solid var(--line); border-radius: 0 0 4px 4px; color: var(--accent-strong); font-weight: 600; }
+.help-en, .help-ja { display: block; }
+.help-ja { color: var(--ink-soft); font-size: 0.94em; line-height: 1.6; margin-top: 1px; }
+.help-menu-text.help-ja { margin-top: -4px; }
+.help-section h3 span { letter-spacing: 0.4px; }
 .help-backdrop { z-index: 100; }
 .help-overlay { width: min(560px, calc(100vw - 40px)); }
 .help-shortcut { margin-left: 8px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 10.5px; font-weight: 600; color: var(--ink-soft); }

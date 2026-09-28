@@ -2,7 +2,8 @@ import { FEATURE_LABELS } from "@fabcad/cad-document";
 import { SKETCH_MODIFY_TOOLS } from "@fabcad/sketch";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { HELP, hasHelp, helpFor } from "../src/help/content";
+import { HELP, hasHelp, helpFor, helpJaFor } from "../src/help/content";
+import { HELP_JA } from "../src/help/content.ja";
 import { CONSTRAINT_TOOLS } from "../src/sketch/constraintTools";
 import { CREATE_TOOLS } from "../src/sketch/createTools";
 
@@ -75,5 +76,26 @@ describe("in-app help", () => {
     expect(entry.summary).toBe("Does something new");
     expect(entry.what.join(" ")).toMatch(/not been written/);
     expect(helpFor("nothing-known").title).toBe("nothing-known");
+  });
+
+  it("has Japanese text for every entry, of the same shape as the English", () => {
+    expect(Object.keys(HELP_JA).sort()).toEqual(Object.keys(HELP).sort());
+    const japanese = /[\u3040-\u30ff\u4e00-\u9fff]/;
+    for (const [id, en] of Object.entries(HELP)) {
+      const ja = helpJaFor(id)!;
+      // Names are written as they are on screen.
+      expect(ja.title, id).toBe(en.title);
+      expect(ja.shortcut, id).toBe(en.shortcut);
+      expect(ja.summary, id).toMatch(japanese);
+      expect(ja.summary.length, `${id}: the summary is for the small menu`).toBeLessThan(80);
+      for (const field of ["what", "when", "requires", "limitations", "examples"] as const) {
+        expect(ja[field]?.length, `${id}.${field}`).toBe(en[field]?.length);
+        for (const text of ja[field] ?? []) expect(text, `${id}.${field}`).toMatch(japanese);
+      }
+      expect(ja.parameters?.map((p) => p.name), `${id}.parameters`).toEqual(
+        en.parameters?.map((p) => p.name),
+      );
+      for (const p of ja.parameters ?? []) expect(p.text, `${id}.${p.name}`).toMatch(japanese);
+    }
   });
 });
