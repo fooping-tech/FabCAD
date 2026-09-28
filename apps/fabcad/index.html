@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#0d1216" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>FabCAD — Parametric 3D CAD with a Fabrication Compiler</title>
-    <meta name="description" content="ブラウザで動くパラメトリック3D CAD。設計した立体を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
+    <meta name="description" content="ブラウザで動くパラメトリック3D CAD。設計した板や箱を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
     <link rel="canonical" href="https://fooping-tech.github.io/FabCAD/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="FabCAD" />
     <meta property="og:title" content="FabCAD — Parametric 3D CAD with a Fabrication Compiler" />
-    <meta property="og:description" content="ブラウザで動くパラメトリック3D CAD。設計した立体を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
+    <meta property="og:description" content="ブラウザで動くパラメトリック3D CAD。設計した板や箱を、MDF・アクリル・紙でそのまま切れるSVG / DXFに変換します。" />
     <meta property="og:url" content="https://fooping-tech.github.io/FabCAD/" />
     <meta property="og:image" content="https://fooping-tech.github.io/FabCAD/landing/og.png" />
     <meta property="og:image:width" content="1200" />
@@ -56,7 +56,7 @@
           <h1>Design it. Then make it <em>cuttable</em>.</h1>
           <p class="lede">
             <strong>設計から、切れるデータまで。</strong>
-            スケッチを描き、拘束と寸法で形を決め、押し出して立体にする。材料を選ぶと、その立体がレーザーで切れる部品になります。すべてブラウザの中で動きます。
+            スケッチを描き、拘束と寸法で形を決め、押し出して立体にする。材料を選ぶと、板と箱はレーザーで切れる部品に、紙は展開図になります。すべてブラウザの中で動きます。
           </p>
           <div class="cta-row">
             <a class="button primary" href="./app/">FabCADを開く <span aria-hidden="true">→</span></a>
@@ -66,7 +66,7 @@
         </div>
         <div class="wrap wide">
           <figure class="shot hero-shot reveal">
-            <img src="./landing/hero.png" width="2880" height="1800" alt="FabCADの画面。星形の立体を押し出しの矢印で引き出している" />
+            <img src="./landing/hero.png" width="2880" height="1800" alt="FabCADの画面。星形のスケッチを、板の厚みの5.5 mmだけ押し出している" />
           </figure>
         </div>
       </section>
@@ -104,6 +104,7 @@
               <h3>スケッチと拘束</h3>
               <p>線・矩形・円・円弧・楕円・多角形・スロット・スプライン。12種類の拘束と6種類の寸法を、独立した拘束ソルバーが解きます。ドラッグしても拘束は保たれ、残りの自由度と過剰拘束がその場で分かります。</p>
               <ul class="ticks">
+                <li>ほかの点の真上・真横にそろう位置へスナップし、ガイドを表示</li>
                 <li>何もない場所は1 mm単位にスナップ</li>
                 <li>閉じた領域を自動で検出し、クリックで選択</li>
                 <li>立体の稜線や面をスケッチへ投影（Project）</li>
@@ -114,8 +115,9 @@
             <figure class="shot"><img loading="lazy" src="./landing/solid.png" width="2880" height="1800" alt="穴とフィレットのある立体と、操作が並んだタイムライン" /></figure>
             <div class="split-text">
               <h3>履歴のある立体</h3>
-              <p>Extrude、Revolve、Combine、Fillet、Chamfer、Shell。操作はタイムラインに並び、上流を変えると下流だけが再計算されます。寸法には <code>width / 2</code> や <code>material + 0.1 mm</code> のような式が書けます。</p>
+              <p>Extrude、Revolve、Sweep、Loft、Hole、Pattern、Mirror、Fillet、Chamfer、Shell、Combine。操作はタイムラインに並び、上流を変えると下流だけが再計算されます。寸法には <code>width / 2</code> や <code>material + 0.1 mm</code> のような式が書けます。</p>
               <ul class="ticks">
+                <li>平面や面から距離を指定して、構成平面（Offset Plane）を作成</li>
                 <li>すべての操作をUndo / Redo</li>
                 <li>STEPの読み込みと書き出し、STLの書き出し</li>
                 <li>スケッチはSVG / DXFで書き出し</li>
@@ -127,7 +129,11 @@
           <div class="cards reveal">
             <article class="card">
               <h3>Fusionに近い操作</h3>
-              <p><code>L</code> <code>R</code> <code>C</code> <code>D</code> <code>T</code> <code>O</code> <code>E</code> <code>F</code> <code>Q</code> <code>P</code>。面を選んで <code>R</code> を押せば、その面で矩形を描き始めます。右クリックで、選択に合ったメニューが開きます。</p>
+              <p><code>L</code> <code>R</code> <code>C</code> <code>D</code> <code>T</code> <code>O</code> <code>E</code> <code>F</code> <code>Q</code> <code>P</code>。面を選んで <code>R</code> を押せば、その面で矩形を描き始めます。右クリックで、選択に合ったメニューが開きます。<code>Shift</code> + クリックかMulti-Selectで、稜線や面をまとめて選べます。</p>
+            </article>
+            <article class="card">
+              <h3>アイコンからヘルプ</h3>
+              <p>ツールのアイコンを右クリック（タッチでは長押し）すると、そのツールの説明が出ます。用途、必要な選択、パラメータ、制限を、英語と日本語で確認できます。実行中のコマンドはそのままです。</p>
             </article>
             <article class="card">
               <h3>矢印で押し出す</h3>
@@ -145,18 +151,18 @@
         <div class="wrap">
           <p class="eyebrow">FABRICATION</p>
           <h2>Pick a material. Get parts you can cut.</h2>
-          <p class="sub">箱の展開図ジェネレータではありません。どんな立体でも、面・稜線・二面角から部品を作ります。星形も、角錐も、同じ処理を通ります。</p>
+          <p class="sub">立体の面・稜線・二面角から、何を作れるかを先に判定します。板は「平らな部品」と「直方体の箱」、紙は任意の多面体の展開図。作れない形は、理由を示して止めます。</p>
         </div>
         <div class="wrap wide">
           <div class="split reveal">
-            <figure class="shot"><img loading="lazy" src="./landing/sheet.png" width="2880" height="1800" alt="星形の立体をMDFのパネルに分解し、シートに並べた画面" /></figure>
+            <figure class="shot"><img loading="lazy" src="./landing/sheet.png" width="2880" height="1800" alt="箱を6枚のパネルに分解し、星形の板と一緒にMDFのシートに並べた画面" /></figure>
             <div class="split-text">
-              <h3>MDF・アクリル：パネルに分解</h3>
-              <p>面ごとにパネルを作り、板厚のぶんだけ辺を詰めます。上下の板にはスロット、側板にはタブ。タブとスロットは立体の稜線から対応づけるので、位置がずれません。</p>
+              <h3>MDF・アクリル：板と箱</h3>
+              <p>板厚と同じ厚みの形は、輪郭のまま1つの部品になります。六角形でも星形でも、穴があっても同じです。直方体は6枚のパネルに分け、板厚のぶんだけ辺を詰めて、タブとスロットを付けます。</p>
               <ul class="ticks">
+                <li>Flat Part / Rectangular Box を自動で判定して表示</li>
                 <li>Tab &amp; Slot / Finger / Flat を選択</li>
                 <li>切り幅（kerf）と、はめ合いの余裕を補正</li>
-                <li>斜めの角に直角の組み継ぎは使いません</li>
               </ul>
             </div>
           </div>
@@ -175,9 +181,9 @@
         <div class="wrap">
           <div class="cards reveal">
             <article class="card">
-              <h3>作れない形は、先に知らせる</h3>
-              <p>凹んだ角、鋭い角、短い辺、細いタブ。板厚のせいで正確に再現できない箇所を警告します。</p>
-              <p class="quote">This corner cannot be reproduced accurately with 5.5 mm MDF.</p>
+              <h3>作れない形は、作らない</h3>
+              <p>角柱、角錐、屋根、斜めの接合。板で組めると保証できない立体は、それらしいカットデータを出さずに、理由を示して止めます。</p>
+              <p class="quote">Unsupported body — Reason: This body contains non-90° panel joints.</p>
             </article>
             <article class="card">
               <h3>部品と接続の一覧</h3>
@@ -216,7 +222,7 @@
             <div class="split-text">
               <p class="eyebrow">TOUCH</p>
               <h2>Works on a phone, too.</h2>
-              <p>スワイプで移動、ピンチでズーム。指を置いてずらし、離した位置に点を置きます。長押しでメニューが開き、押し出しの矢印も指で引けます。</p>
+              <p>スワイプで移動、ピンチでズーム。指を置いてずらし、離した位置に点を置きます。ダブルタップでメニューが開き、Multiで複数選択、アイコンの長押しでヘルプ。押し出しの矢印も指で引けます。</p>
               <p class="fine">スマートフォンでの動作は、ブラウザのエミュレーションで確認しています。</p>
             </div>
           </div>
@@ -234,7 +240,7 @@
             </article>
             <article class="card">
               <h3>ベータ版です</h3>
-              <p>Sweep、Loft、アセンブリの操作などは未実装です。切り幅やはめ合いの値は、お使いの材料と加工機に合わせて調整してください。実機での加工と造形は未検証です。</p>
+              <p>アセンブリの操作、蓋や仕切りのあるケースの生成、箱以外の立体の板への分解などは未実装です。切り幅やはめ合いの値は、お使いの材料と加工機に合わせて調整してください。実機での加工と造形は未検証です。</p>
             </article>
             <article class="card">
               <h3>ソースコード</h3>
