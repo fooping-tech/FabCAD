@@ -28,6 +28,10 @@ npm run build
 5. **ドキュメントのスケッチは常に解いた状態で保存する。** パラメータを変える Command は `resolveDocumentSketches()` で同じ Undo ステップの中でスケッチを解き直す。
 6. **Part Geometry と Joint Geometry を混ぜない。接続は `EdgeConnection` で明示する。**
 7. **プレビューと書き出しは同じ `SheetGeometry` を使う。**
+8. **面と稜線を位置で覚えない。** Feature が面・稜線・頂点を参照するときは `TopologyRef`（`packages/features/src/naming.ts` の `makeFaceRef` / `makeEdgeRef`）を保存し、`resolveFaceRef` / `resolveEdgeRef` で解決する。新しい Feature を足すときは、結果の面に名前を付ける（`nameSolid` / `propagateNames`）。
+9. **Feature を増やすときは 1 つのパラメトリックな Feature にする。** Pattern をコピーの集まりとして保存しない。数値はすべて式（文字列）で持ち、`featureExpressions` に載せる。
+10. **`packages/typography` は CAD を知らない。** 依存してよいのは `packages/geometry` だけ。ドキュメントと文字組みが出会うのは `apps/fabcad/src/text/derive.ts` だけ。Fabrication にテキスト専用の処理を書かない。
+11. **ユーザーが読み込んだフォントをプロジェクトに埋め込まない。送信もしない。**
 
 ## 構成
 
@@ -40,6 +44,9 @@ npm run build
 | `apps/fabcad/src/sketch/` | `SketchController.ts`（スケッチの描画と入力）、`createTools.ts`（Create ツールの定義）、`constraintTools.ts`、`render.ts` |
 | `apps/fabcad/src/panels/` | Header、Ribbon、Browser、Properties、Timeline、ダイアログ |
 | `apps/fabcad/index.html`、`src/landing/` | 紹介ページ。静的な HTML と CSS。掲載しているスクリーンショット（`public/landing/`）は実際のアプリを Playwright で操作して撮ったもの。画面を大きく変えたら撮り直す |
+| `apps/fabcad/src/text/` | スケッチのテキスト。`typography.ts`（フォントの読み込みと、輪郭を最新に保つ処理）、`derive.ts`（`SketchText` → 輪郭。純粋な関数）、`textCommands.ts`、`TextDialog.tsx` |
+| `apps/fabcad/src/measure/` | Measure。選択を幾何の基本要素に変換し、値は `packages/geometry/src/measure.ts` で計算する。ドキュメントには何も保存しない |
+| `apps/fabcad/public/fonts/` | 標準搭載のフォントと OFL の本文。追加・更新したら `packages/typography/src/catalog.ts` と `THIRD_PARTY_FONTS.md` も直す |
 | `apps/fabcad/src/print/` | FABRICATION ワークスペースの 3D Print。設定は `extensions["fabrication.print"]`。受け取るのは Body のメッシュ（`modelState` の tessellation）だけ |
 | `apps/fabcad/src/fabrication/` | FABRICATION ワークスペース。`pipeline.ts` は React に依存しない純粋な関数 |
 
@@ -48,6 +55,8 @@ npm run build
 ポインタ入力は `Viewport.tsx` に集約している。タッチは `pointerType === "touch"` で判別し、スケッチのツールでは指を離したときに点を置く。2 本目の指が触れたら、1 本目が始めた操作は取り消す。Extrude の矢印（`extrudeManipulator.ts`）は capture フェーズで `pointerdown` を受け、OrbitControls より先に処理する。
 
 キーボードショートカットは `app/shortcuts.ts`。日本語入力がオンだと `key` が `Process` になるので、`code` から文字を求めている。
+
+テキストの輪郭は派生データで、`SketchText.outline` にキャッシュする。`outline.key` が入力（文字列、フォント、評価済みの数値、パスの形）と一致しなくなったら、`refreshTexts()` が作り直して `documentStore.amend()` で差し替える（履歴は増えない）。テキストのダイアログは `documentStore.begin()` のトランザクションの中でドキュメントを直接書き換え、OK で 1 つの履歴にまとめる。
 
 Sketch の Create ツールを足すときは `packages/sketch/src/create.ts` に関数を、`apps/fabcad/src/sketch/createTools.ts` の `CREATE_TOOLS` に定義を 1 つ追加する。
 
