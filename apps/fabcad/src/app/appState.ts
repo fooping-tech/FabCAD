@@ -4,7 +4,16 @@ import type {
   EdgeRef,
   ExtrudeDirection,
   FaceRef,
+  HoleExtent,
+  HoleType,
+  LoftSection,
+  MirrorPlane,
+  PatternAxis,
+  PatternDirection,
+  Point3Ref,
   RevolveAxis,
+  SplitFeature,
+  SplitTool,
 } from "@fabcad/cad-document";
 import type { OriginPlaneName, Vec2, Vec3 } from "@fabcad/geometry";
 import type { ProfileRef } from "@fabcad/sketch";
@@ -55,8 +64,143 @@ export const selectionKey = (s: Selection): string => {
   }
 };
 
+/** What a pattern or a mirror repeats, as the dialog holds it: both lists survive a switch. */
+export interface SourcePick {
+  sourceKind: "features" | "bodies";
+  featureIds: string[];
+  bodyIds: string[];
+}
+
+/** Operation and target bodies, shared by the features that build a solid from a sketch. */
+export interface OperationPick {
+  operation: BodyOperation;
+  targetBodyIds: string[];
+}
+
+export type HoleDialog = {
+  type: "hole";
+  editing: string | null;
+  bodyId: string | null;
+  /** The body follows the sketch until the user picks one. */
+  bodyAuto: boolean;
+  sketchId: string | null;
+  points: string[];
+  holeType: HoleType;
+  diameter: string;
+  extent: HoleExtent;
+  depth: string;
+  counterboreDiameter: string;
+  counterboreDepth: string;
+  countersinkDiameter: string;
+  countersinkAngle: string;
+  flip: boolean;
+  picking: "points" | "body";
+};
+
+export type RectangularPatternDialog = SourcePick & {
+  type: "rectangular-pattern";
+  editing: string | null;
+  direction: PatternDirection | null;
+  count: string;
+  distance: string;
+  flip: boolean;
+  /** Whether the pattern has a second direction. */
+  second: boolean;
+  direction2: PatternDirection | null;
+  count2: string;
+  distance2: string;
+  flip2: boolean;
+  picking: "source" | "direction" | "direction2";
+};
+
+export type CircularPatternDialog = SourcePick & {
+  type: "circular-pattern";
+  editing: string | null;
+  axis: PatternAxis | null;
+  count: string;
+  angle: string;
+  flip: boolean;
+  picking: "source" | "axis";
+};
+
+export type MirrorDialog = SourcePick & {
+  type: "mirror";
+  editing: string | null;
+  plane: MirrorPlane | null;
+  picking: "source" | "plane";
+};
+
+export type MoveDialog = {
+  type: "move";
+  editing: string | null;
+  bodyIds: string[];
+  copy: boolean;
+  mode: "translate" | "rotate" | "point-to-point";
+  x: string;
+  y: string;
+  z: string;
+  axis: PatternAxis | null;
+  angle: string;
+  from: Point3Ref | null;
+  to: Point3Ref | null;
+  picking: "bodies" | "axis" | "from" | "to";
+};
+
+export type AlignDialog = {
+  type: "align";
+  editing: string | null;
+  mode: "face-to-face" | "point-to-point";
+  /** Body that moves: the one `from` lies on. */
+  bodyId: string | null;
+  fromFace: FaceRef | null;
+  toFace: { bodyId: string; ref: FaceRef } | null;
+  fromPoint: Point3Ref | null;
+  toPoint: Point3Ref | null;
+  flip: boolean;
+  picking: "from" | "to";
+};
+
+export type SplitDialog = {
+  type: "split";
+  editing: string | null;
+  bodyId: string | null;
+  tool: SplitTool | null;
+  keep: SplitFeature["keep"];
+  picking: "body" | "tool";
+};
+
+export type SweepDialog = OperationPick & {
+  type: "sweep";
+  editing: string | null;
+  sketchId: string | null;
+  profiles: ProfileRef[];
+  pathSketchId: string | null;
+  path: string[];
+  picking: "profile" | "path";
+};
+
+export type LoftDialog = OperationPick & {
+  type: "loft";
+  editing: string | null;
+  sections: LoftSection[];
+  ruled: boolean;
+};
+
+/** The dialogs of the solid features that pick through `dialogWants` / `applyPick`. */
+export type SolidDialog =
+  | HoleDialog
+  | RectangularPatternDialog
+  | CircularPatternDialog
+  | MirrorDialog
+  | MoveDialog
+  | AlignDialog
+  | SplitDialog
+  | SweepDialog
+  | LoftDialog;
+
 /** Feature dialogs. `editing` is the id of an existing feature being edited. */
 export type Dialog =
+  | SolidDialog
   | { type: "pick-sketch-plane" }
   | {
       type: "extrude";
@@ -70,6 +214,8 @@ export type Dialog =
       autoSketch?: string | null;
       distance: string;
       direction: ExtrudeDirection;
+      /** Set once the user picked a direction: the operation no longer changes it. */
+      directionChosen?: boolean;
       operation: BodyOperation;
       targetBodyIds: string[];
     }

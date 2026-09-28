@@ -9,7 +9,7 @@ import {
 } from "@fabcad/cad-document";
 import type { OriginPlaneName } from "@fabcad/geometry";
 import { type ReactElement, type ReactNode, useState } from "react";
-import { enterSketch } from "../app/actions";
+import { enterSketch, pickInDialog } from "../app/actions";
 import { type Selection, appState, isSelected, select } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
@@ -182,6 +182,10 @@ export function BrowserTree(): ReactElement {
   });
   const toggle = (key: string): void => setOpen((o) => ({ ...o, [key]: !o[key] }));
   const additive = (e: React.MouseEvent): boolean => e.shiftKey || e.metaKey || e.ctrlKey;
+  /** A click on a row: a pick for the open feature dialog, otherwise a selection. */
+  const pick = (sel: Selection, e: React.MouseEvent): void => {
+    if (!pickInDialog(sel, additive(e))) select(sel, additive(e));
+  };
   const menuFor = (sel: Selection) => (e: React.MouseEvent): void => {
     if (!isSelected(appState.get().selection, sel)) appState.set({ selection: [sel] });
     openContextMenu(e.clientX, e.clientY);
@@ -232,7 +236,7 @@ export function BrowserTree(): ReactElement {
                     visible={doc.origin.visible && !doc.origin.hidden.includes(item.key)}
                     onVisible={(v) => run(setOriginVisible(item.key, v))}
                     selected={sel ? isSelected(selection, sel) : false}
-                    onClick={sel ? (e) => select(sel, additive(e)) : undefined}
+                    onClick={sel ? (e) => pick(sel, e) : undefined}
                     onMenu={sel ? menuFor(sel) : undefined}
                   />
                 );
@@ -263,7 +267,7 @@ export function BrowserTree(): ReactElement {
                     active={activeSketchId === f.id}
                     error={statuses[f.id]?.state === "error"}
                     title={statuses[f.id]?.message ?? "Double-click to edit the sketch"}
-                    onClick={(e) => select(sel, additive(e))}
+                    onClick={(e) => pick(sel, e)}
                     onDoubleClick={() => enterSketch(f.id)}
                     onMenu={menuFor(sel)}
                     onRename={(name) => run(renameFeature(f.id, name))}
@@ -296,7 +300,7 @@ export function BrowserTree(): ReactElement {
                     selected={isSelected(selection, sel)}
                     error={missing && statuses[b.createdBy]?.state === "error"}
                     title={missing ? "This body has no geometry at the current history position" : undefined}
-                    onClick={(e) => select(sel, additive(e))}
+                    onClick={(e) => pick(sel, e)}
                     onMenu={menuFor(sel)}
                     onRename={(name) => run(renameBody(b.id, name))}
                   />

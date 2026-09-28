@@ -27,7 +27,10 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Profile | 交点を含めて閉領域を自動検出し、クリックで選択（複数選択可） |
 | 範囲選択 | スケッチの何もない場所からドラッグ。左から右は枠に完全に入ったものだけ（実線の枠）、右から左は枠に触れたものすべて（破線の枠）。`Shift` で追加 |
 | Measure | `I`。点・線・円・面・Body を 1 つまたは 2 つ選ぶと、長さ、半径、直径、面積、体積、距離、角度を表示します。値はコピーできます。計測は保存されず、履歴にも残りません |
-| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
+| Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。Cut / Intersect を選ぶと向きは自動で立体の側に、Join / New Body に戻すと立体の外側に切り替わります。自分で向きを選んだあとは変えません。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Sweep（プロファイルを、線・円弧・スプラインをつないだパスに沿って掃引）、Loft（2 つ以上の断面をつなぐ。断面はスケッチの閉領域または平らな面）、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
+| Hole | `H`。スケッチの点に穴をあけます。1 つの Feature に複数の点を指定できます。Simple / Counterbore / Countersink、Distance / Through All、Flip |
+| Pattern / Mirror | Rectangular Pattern（1 方向または 2 方向）、Circular Pattern、Mirror。対象は Feature（Extrude、Revolve、Hole、Sweep、Loft）または Body。個数・間隔・角度を持つ 1 つの Feature として保存し、コピーの集まりにはしません |
+| Move / Align / Split | Move/Copy（`M`。移動、回転、点から点、コピー）、Align（面と面、点と点）、Split Body（原点平面または他の Body の平らな面で分割。両側 / 片側を残す） |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
 | 入出力 | STEP import / export、STL export、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
@@ -101,7 +104,8 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 | `E` | スケッチを終了して Extrude | Extrude |
 | `Q` | スケッチを終了して Extrude | Press Pull（稜線を選択中は Fillet、それ以外は Extrude） |
 | `F` | Sketch Fillet | Fillet |
-| `M` | Move | — |
+| `M` | Move（スケッチの図形） | Move/Copy（Body） |
+| `H` | スケッチを終了して Hole | Hole |
 | `I` | Measure | Measure |
 | `V` | — | 選択した Body / Sketch の表示・非表示 |
 | `S` | Fit Point Spline | Create Sketch |
@@ -126,6 +130,23 @@ DXF は **Save As DXF**（右クリックメニュー）または **Export → D
 
 Fusion 360 のショートカットのうち、対応するコマンドがないもの（`J` Joint、`A` Appearance、`1` `2` `3` の選択方法）は未実装です。
 
+### Hole、Pattern、Mirror などの選び方
+
+ダイアログの入力欄をクリックすると、その欄が選択の対象になり、ビューでクリックしたものが入ります。もう一度クリックすると外れます。コマンドを始める前に選択しておいたものは、最初から入ります。
+
+| コマンド | 選ぶもの |
+| --- | --- |
+| Hole | スケッチの点（複数可）と、穴をあける Body。先に点を描いたスケッチを用意します |
+| Pattern、Mirror の対象 | Feature はタイムラインかブラウザで、またはその Feature が作った面をクリックして選びます。Body はビューかブラウザで選びます |
+| 方向・軸 | X / Y / Z のボタン、直線の稜線、スケッチの線。Circular Pattern と回転では円形の稜線も選べます（その中心軸） |
+| 平面 | XY / XZ / YZ のボタン、または平らな面 |
+| Sweep のパス | スケッチの曲線を 1 つクリックすると、つながっている曲線がまとめて入ります。`Shift` + クリックで 1 本ずつ外せます |
+| Loft の断面 | クリックした順に並びます。一覧で順番の入れ替えと削除ができます |
+
+個数、間隔、角度、直径、深さなどには、パラメータ式を入力できます。作成後は、タイムラインのダブルクリックか **Edit Feature** で同じダイアログが開きます。
+
+Pattern、Mirror、Copy、Split でできた Body は、ブラウザに「Body001 (Mirror001)」のような名前で並び、ほかの Body と同じように選択、表示切り替え、書き出しができます。
+
 ### テキスト
 
 スケッチのリボンの **Text** を押し、文字を置く位置をクリックすると、ダイアログが開きます。入力した内容はその場でビューに反映されます。
@@ -146,7 +167,7 @@ Height、Spacing、Line pitch、Angle、Offset、Start にはパラメータ式�
 
 配置済みのテキストは、ダブルクリック、または右クリックの **Edit Text** で編集します。ドラッグすると配置点ごと動き、配置点には寸法や拘束を付けられます。
 
-Extrude でテキストの文字をクリックすると、テキスト全体が Profile になります。あとで文字列やフォントを変えても、Extrude / Cut は新しい文字に追従します。彫り込むときは Operation を **Cut** にし、Direction を **Flipped** にします。
+Extrude でテキストの文字をクリックすると、テキスト全体が Profile になります。あとで文字列やフォントを変えても、Extrude / Cut は新しい文字に追従します。彫り込むときは Operation を **Cut** にします。
 
 **Explode Text** はテキストを線とスプラインに変換します。変換後は文字列として編集できません。Undo 1 回でテキストに戻ります。
 
@@ -204,10 +225,11 @@ Font の一覧の **Load a font file** から、手元の TTF / OTF / WOFF を�
 | コマンドの実行中 | OK、Cancel |
 | 直前にコマンドを使った | Repeat（直前のコマンドをもう一度） |
 | 稜線 | Fillet、Chamfer |
-| 平らな面・原点平面 | Create Sketch、Shell |
+| 平らな面・原点平面 | Create Sketch、Shell、Align |
+| スケッチの点 | Hole |
 | スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG、Save As DXF |
 | スケッチ中のテキスト | Edit Text、Explode Text、Delete |
-| Body | Show / Hide、Combine、Delete |
+| Body | Move/Copy、Split Body、Mirror、Rectangular / Circular Pattern、Show / Hide、Combine、Delete |
 | タイムライン・ブラウザの項目 | Edit Feature / Edit Sketch、Suppress、Show / Hide、Delete |
 | スケッチ中の線や円 | Normal / Construction、Move、Copy、Delete |
 | スケッチ中の寸法 | Edit Dimension、Delete |
@@ -309,13 +331,14 @@ OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚�
 npm test
 ```
 
-Vitest で 500 件以上のテストを実行します。OpenCASCADE を使うテストは Node 上で WASM を読み込みます。
+Vitest で 530 件以上のテストを実行します。OpenCASCADE を使うテストは Node 上で WASM を読み込みます。
 
 | 対象 | 内容 |
 | --- | --- |
 | CAD Core | geometry、constraints、parameter evaluation、feature recompute、dependency graph、save / load |
 | Topology | 面と稜線の名前。寸法を変えたあと、Cut のあと、保存と読み込みのあとで、Fillet / Chamfer / Shell / Project / 面の上のスケッチが同じ面・稜線を指すこと |
 | Text | 標準搭載のフォントを実際に読み込み、横書き・縦書き・パスに沿った配置、Profile、Extrude / Cut、文字列の変更への追従、Explode、フォントがない場合を検証 |
+| Solid Features | Hole、Pattern、Mirror、Move、Align、Split、Sweep、Loft を OpenCASCADE で実行し、体積を計算値と比較。個数や間隔を変えたあとの面の名前、依存グラフ、Undo / Redo、保存と読み込み |
 | DXF | 各要素の読み込み、単位の換算、レイヤー、ブロック、書き出した DXF の読み戻し |
 | Fabrication | rectangle / hexagon / star MDF、paper box、paper polygon、kerf compensation、tab / slot matching、SVG dimensions、角錐 |
 | シナリオ | `apps/fabcad/test/scenarios.test.ts` が Sketch → Solver → Extrude → B-Rep → Fabrication → SVG を通しで検証 |
@@ -339,7 +362,14 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | Project | 実装済み。楕円になる投影（斜めから見た円）はスプラインで近似します |
 | Include / Intersect | 未実装 |
 | Assembly | データモデルのみ。Component や Joint を操作する UI はありません |
-| Sweep、Loft、Draft、Rib、Hole、Thread、Split Body | 未実装 |
+| Draft、Rib、Thread | 未実装 |
+| Hole | ねじ穴、下穴、先端の円錐（ドリル形状）、「指定した面まで」はありません。穴が何も削らない向きのときはエラーになります（Flip で反転） |
+| Pattern / Mirror | Feature を対象にできるのは、材料を足すか削る Feature（Extrude、Revolve、Hole、Sweep、Loft、Pattern）だけです。Fillet、Chamfer、Shell は対象にできません（Body を対象にしてください）。パスに沿った Pattern はありません |
+| Sweep | パスは 1 つのスケッチ上の、線・円弧・円・スプラインです。楕円はパスにできません。ねじり、ガイドレールはありません。閉じたパスは未検証です |
+| Loft | 穴のある断面、平らでない面、ガイドレールには対応していません |
+| Align | 平らな面どうし、または点どうしだけです |
+| Split Body | 分割に使えるのは平面（原点平面、平らな面）だけです。曲面やスケッチの線では分割できません |
+| 面の上のスケッチと Move | 面の上のスケッチは、面が法線方向に動いたときと傾いたときに追従します。面の中での平行移動と、法線まわりの回転には追従しません |
 | IGES | 未実装 |
 | 面・稜線の参照 | 名前で照合します（「設計上の決まり」を参照）。1 つのスケッチ要素から複数の面ができた場合（Cut で面が 2 つに分かれたなど）は、番号で区別します。分かれ方が変わると、番号が入れ替わることがあります。STEP で読み込んだ立体の面は、面の順番で名前を付けます |
 | テキスト | 右から左へ書く文字と、向きの混ざった文章には対応していません。フォントにない文字は空白になり、別のフォントでは補いません。縦書きの中の欧文は、フォントが回転した字形を持つ場合だけ横倒しになります（縦中横はありません）。輪郭どうしが重なるフォントは、重なりをまとめずにそのまま Profile にします。バリアブルフォントは既定のスタイルだけを使います。テキストは拘束・寸法・Trim などの対象ではありません（配置点を除く）。文字列にパラメータを埋め込むことはできません |

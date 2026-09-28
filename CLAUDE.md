@@ -58,6 +58,8 @@ npm run build
 
 テキストの輪郭は派生データで、`SketchText.outline` にキャッシュする。`outline.key` が入力（文字列、フォント、評価済みの数値、パスの形）と一致しなくなったら、`refreshTexts()` が作り直して `documentStore.amend()` で差し替える（履歴は増えない）。テキストのダイアログは `documentStore.begin()` のトランザクションの中でドキュメントを直接書き換え、OK で 1 つの履歴にまとめる。
 
+Hole、Pattern、Mirror、Move、Align、Split、Sweep、Loft のダイアログは `app/solidDialogs.ts`（ダイアログ ↔ Command の入力、検証、どの欄が何を受け取るか。純粋な関数）と `panels/SolidDialogFields.tsx`。数が評価結果で決まる Body（Pattern のインスタンスなど）は ID が `featureId:bodyId:n` で、再計算のたびに `syncBodyRecords()` でドキュメントの Body の記録を合わせる。
+
 Sketch の Create ツールを足すときは `packages/sketch/src/create.ts` に関数を、`apps/fabcad/src/sketch/createTools.ts` の `CREATE_TOOLS` に定義を 1 つ追加する。
 
 ## ブラウザでの確認

@@ -838,7 +838,11 @@ export class ViewportScene {
             const t = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - sa.x) * dx + (y - sa.y) * dy) / l2));
             const d = Math.hypot(sa.x + dx * t - x, sa.y + dy * t - y);
             if (d >= bestD) continue;
-            const p = a.clone().lerp(c, t);
+            // The point of the edge under the pointer. Not `lerp(a, c, t)`: `t` is measured
+            // on the screen, and with perspective that is another point of the edge, whose
+            // depth would be compared with what lies under the pointer.
+            const p = new THREE.Vector3();
+            this.raycaster.ray.distanceSqToSegment(a, c, undefined, p);
             if (!isVisible(p)) continue;
             bestD = d;
             best = { kind: "edge", bodyId: b.id, edgeIndex: edge.edgeIndex, point: edge.midpoint };

@@ -211,6 +211,55 @@ const P: Record<string, ReactElement> = {
       <circle cx="12" cy="10" r="5" />
     </>
   ),
+  sweep: (
+    <>
+      <path d="M4 16c0-7 4-11 12-11" />
+      <circle cx="4" cy="16" r="2" />
+      <path d="M13.5 2.5L16 5l-2.5 2.5" />
+    </>
+  ),
+  loft: <path d="M4 16h12M7 4h6M4 16c0-5 3-7 3-12M16 16c0-5-3-7-3-12" />,
+  hole: (
+    <>
+      <path d="M3 8l7-3.500L17 8v4l-7 3.500L3 12zM3 8l7 3.500L17 8" />
+      <ellipse cx="10" cy="8" rx="2.6" ry="1.3" />
+    </>
+  ),
+  split: <path d="M3 8l5-2.500v8L3 16zM12 6.500L17 4v8l-5 2.500zM10 2.500v15" />,
+  "move-3d": (
+    <>
+      <path d="M8 10l4-2 4 2v4l-4 2-4-2zM8 10l4 2 4-2M12 12v4" />
+      <path d="M3 5h5M6 3l2 2-2 2M4.5 9v5M2.5 12l2 2 2-2" />
+    </>
+  ),
+  "copy-3d": (
+    <>
+      <path d="M8 10l4-2 4 2v4l-4 2-4-2zM8 10l4 2 4-2M12 12v4" />
+      <path d="M4 12V6l4-2 4 2" />
+    </>
+  ),
+  align: <path d="M3 4v12M6 6h5v3H6zM6 11h10v3H6z" />,
+  "pattern-rectangular": (
+    <>
+      <path d="M3 6l3-1.500L9 6v3l-3 1.500L3 9zM11 6l3-1.500L17 6v3l-3 1.500L11 9z" />
+      <path d="M3 13l3-1.500L9 13v3l-3 1.500L3 16zM11 13l3-1.5 3 1.500v3l-3 1.5-3-1.500z" strokeDasharray="1.5 1.5" />
+    </>
+  ),
+  "pattern-circular": (
+    <>
+      <circle cx="10" cy="10" r="6.5" strokeDasharray="1.5 2" />
+      <path d="M8 3.500l2-1 2 1v2l-2 1-2-1z" />
+      <path d="M13.5 12.500l2-1 2 1v2l-2 1-2-1zM2.5 12.500l2-1 2 1v2l-2 1-2-1z" />
+    </>
+  ),
+  "mirror-3d": (
+    <>
+      <path d="M10 2.500v15" strokeDasharray="2 2" />
+      <path d="M3 8l4-2v8l-4 2zM17 8l-4-2v8l4 2z" />
+    </>
+  ),
+  "arrow-up": <path d="M10 16V4M5 9l5-5 5 5" />,
+  "arrow-down": <path d="M10 4v12M5 11l5 5 5-5" />,
   import3d: <path d="M3 7l7-3.5L17 7v7l-7 3.5L3 14zM10 8v6M7.5 11.5L10 14l2.5-2.5" />,
   print3d: <path d="M3 4h14M6 4v3h8V4M10 7v3M7.5 10h5l1 2h-7zM5 17h10M6.5 14.5h7" />,
   text: <path d="M4 5V4h12v1M10 4v12M7.5 16h5" />,

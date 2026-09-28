@@ -12,6 +12,7 @@ import {
   evaluateParameters,
   parameterScope,
   serializeDocument,
+  syncBodyRecords,
   updateSketch,
 } from "@fabcad/cad-document";
 import {
@@ -212,6 +213,13 @@ let client: EngineClient | null = null;
 let recomputeRunning = false;
 let recomputeQueued = false;
 let lastComputed: CadDocument | null = null;
+/**
+ * Recomputes in a row whose result was written back to the document. Writing back asks for
+ * another recompute, which normally finds nothing left to write; the count stops a result
+ * that keeps changing the document from going round forever.
+ */
+let writeBacks = 0;
+const MAX_WRITE_BACKS = 4;
 
 function engine(): EngineClient {
   if (!client) client = new EngineClient();
@@ -256,10 +264,19 @@ async function recomputeLoop(): Promise<void> {
         sketches: result.sketches,
         lastDurationMs: result.durationMs,
       });
-      // Projected sketch geometry follows the bodies it was taken from.
+      // What the recompute found out about the document is written back, unless the document
+      // changed meanwhile: the recompute that is queued for that change will do it then.
+      if (documentStore.document !== doc) continue;
       const updates = result.sketchUpdates ?? {};
-      if (Object.keys(updates).length > 0 && documentStore.document === doc) {
+      // Bodies that only evaluation can tell (pattern instances …) get their record here.
+      const syncBodies = syncBodyRecords(
+        result.bodies.flatMap((b) => (b.record ? [{ id: b.id, ...b.record }] : [])),
+        result.bodies.map((b) => b.id),
+      );
+      const changed =
+        writeBacks < MAX_WRITE_BACKS &&
         documentStore.amend((d) => {
+          // Projected sketch geometry follows the bodies it was taken from.
           let features = d.features;
           for (const [id, sketch] of Object.entries(updates)) {
             const f = features[id];
@@ -267,9 +284,9 @@ async function recomputeLoop(): Promise<void> {
             if (features === d.features) features = { ...d.features };
             features[id] = { ...f, sketch };
           }
-          return features === d.features ? d : { ...d, features };
+          return syncBodies(features === d.features ? d : { ...d, features });
         });
-      }
+      writeBacks = changed ? writeBacks + 1 : 0;
     } while (recomputeQueued);
   } catch (err) {
     console.error(err);

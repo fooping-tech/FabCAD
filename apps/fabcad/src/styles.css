@@ -248,6 +248,11 @@ select { padding-right: 4px; }
 }
 .pick-box.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
 .pick-box .clear { width: 16px; height: 16px; padding: 0; display: grid; place-items: center; color: var(--ink-faint); }
+.pick-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.pick-list li { display: flex; align-items: center; gap: 1px; padding-left: 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-alt); min-height: 23px; }
+.pick-list-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-list .icon-btn { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; color: var(--ink-soft); }
+.pick-list .icon-btn:disabled { opacity: 0.3; }
 .value-preview { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
 .empty { color: var(--ink-faint); padding: 10px 4px; line-height: 1.5; }
 .kv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 6px; }

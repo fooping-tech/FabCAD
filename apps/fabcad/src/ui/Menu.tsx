@@ -19,15 +19,29 @@ export function Menu({
   align = "left",
   buttonClass = "btn",
   title,
+  detached = false,
 }: {
   label: ReactNode;
   items: MenuItem[];
   align?: "left" | "right";
   buttonClass?: string;
   title?: string;
+  /**
+   * Place the menu relative to the window instead of its button. Needed where the button sits
+   * in a container that clips what sticks out of it, such as the ribbon, which scrolls.
+   */
+  detached?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  const toggle = (): void => {
+    const r = ref.current?.getBoundingClientRect();
+    // Kept inside the window: the menu is at least 190 px wide.
+    setAt(r ? { left: Math.max(4, Math.min(r.left, window.innerWidth - 200)), top: r.bottom + 4 } : null);
+    setOpen((o) => !o);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -53,12 +67,16 @@ export function Menu({
         aria-haspopup="menu"
         aria-expanded={open}
         title={title}
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
       >
         {label}
       </button>
       {open && (
-        <div className={`menu${align === "right" ? " right" : ""}`} role="menu">
+        <div
+          className={`menu${align === "right" ? " right" : ""}`}
+          role="menu"
+          style={detached && at ? { position: "fixed", left: at.left, top: at.top } : undefined}
+        >
           {items.map((item, i) => {
             if ("separator" in item) return <hr key={i} />;
             if ("title" in item) {

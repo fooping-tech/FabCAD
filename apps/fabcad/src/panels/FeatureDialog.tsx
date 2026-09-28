@@ -1,137 +1,24 @@
-import { type BodyOperation, FEATURE_LABELS } from "@fabcad/cad-document";
-import { type ReactElement, type ReactNode, useState } from "react";
-import { closeDialog, commitDialog, dialogProblem, patchDialog } from "../app/actions";
+import { FEATURE_LABELS } from "@fabcad/cad-document";
+import { type ReactElement, useState } from "react";
+import {
+  DIALOG_COMMANDS,
+  closeDialog,
+  commitDialog,
+  dialogProblem,
+  patchDialog,
+} from "../app/actions";
 import { type Dialog, appState } from "../app/appState";
 import { useDocument } from "../app/session";
+import { isSolidDialog } from "../app/solidDialogs";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
+import { Field, OperationFields, PickBox } from "./dialogFields";
 import { ExpressionInput } from "./ExpressionInput";
-
-const OPERATIONS: { id: BodyOperation; label: string }[] = [
-  { id: "new", label: "New Body" },
-  { id: "join", label: "Join" },
-  { id: "cut", label: "Cut" },
-  { id: "intersect", label: "Intersect" },
-];
-
-/** `secondary` fields are folded away on small screens until "Options" is opened. */
-function Field({
-  label,
-  children,
-  secondary,
-}: {
-  label: string;
-  children: ReactNode;
-  secondary?: boolean;
-}): ReactElement {
-  return (
-    <div className={`field${secondary ? " secondary" : ""}`} style={{ alignItems: "start" }}>
-      <span className="label" style={{ paddingTop: 5 }}>
-        {label}
-      </span>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-function PickBox({
-  active,
-  text,
-  onActivate,
-  onClear,
-}: {
-  active: boolean;
-  text: string;
-  onActivate?: () => void;
-  onClear?: () => void;
-}): ReactElement {
-  return (
-    <div
-      className={`pick-box${active ? " on" : ""}`}
-      role="button"
-      tabIndex={0}
-      onClick={onActivate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onActivate?.();
-      }}
-    >
-      <span>{text}</span>
-      {onClear && (
-        <button
-          className="clear"
-          aria-label="Clear selection"
-          title="Clear"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClear();
-          }}
-        >
-          <Icon name="close" size={11} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function OperationFields({
-  dialog,
-}: {
-  dialog: Extract<Dialog, { type: "extrude" | "revolve" }>;
-}): ReactElement {
-  const doc = useDocument();
-  const bodies = Object.values(doc.bodies);
-  return (
-    <>
-      <Field label="Operation" secondary>
-        <select
-          value={dialog.operation}
-          aria-label="Operation"
-          onChange={(e) => {
-            const operation = e.target.value as BodyOperation;
-            patchDialog({
-              operation,
-              targetBodyIds:
-                operation !== "new" && dialog.targetBodyIds.length === 0
-                  ? bodies.filter((b) => b.visible).map((b) => b.id)
-                  : dialog.targetBodyIds,
-            });
-          }}
-        >
-          {OPERATIONS.map((o) => (
-            <option key={o.id} value={o.id} disabled={o.id !== "new" && bodies.length === 0}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-      {dialog.operation !== "new" && (
-        <Field label="Bodies" secondary>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingTop: 4 }}>
-            {bodies.map((b) => (
-              <label key={b.id} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={dialog.targetBodyIds.includes(b.id)}
-                  onChange={(e) =>
-                    patchDialog({
-                      targetBodyIds: e.target.checked
-                        ? [...dialog.targetBodyIds, b.id]
-                        : dialog.targetBodyIds.filter((id) => id !== b.id),
-                    })
-                  }
-                />
-                {b.name}
-              </label>
-            ))}
-          </div>
-        </Field>
-      )}
-    </>
-  );
-}
+import { SolidDialogBody } from "./SolidDialogFields";
 
 function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
   const doc = useDocument();
+  if (isSolidDialog(dialog)) return <SolidDialogBody dialog={dialog} />;
   const sketchName = (id: string | null): string => {
     const f = id ? doc.features[id] : undefined;
     return f ? f.name : "";
@@ -370,6 +257,15 @@ const TITLES: Partial<Record<Dialog["type"], string>> = {
   chamfer: FEATURE_LABELS.chamfer,
   shell: FEATURE_LABELS.shell,
   combine: FEATURE_LABELS.boolean,
+  hole: FEATURE_LABELS.hole,
+  "rectangular-pattern": FEATURE_LABELS["rectangular-pattern"],
+  "circular-pattern": FEATURE_LABELS["circular-pattern"],
+  mirror: FEATURE_LABELS.mirror,
+  move: DIALOG_COMMANDS.move?.label,
+  align: FEATURE_LABELS.align,
+  split: FEATURE_LABELS.split,
+  sweep: FEATURE_LABELS.sweep,
+  loft: FEATURE_LABELS.loft,
 };
 
 /** Floating dialog of the running solid feature command. */

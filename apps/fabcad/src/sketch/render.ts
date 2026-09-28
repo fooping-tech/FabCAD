@@ -65,6 +65,11 @@ export interface SketchDrawState {
   hoverText?: string | null;
   /** Texts whose outline could not be brought up to date (font missing, bad expression). */
   problemTexts?: Set<string>;
+  /**
+   * Points drawn although the sketch is not being edited: all of them while a command picks
+   * sketch points, otherwise the listed ones (the points that stand by themselves).
+   */
+  shownPoints?: "all" | Set<string>;
 }
 
 export class Projector {
@@ -284,7 +289,8 @@ export function drawSketchGeometry(
   }
   ctx.setLineDash([]);
 
-  if (!state.active) return;
+  const shown = state.shownPoints;
+  if (!state.active && !shown) return;
   // Centres of circles etc. are drawn hollow so that end points stand out.
   const centres = new Set<string>();
   for (const e of Object.values(sketch.entities)) {
@@ -292,8 +298,9 @@ export function drawSketchGeometry(
   }
   for (const e of Object.values(sketch.entities)) {
     if (e.type !== "point") continue;
-    const s = projector.toScreen(e);
     const highlighted = state.selectedEntities.has(e.id) || state.hoverEntity === e.id;
+    if (!state.active && shown !== "all" && !highlighted && !shown?.has(e.id)) continue;
+    const s = projector.toScreen(e);
     if (e.id === sketch.originId) {
       // Origin marker: a ringed dot.
       ctx.beginPath();

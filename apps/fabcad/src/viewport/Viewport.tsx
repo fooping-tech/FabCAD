@@ -9,25 +9,35 @@ import {
   faceAsProfile,
   finishSketch,
   patchDialog,
+  pickInDialog,
   startSketchOnFace,
   startSketchOnOrigin,
 } from "../app/actions";
 import {
   type Dialog,
   type Selection,
+  type SolidDialog,
   appState,
   select,
   selectionKey,
   toast,
 } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
-import { edgeIndexOf, edgeRefOf, faceIndexOf, faceRefOf } from "../app/topology";
+import { dialogReferences, dialogWants, isPathCurve, isSolidDialog } from "../app/solidDialogs";
+import {
+  edgeIndexOf,
+  edgeRefOf,
+  faceIndexOf,
+  faceRefOf,
+  facesOfFeatures,
+  vertexPointOf,
+} from "../app/topology";
 import type { TopologyRef } from "@fabcad/cad-document";
 import { documentStore, editSketchSolved, modelState, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { useNumericKeypad } from "../panels/ExpressionInput";
 import { projectPick } from "../sketch/projectTool";
-import { SketchController } from "../sketch/SketchController";
+import { type HoverProfile, SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
@@ -104,6 +114,24 @@ function dialogHighlights(dialog: Dialog | null, scene: ViewportScene): Highligh
     for (const id of dialog.toolBodyIds) out.push({ kind: "body", bodyId: id });
   } else if ((dialog.type === "extrude" || dialog.type === "revolve") && dialog.operation !== "new") {
     // Targets are listed in the dialog; tinting every body would hide the profile.
+  } else if (isSolidDialog(dialog)) {
+    // Sketch points, lines and profiles are drawn by the sketch overlay.
+    const refs = dialogReferences(dialog);
+    for (const bodyId of refs.bodies) out.push({ kind: "body", bodyId });
+    for (const face of facesOfFeatures(refs.features)) out.push({ kind: "face", ...face });
+    for (const { bodyId, ref } of refs.faces) {
+      const faceIndex = faceIndexOf(bodyId, ref);
+      if (faceIndex >= 0) out.push({ kind: "face", bodyId, faceIndex });
+    }
+    for (const { bodyId, ref } of refs.edges) {
+      const edgeIndex = edgeIndexOf(bodyId, ref);
+      if (edgeIndex >= 0) out.push({ kind: "edge", bodyId, edgeIndex });
+    }
+    for (const p of refs.points) {
+      const point = p.type === "vertex" ? vertexPointOf(p) : p.point;
+      if (point && p.type === "vertex") out.push({ kind: "vertex", bodyId: p.bodyId, point });
+    }
+    for (const plane of refs.originPlanes) out.push({ kind: "origin-plane", plane });
   }
   return out;
 }
@@ -154,9 +182,73 @@ export function Viewport(): ReactElement {
 
     let down: { x: number; y: number; button: number } | null = null;
 
+    /** What the active input of a feature dialog would take from under the pointer. */
+    const hoverForDialog = (dialog: SolidDialog, x: number, y: number): void => {
+      const wants = dialogWants(dialog);
+      let hover: Selection | null = null;
+      let profile: HoverProfile | null = null;
+      const entity = (e: { sketchId: string; entityId: string } | null): Selection | null =>
+        e ? { kind: "entity", sketchId: e.sketchId, entityId: e.entityId } : null;
+      // Points first, then curves, then areas: the smaller target wins.
+      if (wants.sketchPoints) {
+        hover = entity(controller.entityAt(x, y, { curves: false, origin: true, through: true }));
+      }
+      if (!hover && wants.vertices) {
+        const pick = scene.pick(x, y, { faces: false, edges: false, vertices: true });
+        if (pick?.kind === "vertex") hover = pickToSelection(pick);
+      }
+      if (!hover && (wants.sketchLines || wants.sketchCurves)) {
+        const path = wants.sketchCurves === true;
+        hover = entity(
+          controller.entityAt(x, y, {
+            points: false,
+            through: true,
+            accept: (e) => (path ? isPathCurve(e) : e.type === "line"),
+          }),
+        );
+      }
+      if (!hover && wants.edges) {
+        const pick = scene.pick(x, y, { faces: false, edges: true, vertices: false });
+        if (pick?.kind === "edge") {
+          const curve = scene.bodyGeometry(pick.bodyId)?.edges[pick.edgeIndex]?.curve;
+          if (curve === "line" || (wants.edges === "axis" && curve === "circle")) {
+            hover = pickToSelection(pick);
+          }
+        }
+      }
+      if (!hover && wants.profiles) {
+        profile = controller.profileAt(x, y, { visibleOnly: true }) ?? controller.profileAt(x, y);
+      }
+      if (!hover && !profile && (wants.faces || wants.originPlanes)) {
+        const pick = scene.pick(x, y, {
+          faces: wants.faces !== undefined,
+          edges: false,
+          vertices: false,
+          originPlanes: wants.originPlanes === true,
+        });
+        if (pick?.kind === "origin-plane") hover = pickToSelection(pick);
+        else if (pick?.kind === "face" && (wants.faces === "any" || pick.planar)) {
+          hover = pickToSelection(pick);
+        }
+      }
+      if (!hover && !profile && wants.bodies) {
+        const id = scene.pickBody(x, y);
+        if (id) hover = { kind: "body", bodyId: id };
+      }
+      controller.setHoverProfile(profile);
+      const previous = appState.get().hover;
+      if ((previous ? selectionKey(previous) : "") !== (hover ? selectionKey(hover) : "")) {
+        appState.set({ hover });
+      }
+    };
+
     const hover3d = (x: number, y: number): void => {
       const state = appState.get();
       const dialog = state.dialog;
+      if (isSolidDialog(dialog)) {
+        hoverForDialog(dialog, x, y);
+        return;
+      }
       if (dialog && (dialog.type === "extrude" || dialog.type === "revolve")) {
         const wantsAxis = dialog.type === "revolve" && dialog.picking === "axis";
         if (wantsAxis && dialog.sketchId) {
@@ -233,6 +325,26 @@ export function Viewport(): ReactElement {
           startSketchOnFace(hover.bodyId, hover.point, hover.normal, hover.faceIndex);
         } else if (hover?.kind === "face") {
           toast("Sketches need a planar face.", "warning");
+        }
+        return;
+      }
+      if (isSolidDialog(dialog)) {
+        const item: Selection | null =
+          hover ??
+          (profile
+            ? {
+                kind: "profile",
+                sketchId: profile.sketchId,
+                regionId: profile.region.id,
+                ref: profileRefOf(profile.region),
+              }
+            : null);
+        if (item) {
+          pickInDialog(item, additive);
+          controller.setHoverProfile(null);
+        } else if (dialogWants(dialog).faces === "planar") {
+          const pick = scene.pick(x, y, { faces: true, edges: false, vertices: false });
+          if (pick?.kind === "face" && !pick.planar) toast("Select a flat face.", "warning");
         }
         return;
       }

@@ -66,8 +66,9 @@ export function pressEnter(): boolean {
 }
 
 /**
- * Keys follow Fusion 360 where FabCAD has the command: L R C D T O X (sketch), E Q F (solid),
- * M, P, V, Delete and F6. A (arc) and S (spline) are FabCAD's own.
+ * Keys follow Fusion 360 where FabCAD has the command: L R C D T O X (sketch), E Q F H (solid),
+ * M (Move: sketch geometry inside a sketch, bodies outside), P, V, Delete and F6. A (arc) and
+ * S (spline) are FabCAD's own.
  */
 
 /** Q, Press Pull: fillet when edges are selected, extrude otherwise. */
@@ -207,6 +208,10 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
         openDialog("extrude");
         return;
       }
+      if (key === "h") {
+        openDialog("hole");
+        return;
+      }
       const tool = SKETCH_KEYS[key];
       if (tool) setTool(tool);
       return;
@@ -224,7 +229,14 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       openDialog("fillet");
       return;
     }
-    if (key === "m") return;
+    if (key === "h") {
+      openDialog("hole");
+      return;
+    }
+    if (key === "m") {
+      openDialog("move");
+      return;
+    }
     if (key === "s") {
       beginSketchPlanePick(null);
       return;

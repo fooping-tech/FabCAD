@@ -11,6 +11,7 @@ import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import type { MenuItem } from "../ui/Menu";
 import { viewportApi } from "../viewport/api";
 import {
+  DIALOG_COMMANDS,
   beginSketchPlanePick,
   commitDialog,
   deleteSelection,
@@ -22,26 +23,31 @@ import {
   repeatLastCommand,
   setTool,
 } from "./actions";
-import { appState, setSelection } from "./appState";
+import { type Dialog, appState, setSelection } from "./appState";
 import { documentStore, editSketchSolved, redo, run, undo } from "./session";
+import { freePoints } from "./solidDialogs";
 import { pressEnter, pressEscape } from "./shortcuts";
 
 /**
  * Context menu, modelled on the right-click menu of Fusion 360: OK / Cancel for the running
  * command, Repeat, what can be done with the selection, then the common commands.
  */
-const DIALOG_LABELS: Record<string, string> = {
-  extrude: "Extrude",
-  revolve: "Revolve",
-  fillet: "Fillet",
-  chamfer: "Chamfer",
-  shell: "Shell",
-  combine: "Combine",
-  "pick-sketch-plane": "Create Sketch",
-};
+const dialogCommand = (id: string): { label: string; icon: string } | undefined =>
+  (DIALOG_COMMANDS as Record<string, { label: string; icon: string } | undefined>)[id];
+
+/** Menu entry that starts the command of a feature dialog. */
+function dialogItem(type: Dialog["type"], kbd?: string): MenuItem {
+  const c = dialogCommand(type);
+  return {
+    label: c?.label ?? type,
+    icon: c?.icon,
+    ...(kbd ? { kbd } : {}),
+    onSelect: () => openDialog(type),
+  };
+}
 
 function commandLabel(command: { kind: "tool" | "dialog" | "measure"; id: string; label: string }): string {
-  if (command.kind === "dialog") return DIALOG_LABELS[command.id] ?? command.label;
+  if (command.kind === "dialog") return dialogCommand(command.id)?.label ?? command.label;
   if (command.id === "dimension") return "Sketch Dimension";
   if (command.id === "project") return "Project";
   return (
@@ -131,6 +137,14 @@ export function buildContextMenu(): MenuItem[] {
       if (every("profile")) {
         items.push({ label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") });
         items.push({ label: "Revolve", icon: "revolve", onSelect: () => openDialog("revolve") });
+        items.push(dialogItem("sweep"), dialogItem("loft"));
+      }
+      if (
+        entities.length > 0 &&
+        entities.length === selection.length &&
+        entities.every((id) => feature.sketch.entities[id]?.type === "point")
+      ) {
+        items.push(dialogItem("hole", "H"));
       }
       const curves = entities.filter((id) => {
         const e = feature.sketch.entities[id];
@@ -175,7 +189,7 @@ export function buildContextMenu(): MenuItem[] {
   if (repeat) {
     items.push({
       label: `Repeat ${commandLabel(repeat)}`,
-      icon: repeat.kind === "dialog" ? (repeat.id === "combine" ? "combine" : repeat.id) : repeat.id,
+      icon: repeat.kind === "dialog" ? (dialogCommand(repeat.id)?.icon ?? repeat.id) : repeat.id,
       onSelect: repeatLastCommand,
     });
     sep();
@@ -197,8 +211,15 @@ export function buildContextMenu(): MenuItem[] {
           onSelect: () => run(setSketchVisible(f.id, !f.visible)),
         });
         items.push({ label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") });
+        if (freePoints(f.sketch).length > 0) items.push(dialogItem("hole", "H"));
         items.push({ label: "Export Sketch as SVG", icon: "export", onSelect: () => exportSketchSvg(f.id) });
         items.push({ label: "Save As DXF", icon: "export", onSelect: () => exportSketchDxf(f.id) });
+      } else {
+        items.push(
+          dialogItem("rectangular-pattern"),
+          dialogItem("circular-pattern"),
+          dialogItem("mirror"),
+        );
       }
       items.push({
         label: f.suppressed ? "Unsuppress Features" : "Suppress Features",
@@ -210,6 +231,12 @@ export function buildContextMenu(): MenuItem[] {
     }
   } else if (every("entity") && first?.kind === "entity") {
     const f = doc.features[first.sketchId];
+    const points =
+      f?.type === "sketch" &&
+      selection.every(
+        (s) => s.kind === "entity" && f.sketch.entities[s.entityId]?.type === "point",
+      );
+    if (points) items.push(dialogItem("hole", "H"));
     items.push({ label: "Edit Sketch", icon: "sketch", onSelect: () => enterSketch(first.sketchId) });
     items.push({
       label: "Export Sketch as SVG",
@@ -237,6 +264,8 @@ export function buildContextMenu(): MenuItem[] {
     items.push(
       { label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") },
       { label: "Revolve", icon: "revolve", onSelect: () => openDialog("revolve") },
+      dialogItem("sweep"),
+      dialogItem("loft"),
       { label: "Edit Sketch", icon: "sketch", onSelect: () => enterSketch(first.sketchId) },
       {
         label: "Export Sketch as SVG",
@@ -261,6 +290,7 @@ export function buildContextMenu(): MenuItem[] {
       });
     }
     items.push({ label: "Shell", icon: "shell", onSelect: () => openDialog("shell") });
+    if (selection.every((s) => s.kind === "face" && s.planar)) items.push(dialogItem("align"));
     sep();
   } else if (first?.kind === "origin-plane" && selection.length === 1) {
     items.push({
@@ -287,6 +317,13 @@ export function buildContextMenu(): MenuItem[] {
       items.push({ label: "Combine", icon: "combine", onSelect: () => openDialog("combine") });
     }
     if (every("body")) {
+      items.push(dialogItem("move", "M"));
+      if (bodyIds.length === 1) items.push(dialogItem("split"));
+      items.push(
+        dialogItem("mirror"),
+        dialogItem("rectangular-pattern"),
+        dialogItem("circular-pattern"),
+      );
       items.push({ label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection });
     }
     sep();
@@ -304,6 +341,8 @@ export function buildContextMenu(): MenuItem[] {
     { label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") },
     { label: "Press Pull", icon: "extrude", kbd: "Q", onSelect: () => openDialog(every("edge") ? "fillet" : "extrude") },
     { label: "Fillet", icon: "fillet-3d", kbd: "F", onSelect: () => openDialog("fillet") },
+    dialogItem("hole", "H"),
+    dialogItem("move", "M"),
   );
   sep();
   undoRedo();

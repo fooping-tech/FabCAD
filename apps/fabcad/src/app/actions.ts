@@ -34,18 +34,33 @@ import {
   profileRefOf,
   removeTexts,
 } from "@fabcad/sketch";
+import { resolveSketchPlane } from "@fabcad/features";
 import { projectInto } from "../sketch/projectTool";
+import { directionForOperation } from "./extrudeDirection";
 import { cancelText, commitText, deleteTexts } from "../text/textCommands";
 import { viewportApi } from "../viewport/api";
-import { edgeRefOf, faceRefOf } from "./topology";
+import { edgeRefOf, faceIndexOf, faceRefOf, pickedOf } from "./topology";
 import {
   type Dialog,
   type Selection,
+  type SolidDialog,
   appState,
   selectionKey,
   setSelection,
   toast,
 } from "./appState";
+import {
+  type Picked,
+  applyPick,
+  consumedSketches,
+  dialogFromFeature,
+  freePoints,
+  holeBody,
+  isSolidDialog,
+  nextPicking,
+  solidDialogCommand,
+  solidDialogProblem,
+} from "./solidDialogs";
 import {
   currentScope,
   documentStore,
@@ -65,6 +80,26 @@ const titleCase = (id: string): string =>
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+
+/** Names and icons of the commands that open a feature dialog. */
+export const DIALOG_COMMANDS: Partial<Record<Dialog["type"], { label: string; icon: string }>> = {
+  "pick-sketch-plane": { label: "Create Sketch", icon: "new-sketch" },
+  extrude: { label: "Extrude", icon: "extrude" },
+  revolve: { label: "Revolve", icon: "revolve" },
+  sweep: { label: "Sweep", icon: "sweep" },
+  loft: { label: "Loft", icon: "loft" },
+  hole: { label: "Hole", icon: "hole" },
+  fillet: { label: "Fillet", icon: "fillet-3d" },
+  chamfer: { label: "Chamfer", icon: "chamfer-3d" },
+  shell: { label: "Shell", icon: "shell" },
+  combine: { label: "Combine", icon: "combine" },
+  split: { label: "Split Body", icon: "split" },
+  move: { label: "Move/Copy", icon: "move-3d" },
+  align: { label: "Align", icon: "align" },
+  "rectangular-pattern": { label: "Rectangular Pattern", icon: "pattern-rectangular" },
+  "circular-pattern": { label: "Circular Pattern", icon: "pattern-circular" },
+  mirror: { label: "Mirror", icon: "mirror-3d" },
+};
 
 /** Measure (I): picks made before the command was started are measured right away. */
 export function startMeasure(): void {
@@ -304,16 +339,237 @@ function defaultTargets(): string[] {
     .map((b) => b.id);
 }
 
+/**
+ * Fill a new dialog from the selection, like Fusion's preselection. `plan` tells which input
+ * of the dialog a selected item goes to, or null when the dialog has no use for it.
+ */
+function preselect<D extends SolidDialog>(
+  dialog: D,
+  selection: Selection[],
+  plan: (picked: Picked, dialog: D) => string | null,
+): D {
+  let d = dialog;
+  for (const s of selection) {
+    const picked = pickedOf(s);
+    const picking = picked ? plan(picked, d) : null;
+    if (!picked || picking === null) continue;
+    const at = "picking" in d ? ({ ...d, picking } as D) : d;
+    const patch = applyPick(at, picked, { doc: documentStore.document, faceIndexOf });
+    if (patch) d = { ...at, ...patch } as D;
+  }
+  return nextPicking(d);
+}
+
+/** Bodies named by the selection, a face or an edge standing for its body. */
+const selectedBodies = (selection: Selection[]): string[] => [
+  ...new Set(selection.flatMap((s) => ("bodyId" in s ? [s.bodyId] : []))),
+];
+
+function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): SolidDialog {
+  const doc = documentStore.document;
+  const operation = {
+    operation: Object.keys(doc.bodies).length > 0 ? ("join" as const) : ("new" as const),
+    targetBodyIds: defaultTargets(),
+  };
+  const bodies = selection.some((s) => s.kind === "body");
+  const source = {
+    sourceKind: bodies ? ("bodies" as const) : ("features" as const),
+    featureIds: [],
+    bodyIds: [],
+  };
+  const sourcePlan = (p: Picked): string | null =>
+    p.kind === "body" || p.kind === "feature" ? "source" : null;
+  switch (type) {
+    case "hole": {
+      // A selected sketch stands for its point when it has exactly one to drill at.
+      const sketchSel = selection.find((s) => s.kind === "feature" || s.kind === "entity");
+      const sketchId =
+        sketchSel?.kind === "feature"
+          ? sketchSel.featureId
+          : sketchSel?.kind === "entity"
+            ? sketchSel.sketchId
+            : null;
+      const f = sketchId ? doc.features[sketchId] : undefined;
+      const free = f?.type === "sketch" ? freePoints(f.sketch) : [];
+      const points =
+        f && free.length === 1 && !selection.some((s) => s.kind === "entity")
+          ? [{ kind: "entity" as const, sketchId: f.id, entityId: free[0]! }]
+          : [];
+      const body = selectedBodies(selection)[0] ?? null;
+      const dialog = preselect<Extract<SolidDialog, { type: "hole" }>>(
+        {
+          type,
+          editing: null,
+          bodyId: body,
+          bodyAuto: body === null,
+          sketchId: null,
+          points: [],
+          holeType: "simple",
+          diameter: "5",
+          extent: "through-all",
+          depth: "10",
+          counterboreDiameter: "9",
+          counterboreDepth: "3",
+          countersinkDiameter: "10",
+          countersinkAngle: "90",
+          flip: false,
+          picking: "points",
+        },
+        [...points, ...selection],
+        (p) => (p.kind === "entity" ? "points" : null),
+      );
+      return dialog.bodyId ? dialog : nextPicking({ ...dialog, bodyId: holeBody(doc, dialog.sketchId) });
+    }
+    case "rectangular-pattern":
+      return preselect<Extract<SolidDialog, { type: "rectangular-pattern" }>>(
+        {
+          type,
+          editing: null,
+          ...source,
+          direction: null,
+          count: "3",
+          distance: "10",
+          flip: false,
+          second: false,
+          direction2: null,
+          count2: "2",
+          distance2: "10",
+          flip2: false,
+          picking: "source",
+        },
+        selection,
+        (p, d) => sourcePlan(p) ?? (p.kind === "edge" ? (d.direction ? null : "direction") : null),
+      );
+    case "circular-pattern":
+      return preselect<Extract<SolidDialog, { type: "circular-pattern" }>>(
+        {
+          type,
+          editing: null,
+          ...source,
+          axis: null,
+          count: "4",
+          angle: "360",
+          flip: false,
+          picking: "source",
+        },
+        selection,
+        (p, d) => sourcePlan(p) ?? (p.kind === "edge" ? (d.axis ? null : "axis") : null),
+      );
+    case "mirror":
+      return preselect<Extract<SolidDialog, { type: "mirror" }>>(
+        { type, editing: null, ...source, plane: null, picking: "source" },
+        selection,
+        (p, d) =>
+          sourcePlan(p) ??
+          (p.kind === "origin-plane" || p.kind === "face" ? (d.plane ? null : "plane") : null),
+      );
+    case "move":
+      return preselect<Extract<SolidDialog, { type: "move" }>>(
+        {
+          type,
+          editing: null,
+          bodyIds: [],
+          copy: false,
+          mode: "translate",
+          x: "0",
+          y: "0",
+          z: "0",
+          axis: null,
+          angle: "90",
+          from: null,
+          to: null,
+          picking: "bodies",
+        },
+        selectedBodies(selection).map((bodyId) => ({ kind: "body", bodyId })),
+        () => "bodies",
+      );
+    case "align": {
+      const points = selection.length > 0 && selection.every((s) => s.kind === "vertex");
+      return preselect<Extract<SolidDialog, { type: "align" }>>(
+        {
+          type,
+          editing: null,
+          mode: points ? "point-to-point" : "face-to-face",
+          bodyId: null,
+          fromFace: null,
+          toFace: null,
+          fromPoint: null,
+          toPoint: null,
+          flip: false,
+          picking: "from",
+        },
+        selection,
+        (p, d) => (p.kind === "face" || p.kind === "vertex" ? d.picking : null),
+      );
+    }
+    case "split": {
+      const only = Object.keys(doc.bodies).length === 1 ? Object.keys(doc.bodies)[0]! : null;
+      const body = selection.find((s) => s.kind === "body");
+      return preselect<Extract<SolidDialog, { type: "split" }>>(
+        {
+          type,
+          editing: null,
+          bodyId: body?.kind === "body" ? body.bodyId : only,
+          tool: null,
+          keep: "both",
+          picking: "body",
+        },
+        selection,
+        (p, d) => (p.kind === "origin-plane" || p.kind === "face" ? (d.tool ? null : "tool") : null),
+      );
+    }
+    case "sweep":
+      return preselect<Extract<SolidDialog, { type: "sweep" }>>(
+        {
+          type,
+          editing: null,
+          sketchId: null,
+          profiles: [],
+          pathSketchId: null,
+          path: [],
+          ...operation,
+          picking: "profile",
+        },
+        selection,
+        (p, d) =>
+          p.kind === "profile"
+            ? "profile"
+            : p.kind === "entity" && !d.path.includes(p.entityId)
+              ? "path"
+              : null,
+      );
+    case "loft":
+      return preselect<Extract<SolidDialog, { type: "loft" }>>(
+        { type, editing: null, sections: [], ruled: false, ...operation },
+        selection,
+        (p) => (p.kind === "profile" || p.kind === "face" ? "" : null),
+      );
+  }
+}
+
 export function openDialog(type: Dialog["type"]): void {
   stopMeasure();
   const state = appState.get();
   // Profiles picked inside the sketch carry over into the command started from it.
   const picked = selectedProfiles();
+  // So does the rest of what was selected there, for the commands that can use it.
+  const inSketch = state.activeSketchId ? state.selection : [];
   if (state.activeSketchId) finishSketch();
   const selection = appState.get().selection;
   const doc = documentStore.document;
   let dialog: Dialog;
   switch (type) {
+    case "hole":
+    case "rectangular-pattern":
+    case "circular-pattern":
+    case "mirror":
+    case "move":
+    case "align":
+    case "split":
+    case "sweep":
+    case "loft":
+      dialog = newSolidDialog(type, [...inSketch, ...selection]);
+      break;
     case "extrude":
     case "revolve": {
       let { sketchId } = picked;
@@ -416,8 +672,14 @@ export function openDialog(type: Dialog["type"]): void {
     case "pick-sketch-plane":
       beginSketchPlanePick(null);
       return;
-    default:
-      dialog = { type } as Dialog;
+    case "parameters":
+    case "about":
+      dialog = { type };
+      break;
+    case "text":
+    case "import-dxf":
+      // Opened by their own commands, with the data they need.
+      return;
   }
   const filter =
     type === "fillet" || type === "chamfer"
@@ -435,7 +697,13 @@ export function openDialog(type: Dialog["type"]): void {
     selectionFilter: filter,
     sidePanelOpen: false,
     ...(dialog.type !== "parameters" && dialog.type !== "about"
-      ? { lastCommand: { kind: "dialog" as const, id: dialog.type, label: titleCase(dialog.type) } }
+      ? {
+          lastCommand: {
+            kind: "dialog" as const,
+            id: dialog.type,
+            label: DIALOG_COMMANDS[dialog.type]?.label ?? titleCase(dialog.type),
+          },
+        }
       : {}),
   });
 }
@@ -458,6 +726,8 @@ export function editFeature(featureId: string): void {
         profiles: f.profiles,
         distance: f.distance,
         direction: f.direction,
+        // The direction of an existing feature is what the user settled on.
+        directionChosen: true,
         operation: f.operation,
         targetBodyIds: f.targetBodyIds,
       };
@@ -498,10 +768,19 @@ export function editFeature(featureId: string): void {
     case "import":
       toast("Imported bodies have nothing to edit.");
       return;
-    default:
-      toast(`${f.name} cannot be edited here yet.`);
-      return;
+    case "hole":
+    case "rectangular-pattern":
+    case "circular-pattern":
+    case "mirror":
+    case "move":
+    case "align":
+    case "split":
+    case "sweep":
+    case "loft":
+      dialog = dialogFromFeature(f);
+      break;
   }
+  if (!dialog) return;
   const filter =
     dialog.type === "fillet" || dialog.type === "chamfer"
       ? "edge"
@@ -533,7 +812,40 @@ export function closeDialog(): void {
 export function patchDialog(patch: Partial<Dialog>): void {
   const d = appState.get().dialog;
   if (!d) return;
-  appState.set({ dialog: { ...d, ...patch } as Dialog });
+  let next = { ...d, ...patch } as Dialog;
+  if (d.type === "extrude" && next.type === "extrude") {
+    if ("direction" in patch) {
+      // A direction picked by the user is kept whatever the operation becomes.
+      next = { ...next, directionChosen: true };
+    } else if (!d.directionChosen && next.operation !== d.operation) {
+      const direction = defaultDirection(d, next);
+      if (direction) next = { ...next, direction };
+    }
+  }
+  appState.set({ dialog: next });
+}
+
+type ExtrudeDialog = Extract<Dialog, { type: "extrude" }>;
+
+function defaultDirection(from: ExtrudeDialog, to: ExtrudeDialog): ExtrudeDialog["direction"] | null {
+  const doc = documentStore.document;
+  const f = to.sketchId ? doc.features[to.sketchId] : undefined;
+  if (f?.type !== "sketch") return null;
+  const computed = modelState.get().bodies;
+  const ids =
+    to.targetBodyIds.length > 0
+      ? to.targetBodyIds
+      : Object.values(doc.bodies)
+          .filter((b) => b.visible)
+          .map((b) => b.id);
+  const boxes = ids.flatMap((id) => (computed[id] ? [computed[id].geometry.bounds] : []));
+  return directionForOperation(
+    from.direction,
+    from.operation,
+    to.operation,
+    resolveSketchPlane(f.sketch.plane),
+    boxes,
+  );
 }
 
 /** Validate an expression of a dialog field; returns an error message or null. */
@@ -548,8 +860,27 @@ export function expressionError(expression: string, kind: "length" | "angle", po
   }
 }
 
+/**
+ * A pick made for the open dialog outside the viewport's own handling: in the timeline, in the
+ * browser, or passed on by the viewport. Returns true when a dialog is open that takes its
+ * picks this way, whether or not it had a use for this one: the pick is then not a selection.
+ */
+export function pickInDialog(item: Selection, additive = false): boolean {
+  const dialog = appState.get().dialog;
+  if (!isSolidDialog(dialog)) return false;
+  const picked = pickedOf(item);
+  const patch = picked
+    ? applyPick(dialog, picked, { doc: documentStore.document, additive, faceIndexOf })
+    : null;
+  if (patch) appState.set({ dialog: { ...dialog, ...patch } as Dialog, hover: null });
+  return true;
+}
+
 /** Reason why the dialog cannot be applied yet, or null when it is complete. */
 export function dialogProblem(dialog: Dialog): string | null {
+  if (isSolidDialog(dialog)) {
+    return solidDialogProblem(dialog, documentStore.document, currentScope());
+  }
   switch (dialog.type) {
     case "extrude":
       if (!dialog.sketchId || dialog.profiles.length === 0) return "Select a profile";
@@ -577,10 +908,11 @@ export function dialogProblem(dialog: Dialog): string | null {
 }
 
 /** Like Fusion, a sketch is hidden once a feature has been built from it. */
-function consumingSketch(cmd: Command, sketchId: string): Command {
+function consumingSketch(cmd: Command, ...sketchIds: string[]): Command {
   return command(cmd.label, (doc) => {
     const next = cmd.apply(doc);
-    return next === doc ? doc : setSketchVisible(sketchId, false).apply(next);
+    if (next === doc) return doc;
+    return sketchIds.reduce((d, id) => setSketchVisible(id, false).apply(d), next);
   });
 }
 
@@ -595,6 +927,14 @@ export function commitDialog(): boolean {
   }
   const out: CreatedRef = {};
   let ok = false;
+  if (isSolidDialog(dialog)) {
+    const cmd = solidDialogCommand(dialog, out);
+    if (!cmd) return false;
+    ok = run(dialog.editing ? cmd : consumingSketch(cmd, ...consumedSketches(dialog)));
+    if (!ok && !dialog.editing) {
+      toast("The feature could not be created. Check what is selected.", "warning");
+    }
+  }
   switch (dialog.type) {
     case "extrude": {
       const input = {
@@ -777,7 +1117,23 @@ export const featureIcon = (feature: Feature): string => {
       return "shell";
     case "import":
       return "import3d";
-    default:
-      return "body";
+    case "hole":
+      return "hole";
+    case "rectangular-pattern":
+      return "pattern-rectangular";
+    case "circular-pattern":
+      return "pattern-circular";
+    case "mirror":
+      return "mirror-3d";
+    case "move":
+      return feature.copy ? "copy-3d" : "move-3d";
+    case "align":
+      return "align";
+    case "split":
+      return "split";
+    case "sweep":
+      return "sweep";
+    case "loft":
+      return "loft";
   }
 };

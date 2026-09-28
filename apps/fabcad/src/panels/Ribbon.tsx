@@ -1,6 +1,7 @@
 import { SKETCH_MODIFY_TOOLS, type Sketch, toggleConstruction } from "@fabcad/sketch";
 import type { ReactElement } from "react";
 import {
+  DIALOG_COMMANDS,
   beginSketchPlanePick,
   finishSketch,
   importStep,
@@ -8,7 +9,14 @@ import {
   setTool,
   startMeasure,
 } from "../app/actions";
-import { type SelectionFilter, type ToolOptions, appState, setSelection, toast } from "../app/appState";
+import {
+  type Dialog,
+  type SelectionFilter,
+  type ToolOptions,
+  appState,
+  setSelection,
+  toast,
+} from "../app/appState";
 import { documentStore, editSketchSolved } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { CONSTRAINT_TOOLS, constraintRefs } from "../sketch/constraintTools";
@@ -201,6 +209,7 @@ function SketchRibbon(): ReactElement {
           onClick={() => setTool("project")}
         />
         <Menu
+          detached
           buttonClass={`tool${activeMoreCreate ? " on" : ""}`}
           title="More create tools"
           label={
@@ -227,6 +236,7 @@ function SketchRibbon(): ReactElement {
           />
         ))}
         <Menu
+          detached
           buttonClass={`tool${activeMoreModify ? " on" : ""}`}
           title="More modify tools"
           label={<Icon name={activeMoreModify?.id ?? "more"} />}
@@ -338,11 +348,15 @@ const FILTERS: { id: SelectionFilter; label: string }[] = [
   { id: "vertex", label: "Vertex" },
 ];
 
+/** Commands of the Modify group that live in its menu, to keep the ribbon on one screen. */
+const MORE_MODIFY: { type: Dialog["type"]; kbd?: string }[] = [{ type: "split" }, { type: "align" }];
+
 function SolidRibbon(): ReactElement {
   const dialog = useStore(appState, (s) => s.dialog);
   const filter = useStore(appState, (s) => s.selectionFilter);
   const measuring = useStore(appState, (s) => s.measuring);
   const is = (type: string): boolean => dialog?.type === type;
+  const activeMore = MORE_MODIFY.find((c) => is(c.type));
   return (
     <>
       <Group label="Sketch">
@@ -358,12 +372,34 @@ function SolidRibbon(): ReactElement {
       <Group label="Create">
         <Tool icon="extrude" label="Extrude" title="Extrude (E)" active={is("extrude")} onClick={() => openDialog("extrude")} />
         <Tool icon="revolve" label="Revolve" title="Revolve" active={is("revolve")} onClick={() => openDialog("revolve")} />
+        <Tool icon="sweep" label="Sweep" title="Sweep — move a profile along a path" active={is("sweep")} onClick={() => openDialog("sweep")} />
+        <Tool icon="loft" label="Loft" title="Loft — a solid through two or more sections" active={is("loft")} onClick={() => openDialog("loft")} />
+        <Tool icon="hole" label="Hole" title="Hole (H)" active={is("hole")} onClick={() => openDialog("hole")} />
       </Group>
       <Group label="Modify">
         <Tool icon="fillet-3d" label="Fillet" title="Fillet edges (F)" active={is("fillet")} onClick={() => openDialog("fillet")} />
         <Tool icon="chamfer-3d" label="Chamfer" title="Chamfer edges" active={is("chamfer")} onClick={() => openDialog("chamfer")} />
         <Tool icon="shell" label="Shell" title="Shell — hollow a body" active={is("shell")} onClick={() => openDialog("shell")} />
         <Tool icon="combine" label="Combine" title="Combine — union, cut or intersect bodies" active={is("combine")} onClick={() => openDialog("combine")} />
+        <Tool icon="move-3d" label="Move" title="Move/Copy (M)" active={is("move")} onClick={() => openDialog("move")} />
+        <Menu
+          detached
+          buttonClass={`tool${activeMore ? " on" : ""}`}
+          title="More modify commands: Split Body, Align"
+          label={<Icon name="more" />}
+          items={MORE_MODIFY.map((c) => ({
+            label: DIALOG_COMMANDS[c.type]?.label ?? c.type,
+            icon: DIALOG_COMMANDS[c.type]?.icon,
+            kbd: c.kbd,
+            active: is(c.type),
+            onSelect: () => openDialog(c.type),
+          }))}
+        />
+      </Group>
+      <Group label="Pattern">
+        <Tool icon="pattern-rectangular" label="Rect." title="Rectangular Pattern" active={is("rectangular-pattern")} onClick={() => openDialog("rectangular-pattern")} />
+        <Tool icon="pattern-circular" label="Circular" title="Circular Pattern" active={is("circular-pattern")} onClick={() => openDialog("circular-pattern")} />
+        <Tool icon="mirror-3d" label="Mirror" title="Mirror" active={is("mirror")} onClick={() => openDialog("mirror")} />
       </Group>
       <Group label="Insert">
         <Tool icon="import3d" label="STEP" title="Import a STEP file" onClick={() => void importStep()} />

@@ -62,6 +62,13 @@ import {
   sketchView,
   solveDrag,
 } from "../app/session";
+import {
+  dialogReferences,
+  dialogSketches,
+  dialogWants,
+  freePoints,
+  isSolidDialog,
+} from "../app/solidDialogs";
 import { currentMeasurement } from "../measure/MeasurePanel";
 import { beginText, editText, pickTextPath } from "../text/textCommands";
 import { textState } from "../text/typography";
@@ -1196,6 +1203,15 @@ export class SketchController {
 
   // ----------------------------------------------------- profiles in 3D mode
 
+  /**
+   * Sketches that the open feature dialog refers to. They are shown and can be picked while
+   * it is open, although a sketch is hidden once a feature has been built from it.
+   */
+  private dialogSketches(): Set<string> {
+    const dialog = appState.get().dialog;
+    return isSolidDialog(dialog) ? dialogSketches(dialog) : new Set();
+  }
+
   /** Closed profile of any visible sketch under the pointer (for Extrude / Revolve). */
   profileAt(
     x: number,
@@ -1203,8 +1219,9 @@ export class SketchController {
     options: { onlySketch?: string | null; visibleOnly?: boolean } = {},
   ): HoverProfile | null {
     let best: HoverProfile | null = null;
+    const used = this.dialogSketches();
     for (const f of Object.values(this.doc.features)) {
-      if (f.type !== "sketch" || !f.visible || f.suppressed) continue;
+      if (f.type !== "sketch" || (!f.visible && !used.has(f.id)) || f.suppressed) continue;
       if (options.onlySketch && f.id !== options.onlySketch) continue;
       const projector = this.projectorFor(f.sketch);
       const at = projector.toSketch(x, y);
@@ -1225,19 +1242,50 @@ export class SketchController {
 
   /**
    * Geometry of a visible sketch under the pointer, seen from the solid environment. Geometry
-   * hidden behind a body is skipped.
+   * hidden behind a body is skipped, unless `through` is set: sketches are drawn on top of the
+   * bodies, and a command that asks for sketch geometry takes what can be seen.
    */
-  entityAt(x: number, y: number): { sketchId: string; entityId: EntityId } | null {
+  entityAt(
+    x: number,
+    y: number,
+    options: {
+      points?: boolean;
+      curves?: boolean;
+      /** The sketch origin counts as a point. */
+      origin?: boolean;
+      through?: boolean;
+      accept?: (e: SketchEntity) => boolean;
+    } = {},
+  ): { sketchId: string; entityId: EntityId } | null {
     let best: { sketchId: string; entityId: EntityId; distance: number } | null = null;
+    const used = this.dialogSketches();
+    const { accept } = options;
     for (const f of Object.values(this.doc.features)) {
-      if (f.type !== "sketch" || !f.visible || f.suppressed) continue;
+      if (f.type !== "sketch" || (!f.visible && !used.has(f.id)) || f.suppressed) continue;
       const projector = this.projectorFor(f.sketch);
       const at = projector.toSketch(x, y);
       if (!at) continue;
       const px = projector.pixel(at);
-      const hit = hitTestSketch(f.sketch, at, px * HIT_PX * this.reach);
-      if (!hit || hit.id === f.sketch.originId) continue;
-      if (!this.scene.isPointVisible(x, y, planeToWorld(projector.plane, at))) continue;
+      // Points stay: the curves that are left are defined by them.
+      const sketch: Sketch = accept
+        ? {
+            ...f.sketch,
+            entities: Object.fromEntries(
+              Object.entries(f.sketch.entities).filter(([, e]) => e.type === "point" || accept(e)),
+            ),
+          }
+        : f.sketch;
+      const hit = hitTestSketch(sketch, at, px * HIT_PX * this.reach, {
+        points: options.points,
+        curves: options.curves,
+      });
+      if (!hit || (hit.id === f.sketch.originId && !options.origin)) continue;
+      if (
+        !options.through &&
+        !this.scene.isPointVisible(x, y, planeToWorld(projector.plane, at))
+      ) {
+        continue;
+      }
       const distance = hit.distance / Math.max(px, 1e-12);
       if (!best || distance < best.distance) best = { sketchId: f.id, entityId: hit.id, distance };
     }
@@ -1295,12 +1343,18 @@ export class SketchController {
       (dialog.type === "extrude" || dialog.type === "revolve");
     const dialogProfiles =
       dialog && (dialog.type === "extrude" || dialog.type === "revolve") ? dialog : null;
+    // The dialogs that pick through `dialogWants`: what they hold and what they ask for.
+    const solid = !state.activeSketchId && isSolidDialog(dialog) ? dialog : null;
+    const references = solid ? dialogReferences(solid) : null;
+    const wants = solid ? dialogWants(solid) : null;
+    const used = solid ? dialogSketches(solid) : new Set<string>();
 
     for (const id of doc.timeline) {
       const f = doc.features[id];
       if (!f || f.type !== "sketch") continue;
       const active = f.id === state.activeSketchId;
-      if (!active && (!f.visible || state.workspace !== "design")) continue;
+      const visible = f.visible || used.has(f.id);
+      if (!active && (!visible || state.workspace !== "design")) continue;
       if (state.activeSketchId && !active && !f.visible) continue;
 
       const sketch = f.sketch;
@@ -1330,7 +1384,12 @@ export class SketchController {
           if (fallback) selectedRegions.add(fallback.id);
         }
       }
-      if (active || pickingProfiles || selectedRegions.size > 0) {
+      for (const p of references?.profiles ?? []) {
+        if (p.sketchId !== f.id) continue;
+        for (const r of resolveProfileRefs(view.regions, p.ref)) selectedRegions.add(r.id);
+      }
+      const offered = pickingProfiles || wants?.profiles === true;
+      if (active || offered || selectedRegions.size > 0) {
         for (const region of view.regions) {
           const hovered =
             this.hoverProfile?.sketchId === f.id && this.hoverProfile.region.id === region.id;
@@ -1338,7 +1397,7 @@ export class SketchController {
             ? SKETCH_COLORS.profileSelected
             : hovered
               ? SKETCH_COLORS.profileHover
-              : active || pickingProfiles
+              : active || offered
                 ? SKETCH_COLORS.profile
                 : null;
           if (color) fillRegion(ctx, projector, region, color);
@@ -1354,8 +1413,16 @@ export class SketchController {
         if (s.kind === "dimension" && s.sketchId === f.id) selectedLabels.add(`dimension:${s.id}`);
         if (s.kind === "constraint" && s.sketchId === f.id) selectedLabels.add(`constraint:${s.id}`);
         if (s.kind === "feature" && s.featureId === f.id && !active) {
-          for (const e of Object.keys(sketch.entities)) selectedEntities.add(e);
+          // The curves stand for the sketch; of its points only the ones that stand by
+          // themselves are drawn out here.
+          for (const e of Object.values(sketch.entities)) {
+            if (e.type !== "point") selectedEntities.add(e.id);
+          }
+          for (const e of freePoints(sketch)) selectedEntities.add(e);
         }
+      }
+      for (const e of references?.entities ?? []) {
+        if (e.sketchId === f.id) selectedEntities.add(e.entityId);
       }
       if (dialog?.type === "revolve" && dialog.sketchId === f.id && dialog.axis?.type === "sketch-line") {
         selectedEntities.add(dialog.axis.entityId);
@@ -1381,6 +1448,7 @@ export class SketchController {
             .map((p) => p.textId),
         ),
         previewEntities: new Set(),
+        shownPoints: wants?.sketchPoints ? "all" : new Set(freePoints(sketch)),
         showConstraints: state.showConstraints,
         showDimensions: state.showDimensions,
         dimensionValues: view.dimensionValues,
