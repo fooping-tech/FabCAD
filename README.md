@@ -22,7 +22,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Sketch Modify | Move、Copy、Trim、Extend、Offset、Mirror、Fillet、Chamfer、Break、Scale、Rectangular Pattern、Circular Pattern、Construction 切り替え |
 | Constraints | Coincident、Horizontal、Vertical、Parallel、Perpendicular、Tangent、Equal、Concentric、Collinear、Midpoint、Fix、Symmetry |
 | Dimensions | Distance、Horizontal / Vertical Distance、Angle、Radius、Diameter。値にはパラメータ式を入力できます |
-| スナップ | 既存の点・中点・曲線へのスナップ。何もない場所では 1 mm 単位に吸着します（リボンの **Snap 1 mm** で切り替え、`Ctrl/Cmd` を押している間は無効） |
+| スナップ | 既存の点・中点・曲線へのスナップ。ほかの点の真上・真下・真横に来ると、その点と X または Y がそろう位置に吸着し、破線のガイドを表示します（**Snap H/V**）。点を置くときも、点をドラッグするときも働きます。何もない場所では 1 mm 単位に吸着します（**Snap 1 mm**）。どちらもリボンの Options で切り替えられ、`Ctrl/Cmd` を押している間は無効です |
 | 拘束状態 | Under-constrained（残り自由度を表示）/ Fully constrained / Over-constrained。過剰拘束になる操作は拒否します |
 | Profile | 交点を含めて閉領域を自動検出し、クリックで選択（複数選択可） |
 | 範囲選択 | スケッチの何もない場所からドラッグ。左から右は枠に完全に入ったものだけ（実線の枠）、右から左は枠に触れたものすべて（破線の枠）。`Shift` で追加 |
@@ -30,7 +30,10 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。Cut / Intersect を選ぶと向きは自動で立体の側に、Join / New Body に戻すと立体の外側に切り替わります。自分で向きを選んだあとは変えません。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Sweep（プロファイルを、線・円弧・スプラインをつないだパスに沿って掃引）、Loft（2 つ以上の断面をつなぐ。断面はスケッチの閉領域または平らな面）、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Hole | `H`。スケッチの点に穴をあけます。1 つの Feature に複数の点を指定できます。Simple / Counterbore / Countersink、Distance / Through All、Flip |
 | Pattern / Mirror | Rectangular Pattern（1 方向または 2 方向）、Circular Pattern、Mirror。対象は Feature（Extrude、Revolve、Hole、Sweep、Loft）または Body。個数・間隔・角度を持つ 1 つの Feature として保存し、コピーの集まりにはしません |
-| Move / Align / Split | Move/Copy（`M`。移動、回転、点から点、コピー）、Align（面と面、点と点）、Split Body（原点平面または他の Body の平らな面で分割。両側 / 片側を残す） |
+| Move / Align / Split | Move/Copy（`M`。移動、回転、点から点、コピー）、Align（面と面、点と点）、Split Body（原点平面、構成平面、または他の Body の平らな面で分割。両側 / 片側を残す） |
+| Offset Plane | 原点平面・平らな面・ほかの構成平面から、指定した距離だけ離れた平行な構成平面を作ります。距離は正負どちらも指定でき、パラメータ式も使えます。確定する前にビューでプレビューします。タイムラインに残る Feature で、あとから距離と基準を変えられます。スケッチ平面、Mirror の平面、Split Body の平面、別の Offset Plane の基準として使えます |
+| 複数選択 | `Shift` / `Ctrl` / `Cmd` + クリックで追加・解除。リボンまたは画面下の **Multi-Select** をオンにすると、修飾キーなしのクリック（タップ）で追加・解除できます。稜線・面・Body・スケッチの要素・ブラウザとタイムラインの項目に共通です |
+| ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details** で、用途、必要な選択、パラメータ、制限、使用例を表示します。ヘルプを開いても、実行中のコマンドと選択は変わりません |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
 | 入出力 | STEP import / export、STL export、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
@@ -40,7 +43,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | 分類 | 内容 |
 | --- | --- |
 | Material | MDF、Acrylic、Cardboard、Paper。厚み・kerf・fit offset を編集でき、独自の材料も追加できます |
-| Board（MDF / Acrylic / Cardboard） | Panel Decomposition → Joint → Thickness Compensation → Kerf Compensation。Joint は Tab & Slot / Finger / Flat |
+| Board（MDF / Acrylic / Cardboard） | まず Body を判定します。**Flat Part**（板厚と同じ厚みの 2D 形状。穴も可）は輪郭のまま 1 部品、**Rectangular Box**（直方体）は 6 枚のパネル → Joint → Thickness Compensation → Kerf Compensation。Joint は Tab & Slot / Finger / Flat。それ以外の立体は Unsupported として理由を表示し、カットデータを作りません |
 | Paper | Unfold → Connected Net → Fold Line → Glue Tab（幅・角度・インセット） |
 | Analyzer | concave corner、acute angle、short edge、narrow tab、曲面などを警告 |
 | Parts | 部品名、寸法、厚み、材料、joint、mating edge（`EdgeConnection` を明示的に保持） |
@@ -82,7 +85,7 @@ npm run preview
 
 ### 基本の流れ
 
-1. **Create Sketch** を押し、原点平面または平らな面を選びます。
+1. **Create Sketch** を押し、原点平面、構成平面、または平らな面を選びます。
 2. Create ツールで形を描き、Constraints と Dimension（`D`）で形状を決めます。
 3. **Finish Sketch** で 3D に戻り、**Extrude**（`E`）でプロファイルをクリックして押し出します。
 4. 上部で **FABRICATION** に切り替え、材料を選びます。
@@ -107,7 +110,7 @@ Fusion 360 に同じコマンドがあるものは、同じキーにしていま
 | `M` | Move（スケッチの図形） | Move/Copy（Body） |
 | `H` | スケッチを終了して Hole | Hole |
 | `I` | Measure | Measure |
-| `V` | — | 選択した Body / Sketch の表示・非表示 |
+| `V` | — | 選択した Body / Sketch / 構成平面の表示・非表示 |
 | `S` | Fit Point Spline | Create Sketch |
 | `P` | Project（立体の形状をスケッチ平面へ投影） | 平面を選んで Project でスケッチ開始 |
 | `A` | 3-Point Arc（FabCAD 独自） | 平面を選んで Arc でスケッチ開始 |
@@ -139,7 +142,7 @@ Fusion 360 のショートカットのうち、対応するコマンドがない
 | Hole | スケッチの点（複数可）と、穴をあける Body。先に点を描いたスケッチを用意します |
 | Pattern、Mirror の対象 | Feature はタイムラインかブラウザで、またはその Feature が作った面をクリックして選びます。Body はビューかブラウザで選びます |
 | 方向・軸 | X / Y / Z のボタン、直線の稜線、スケッチの線。Circular Pattern と回転では円形の稜線も選べます（その中心軸） |
-| 平面 | XY / XZ / YZ のボタン、または平らな面 |
+| 平面 | XY / XZ / YZ のボタン、平らな面、または構成平面（ビュー、ブラウザ、タイムラインで選べます） |
 | Sweep のパス | スケッチの曲線を 1 つクリックすると、つながっている曲線がまとめて入ります。`Shift` + クリックで 1 本ずつ外せます |
 | Loft の断面 | クリックした順に並びます。一覧で順番の入れ替えと削除ができます |
 
@@ -218,14 +221,17 @@ Font の一覧の **Load a font file** から、手元の TTF / OTF / WOFF を�
 
 ### 右クリックメニュー
 
-右クリック（スマートフォンでは長押し）で、カーソル位置の対象を選択してメニューを開きます。右ボタンを押したままドラッグするとオービットです。
+右クリック（タッチではダブルタップ）で、カーソル位置の対象を選択してメニューを開きます。右ボタンを押したままドラッグするとオービットです。メニューは、画面の端や下の近くで開いても、見えている範囲に収まる位置に出ます。
+
+ツールのアイコンの右クリック（タッチでは長押し）は、そのツールのヘルプです。
 
 | 状況 | メニューの内容 |
 | --- | --- |
 | コマンドの実行中 | OK、Cancel |
 | 直前にコマンドを使った | Repeat（直前のコマンドをもう一度） |
 | 稜線 | Fillet、Chamfer |
-| 平らな面・原点平面 | Create Sketch、Shell、Align |
+| 平らな面・原点平面 | Create Sketch、Offset Plane、Shell、Align |
+| 構成平面 | Create Sketch、Edit Plane、Offset Plane、Show / Hide、Delete |
 | スケッチの点 | Hole |
 | スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG、Save As DXF |
 | スケッチ中のテキスト | Edit Text、Explode Text、Delete |
@@ -258,6 +264,9 @@ Fusion 360 の円形のマーキングメニューではなく、一覧形式の
 | 2 本指スワイプ | 移動 |
 | ピンチ | ズーム（指の動きと同じ倍率） |
 | タップ | 選択。スケッチのツールでは点を置きます |
+| ダブルタップ | コンテキストメニュー（マウスの右クリックと同じ内容）。スケッチのツールを実行中は開きません（画面下の **Cancel** / **Done** を使います） |
+| ツールのアイコンを長押し | そのツールのヘルプ |
+| 画面下の **Multi** | 複数選択のオン / オフ。オンの間は、タップするたびに選択に追加・解除します。**Clear** で選択を空にします |
 | 指を置いてからずらして離す | 離した位置に点を置きます（狙いを定められます） |
 | 画面下の **Browser** / **Settings** | ブラウザとプロパティ、または Fabrication の設定を下から開きます |
 | 画面下の **Cancel** / **Done** / **Delete** / **Finish** | `Esc`、`Enter`、`Delete`、スケッチ終了の代わり |
@@ -309,7 +318,7 @@ SheetGeometry  →  preview / SVG / DXF
 ### 設計上の決まり
 
 - **ユーザーの Sketch が正本です。** 長方形・星・多角形を特別扱いするコードはありません。長方形は 4 本の線と拘束です。
-- **Fabrication は形状に依存しません。** 面・稜線・二面角だけから部品を作ります。プリズム以外の立体（角錐など）もテストしています。
+- **Fabrication は形状の名前に依存しません。** 面・稜線・二面角だけから判定し、部品を作ります。Board は Flat Part と Rectangular Box だけを作り、角柱・角錐・斜めの接合を含む立体は Unsupported として止めます。Paper は任意の多面体を展開します。
 - **Part Geometry と Joint Geometry を混ぜません。** `FlatPart.outline` と `FlatPart.joints` は別に保持し、最終的な `paths` で合成します。
 - **接続は明示します。** 部品どうしの関係は `EdgeConnection` として立体のトポロジから作り、SVG 上の位置から推測しません。
 - **寸法の式はソルバーの外で評価します。** ソルバーが受け取るのは数値だけです。
@@ -319,11 +328,11 @@ SheetGeometry  →  preview / SVG / DXF
 
 ### 曲面の扱い
 
-OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚のポリゴン、曲面は同一平面上の三角形をまとめた小さな平面（facet）の集まりとして `SolidTopology` にします。Board は曲面を切り出せないので警告を出し、Paper は facet を帯として展開します。
+OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚のポリゴン、曲面は同一平面上の三角形をまとめた小さな平面（facet）の集まりとして `SolidTopology` にします。Board は曲面を板で作れないので Unsupported にします（円板や丸穴のある板のように、曲面が板の側面であるものは Flat Part です）。Paper は facet を帯として展開します。
 
 ### Board の厚み補正
 
-各面の外側の面を立体の面に合わせ、板厚は内側に取ります。稜線ごとに二面角 θ と板厚 t、面の内側へのずれ m から、面内でのオフセット量を求めます。Tab & Slot のスロットを閉じた穴にするため、タブ側のパネルは `slotEdgeMargin`（初期値 3 mm）だけ内側にずらします。0 にするとスロットは外周に開いた切り欠きになります。
+Rectangular Box と判定した Body にだけ適用します。各面の外側の面を立体の面に合わせ、板厚は内側に取ります。稜線ごとに二面角 θ と板厚 t、面の内側へのずれ m から、面内でのオフセット量を求めます。Tab & Slot のスロットを閉じた穴にするため、タブ側のパネルは `slotEdgeMargin`（初期値 3 mm）だけ内側にずらします。0 にするとスロットは外周に開いた切り欠きになります。
 
 ## テスト
 
@@ -331,7 +340,7 @@ OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚�
 npm test
 ```
 
-Vitest で 530 件以上のテストを実行します。OpenCASCADE を使うテストは Node 上で WASM を読み込みます。
+Vitest で 600 件以上のテストを実行します。OpenCASCADE を使うテストは Node 上で WASM を読み込みます。
 
 | 対象 | 内容 |
 | --- | --- |
@@ -339,8 +348,10 @@ Vitest で 530 件以上のテストを実行します。OpenCASCADE を使う�
 | Topology | 面と稜線の名前。寸法を変えたあと、Cut のあと、保存と読み込みのあとで、Fillet / Chamfer / Shell / Project / 面の上のスケッチが同じ面・稜線を指すこと |
 | Text | 標準搭載のフォントを実際に読み込み、横書き・縦書き・パスに沿った配置、Profile、Extrude / Cut、文字列の変更への追従、Explode、フォントがない場合を検証 |
 | Solid Features | Hole、Pattern、Mirror、Move、Align、Split、Sweep、Loft を OpenCASCADE で実行し、体積を計算値と比較。個数や間隔を変えたあとの面の名前、依存グラフ、Undo / Redo、保存と読み込み |
+| Offset Plane | 正負の距離、面・平面からの連鎖、パラメータへの追従、平面の上のスケッチと立体の追従、Mirror / Split での利用、Undo / Redo、保存と読み込み |
+| UI の部品 | メニューの位置（画面の下端・右端、狭い画面、キーボードで狭くなった範囲）、ダブルタップと長押しの判定、ヘルプがすべてのツールにあること |
 | DXF | 各要素の読み込み、単位の換算、レイヤー、ブロック、書き出した DXF の読み戻し |
-| Fabrication | rectangle / hexagon / star MDF、paper box、paper polygon、kerf compensation、tab / slot matching、SVG dimensions、角錐 |
+| Fabrication | Board の判定（Flat Part / Rectangular Box / Unsupported）、rectangle box MDF、paper box、paper polygon、kerf compensation、tab / slot matching、SVG dimensions |
 | シナリオ | `apps/fabcad/test/scenarios.test.ts` が Sketch → Solver → Extrude → B-Rep → Fabrication → SVG を通しで検証 |
 
 ## GitHub Pages
@@ -368,7 +379,10 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | Sweep | パスは 1 つのスケッチ上の、線・円弧・円・スプラインです。楕円はパスにできません。ねじり、ガイドレールはありません。閉じたパスは未検証です |
 | Loft | 穴のある断面、平らでない面、ガイドレールには対応していません |
 | Align | 平らな面どうし、または点どうしだけです |
-| Split Body | 分割に使えるのは平面（原点平面、平らな面）だけです。曲面やスケッチの線では分割できません |
+| Split Body | 分割に使えるのは平面（原点平面、構成平面、平らな面）だけです。曲面やスケッチの線では分割できません |
+| 構成平面 | 平行にずらした平面（Offset Plane）だけです。角度を付けた平面、3 点を通る平面、曲面に接する平面はありません。Pattern / Mirror の対象にはできません |
+| スナップ（水平・垂直） | 対象はスケッチの点と、実行中のコマンドで置いた点です。線の延長や曲線の接線方向には合わせません。点が多いスケッチでは吸着する場所が増えるので、邪魔なときは **Snap H/V** をオフにします |
+| ヘルプ | 本文は英語です（画面の表記に合わせています） |
 | 面の上のスケッチと Move | 面の上のスケッチは、面が法線方向に動いたときと傾いたときに追従します。面の中での平行移動と、法線まわりの回転には追従しません |
 | IGES | 未実装 |
 | 面・稜線の参照 | 名前で照合します（「設計上の決まり」を参照）。1 つのスケッチ要素から複数の面ができた場合（Cut で面が 2 つに分かれたなど）は、番号で区別します。分かれ方が変わると、番号が入れ替わることがあります。STEP で読み込んだ立体の面は、面の順番で名前を付けます |
@@ -378,7 +392,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | 角度寸法 | 1 本目の線から 2 本目の線へ反時計回りに測ります |
 | Nesting | 外接矩形による row / shelf packing のみ |
 | 3D プリント | スライス（G-code の生成）はしません。見積もりは概算で、サポート材は含みません。実機での造形は未検証です |
-| 凹角 | Board のパネルは線で接するだけで、内側に隙間が残ります（警告を出します） |
+| Board の対象 | Flat Part と Rectangular Box だけです。角柱、角錐、屋根、斜めの接合、曲面のある立体は Unsupported です。Case / Enclosure の専用ジェネレーターは未実装です |
 | 範囲選択 | スケッチの中だけです。3D の面・稜線・Body の範囲選択はありません（3D の左ドラッグはオービットです）。タッチ操作では使えません |
 | Measure | 2 つの選択の距離は、直線どうし・平面どうしが平行なら垂直距離、それ以外は最短距離です。曲面の半径、Body どうしの最短距離、干渉チェックはありません |
 | スマートフォン | Chrome のスマートフォン表示とタッチ入力のエミュレーションで確認しました。実機では未検証です |

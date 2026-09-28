@@ -553,6 +553,22 @@ function EmptyState({ state }: { state: FabricationState }): ReactNode {
       </div>
     );
   }
+  const rejected = state.output?.detections.filter((d) => !d.supported) ?? [];
+  if (rejected.length > 0) {
+    const several = rejected.length > 1;
+    return (
+      <div className="fab-empty error" role="alert">
+        <h3>{several ? "Unsupported bodies" : "Unsupported body"}</h3>
+        {rejected.map((d) => (
+          <p key={d.bodyId}>
+            {several ? `${d.bodyName} — ` : ""}
+            {`Reason: ${d.reason ?? "This shape is not supported."}`}
+          </p>
+        ))}
+        <p className="fab-note">No cut sheet is generated for unsupported bodies.</p>
+      </div>
+    );
+  }
   const errors = state.output?.warnings.filter((w) => w.severity === "error") ?? [];
   return (
     <div className="fab-empty">

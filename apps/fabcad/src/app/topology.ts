@@ -99,6 +99,8 @@ export function pickedOf(s: Selection): Picked | null {
       return { kind: "vertex", ref: vertexRefOf(s.bodyId, s.vertexIndex, s.point) };
     case "origin-plane":
       return { kind: "origin-plane", plane: s.plane };
+    case "plane":
+      return { kind: "plane", featureId: s.featureId };
     case "entity":
       return { kind: "entity", sketchId: s.sketchId, entityId: s.entityId };
     case "profile":

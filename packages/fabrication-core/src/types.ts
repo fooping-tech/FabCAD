@@ -153,6 +153,7 @@ export type WarningCode =
   | "joint-fallback"
   | "overlap"
   | "part-too-large"
+  | "unsupported-board-shape"
   | "unsupported";
 
 export interface FabricationWarning {
@@ -166,6 +167,21 @@ export interface FabricationWarning {
   position?: Vec3;
 }
 
+/**
+ * How a strategy interpreted a body. The kinds belong to the strategy; everything else only
+ * displays `label` and `reason`.
+ */
+export interface FabricationClassification {
+  /** Strategy specific kind, e.g. "flat-part", "rectangular-box", "unsupported". */
+  kind: string;
+  /** Text for the user, e.g. "Flat Part". */
+  label: string;
+  /** False when the strategy refuses to fabricate the body (no parts are produced). */
+  supported: boolean;
+  /** Why the body is not supported. */
+  reason?: string;
+}
+
 export interface FabricationResult {
   bodyId: string;
   material: MaterialProfile;
@@ -173,6 +189,8 @@ export interface FabricationResult {
   parts: FlatPart[];
   connections: EdgeConnection[];
   warnings: FabricationWarning[];
+  /** What the strategy detected. Strategies that do not classify bodies leave it out. */
+  classification?: FabricationClassification;
 }
 
 /** Settings bag interpreted by the strategy. Each strategy documents its own keys. */

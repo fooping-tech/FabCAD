@@ -311,6 +311,59 @@ export function hitTestSketch(
   return bestPoint ?? bestCurve;
 }
 
+/** A position lined up with other points of the sketch. */
+export interface AlignResult {
+  point: Vec2;
+  /** The reference straight above or below `point`: both have the same X. */
+  vertical?: Vec2;
+  /** The reference straight left or right of `point`: both have the same Y. */
+  horizontal?: Vec2;
+}
+
+/**
+ * Line `p` up with reference points: when its X is within `tolerance` of the X of a reference
+ * it takes that X (it then lies straight above or below the reference), and the same for Y.
+ * The two axes are independent, so a position can be above one point and beside another.
+ * Per axis the reference that is nearest along that axis wins; among equals, the nearest one.
+ */
+export function alignPoint(p: Vec2, references: Iterable<Vec2>, tolerance: number): AlignResult {
+  let vertical: { ref: Vec2; off: number; distance: number } | null = null;
+  let horizontal: { ref: Vec2; off: number; distance: number } | null = null;
+  const better = (
+    best: { off: number; distance: number } | null,
+    off: number,
+    distance: number,
+  ): boolean =>
+    best === null ||
+    off < best.off - 1e-12 ||
+    (Math.abs(off - best.off) <= 1e-12 && distance < best.distance);
+  for (const ref of references) {
+    const dx = Math.abs(ref.x - p.x);
+    const dy = Math.abs(ref.y - p.y);
+    const distance = Math.hypot(dx, dy);
+    if (dx <= tolerance && better(vertical, dx, distance)) vertical = { ref, off: dx, distance };
+    if (dy <= tolerance && better(horizontal, dy, distance)) {
+      horizontal = { ref, off: dy, distance };
+    }
+  }
+  const result: AlignResult = {
+    point: { x: vertical ? vertical.ref.x : p.x, y: horizontal ? horizontal.ref.y : p.y },
+  };
+  if (vertical) result.vertical = { x: vertical.ref.x, y: vertical.ref.y };
+  if (horizontal) result.horizontal = { x: horizontal.ref.x, y: horizontal.ref.y };
+  return result;
+}
+
+/** The points of a sketch a position can line up with: its point entities, `exclude` left out. */
+export function alignmentReferences(sketch: Sketch, exclude: EntityId[] = []): Vec2[] {
+  const skip = new Set(exclude);
+  const out: Vec2[] = [];
+  for (const e of Object.values(sketch.entities)) {
+    if (e.type === "point" && !skip.has(e.id)) out.push({ x: e.x, y: e.y });
+  }
+  return out;
+}
+
 export interface SnapResult {
   point: Vec2;
   pointId?: EntityId;

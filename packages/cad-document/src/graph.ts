@@ -6,6 +6,7 @@ import {
   featureExpressions,
   featureInputBodies,
   featureInputFeatures,
+  featureInputPlanes,
   featureInputSketches,
   featureOutputBodies,
   parseDynamicBodyId,
@@ -64,6 +65,9 @@ export function buildDependencyGraph(doc: CadDocument): DependencyGraph {
     // A pattern of features applies what those features recorded when they ran.
     for (const s of featureInputFeatures(f)) {
       if (earlier.has(s)) addEdge(featureNode(s), node);
+    }
+    for (const p of featureInputPlanes(f)) {
+      if (earlier.has(p)) addEdge(featureNode(p), node);
     }
     for (const b of featureInputBodies(f, lookup)) {
       // Bodies whose number depends on evaluated values are not announced by

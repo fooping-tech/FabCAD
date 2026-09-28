@@ -9,6 +9,7 @@ export const COLORS = {
   planeXY: 0x4b8bb9,
   planeXZ: 0x5aa469,
   planeYZ: 0xc7773b,
+  constructionPlane: 0x8a6fc0,
   axisX: 0xd0453a,
   axisY: 0x3d9a4a,
   axisZ: 0x3a6fd0,

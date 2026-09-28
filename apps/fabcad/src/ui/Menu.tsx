@@ -1,5 +1,8 @@
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
+import type { HelpTopic } from "../app/appState";
+import { useHelpTrigger } from "../help/useHelpTrigger";
 import { Icon } from "./Icon";
+import { Popover } from "./Popover";
 
 export type MenuItem =
   | { separator: true }
@@ -10,8 +13,36 @@ export type MenuItem =
       kbd?: string;
       disabled?: boolean;
       active?: boolean;
+      /** Help shown on right-click or long press. */
+      help?: HelpTopic;
       onSelect: () => void;
     };
+
+type MenuCommand = Extract<MenuItem, { label: string }>;
+
+function MenuButton({
+  item,
+  onSelect,
+}: {
+  item: MenuCommand;
+  onSelect: () => void;
+}): ReactElement {
+  const help = useHelpTrigger(item.help);
+  const { guard, ...handlers } = help ?? { guard: (f: () => void) => f };
+  return (
+    <button
+      role="menuitem"
+      disabled={item.disabled}
+      className={item.active ? "on" : ""}
+      {...handlers}
+      onClick={guard(onSelect)}
+    >
+      {item.icon && <Icon name={item.icon} size={16} />}
+      {item.label}
+      {item.kbd && <span className="kbd">{item.kbd}</span>}
+    </button>
+  );
+}
 
 export function Menu({
   label,
@@ -19,7 +50,6 @@ export function Menu({
   align = "left",
   buttonClass = "btn",
   title,
-  detached = false,
 }: {
   label: ReactNode;
   items: MenuItem[];
@@ -27,26 +57,23 @@ export function Menu({
   buttonClass?: string;
   title?: string;
   /**
-   * Place the menu relative to the window instead of its button. Needed where the button sits
-   * in a container that clips what sticks out of it, such as the ribbon, which scrolls.
+   * Kept for callers: every menu is placed relative to the window now, inside what can be
+   * seen of it, whatever container its button sits in.
    */
   detached?: boolean;
 }): ReactElement {
   const [open, setOpen] = useState(false);
-  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-
-  const toggle = (): void => {
-    const r = ref.current?.getBoundingClientRect();
-    // Kept inside the window: the menu is at least 190 px wide.
-    setAt(r ? { left: Math.max(4, Math.min(r.left, window.innerWidth - 200)), top: r.bottom + 4 } : null);
-    setOpen((o) => !o);
-  };
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const close = (e: PointerEvent): void => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
+      // The help menu of an entry belongs to the menu: using it does not close the menu.
+      if (target instanceof Element && target.closest(".help-menu")) return;
+      setOpen(false);
     };
     const key = (e: KeyboardEvent): void => {
       if (e.key === "Escape") setOpen(false);
@@ -67,15 +94,16 @@ export function Menu({
         aria-haspopup="menu"
         aria-expanded={open}
         title={title}
-        onClick={toggle}
+        onClick={() => setOpen((o) => !o)}
       >
         {label}
       </button>
       {open && (
-        <div
-          className={`menu${align === "right" ? " right" : ""}`}
-          role="menu"
-          style={detached && at ? { position: "fixed", left: at.left, top: at.top } : undefined}
+        <Popover
+          anchor={() => ref.current?.getBoundingClientRect()}
+          className="menu"
+          popoverRef={menuRef}
+          placement={{ align }}
         >
           {items.map((item, i) => {
             if ("separator" in item) return <hr key={i} />;
@@ -87,23 +115,17 @@ export function Menu({
               );
             }
             return (
-              <button
+              <MenuButton
                 key={i}
-                role="menuitem"
-                disabled={item.disabled}
-                className={item.active ? "on" : ""}
-                onClick={() => {
+                item={item}
+                onSelect={() => {
                   setOpen(false);
                   item.onSelect();
                 }}
-              >
-                {item.icon && <Icon name={item.icon} size={16} />}
-                {item.label}
-                {item.kbd && <span className="kbd">{item.kbd}</span>}
-              </button>
+              />
             );
           })}
-        </div>
+        </Popover>
       )}
     </div>
   );

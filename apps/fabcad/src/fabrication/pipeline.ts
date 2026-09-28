@@ -32,10 +32,24 @@ import {
  *
  * `FabricationOutput.geometry` is the single source for the on-screen preview and for export.
  */
+/** What the strategy detected in one body ("Detected: Flat Part", "Unsupported body"). */
+export interface BodyDetection {
+  bodyId: string;
+  bodyName: string;
+  kind: string;
+  label: string;
+  /** False when the body is not fabricated: it contributes no parts and no sheet output. */
+  supported: boolean;
+  reason?: string;
+  parts: number;
+}
+
 export interface FabricationOutput {
   material: MaterialProfile;
   strategyId: string;
   results: FabricationResult[];
+  /** One entry per compiled body whose strategy classifies bodies, in body order. */
+  detections: BodyDetection[];
   parts: FlatPart[];
   connections: EdgeConnection[];
   warnings: FabricationWarning[];
@@ -100,6 +114,7 @@ export function compileFabrication(
   const results: FabricationResult[] = [];
   const parts: FlatPart[] = [];
   const connections: EdgeConnection[] = [];
+  const detections: BodyDetection[] = [];
 
   let strategy;
   try {
@@ -123,6 +138,22 @@ export function compileFabrication(
       seenBodies.add(body.id);
       try {
         const result = fabricate(body, material, strategy, strategySettings);
+        const detected = result.classification;
+        if (detected && detected.supported === false) {
+          // Unsupported: whatever the strategy returned, nothing of this body reaches a sheet.
+          detections.push({
+            bodyId: body.id,
+            bodyName: body.name,
+            kind: detected.kind,
+            label: detected.label,
+            supported: false,
+            reason: detected.reason,
+            parts: 0,
+          });
+          results.push({ ...result, parts: [], connections: [] });
+          warnings.push(...result.warnings);
+          continue;
+        }
         // Part ids are prefixed with the body id by the strategies; enforce uniqueness anyway.
         const clash = result.parts.find((p) => seenParts.has(p.id));
         if (clash) {
@@ -135,6 +166,16 @@ export function compileFabrication(
           ? result.parts.map((p) => ({ ...p, name: `${body.name} ${p.name}` }))
           : result.parts;
         for (const p of named) seenParts.add(p.id);
+        if (detected) {
+          detections.push({
+            bodyId: body.id,
+            bodyName: body.name,
+            kind: detected.kind,
+            label: detected.label,
+            supported: true,
+            parts: named.length,
+          });
+        }
         results.push({ ...result, parts: named });
         parts.push(...named);
         connections.push(...result.connections);
@@ -168,6 +209,7 @@ export function compileFabrication(
     material,
     strategyId: strategy?.id ?? "",
     results,
+    detections,
     parts,
     connections,
     warnings: dedupeWarnings(warnings),

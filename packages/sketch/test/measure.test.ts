@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createCircle, createLine, createPoint } from "../src/create";
 import { SketchBuilder } from "../src/edit";
 import {
+  alignPoint,
+  alignmentReferences,
   dimensionAnchor,
   hitTestSketch,
   measureDimension,
@@ -147,5 +149,63 @@ describe("bounds, hit test, snapping", () => {
     expect(onCurve.point.y).toBeCloseTo(10);
     expect(snapPoint(sketch, v(200, 200), 1)).toEqual({ point: v(200, 200), kind: "none" });
     expect(snapPoint(sketch, v(0.2, 0.1), 1, [ids.l1a!, ids.l1!]).kind).toBe("none");
+  });
+});
+
+describe("alignPoint", () => {
+  const refs = [v(0, 0), v(40, 25), v(41, 80)];
+
+  it("takes the X of a reference it is nearly above", () => {
+    const r = alignPoint(v(0.4, 30), refs, 0.5);
+    expect(r.point).toEqual(v(0, 30));
+    expect(r.vertical).toEqual(v(0, 0));
+    expect(r.horizontal).toBeUndefined();
+  });
+
+  it("takes the Y of a reference it is nearly beside", () => {
+    const r = alignPoint(v(70, 24.7), refs, 0.5);
+    expect(r.point).toEqual(v(70, 25));
+    expect(r.horizontal).toEqual(v(40, 25));
+    expect(r.vertical).toBeUndefined();
+  });
+
+  it("lines up with two references at once", () => {
+    const r = alignPoint(v(0.2, 79.8), refs, 0.5);
+    expect(r.point).toEqual(v(0, 80));
+    expect(r.vertical).toEqual(v(0, 0));
+    expect(r.horizontal).toEqual(v(41, 80));
+  });
+
+  it("prefers the reference that is nearest along the axis", () => {
+    // X = 40.6 is 0.6 from the reference at 40 and 0.4 from the one at 41.
+    const r = alignPoint(v(40.6, 50), refs, 1);
+    expect(r.point.x).toBe(41);
+    expect(r.vertical).toEqual(v(41, 80));
+  });
+
+  it("among references with the same X, reports the nearest", () => {
+    const r = alignPoint(v(10.1, 95), [v(10, 0), v(10, 100)], 0.5);
+    expect(r.vertical).toEqual(v(10, 100));
+  });
+
+  it("leaves a position alone that is not near any reference line", () => {
+    const r = alignPoint(v(20, 60), refs, 0.5);
+    expect(r).toEqual({ point: v(20, 60) });
+  });
+
+  it("puts a polygon corner exactly above its centre", () => {
+    // Centre off the millimetre grid; the corner is placed by hand, a little to the side.
+    const centre = v(12.37, 8.91);
+    const r = alignPoint(v(12.6, 38.2), [centre], 0.4);
+    expect(r.point.x).toBe(centre.x);
+    expect(r.point.y).toBe(38.2);
+  });
+
+  it("collects the points of a sketch, the excluded ones left out", () => {
+    const { sketch, ids } = fixture();
+    const all = alignmentReferences(sketch);
+    const some = alignmentReferences(sketch, [ids.l1a!]);
+    expect(all.length).toBe(some.length + 1);
+    expect(all).toContainEqual(v(30, 40));
   });
 });

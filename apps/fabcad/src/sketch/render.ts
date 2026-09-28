@@ -601,6 +601,43 @@ export function drawSnapMarker(
   }
 }
 
+/**
+ * Inference guides: a dashed line from each point a position is lined up with to the
+ * position, and a mark on that point.
+ */
+export function drawAlignmentGuides(
+  ctx: CanvasRenderingContext2D,
+  at: ScreenPoint,
+  references: ScreenPoint[],
+): void {
+  if (references.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = SKETCH_COLORS.preview;
+  ctx.lineWidth = 1;
+  for (const ref of references) {
+    // The guide runs a little past both ends, as a ruler laid through the two points would.
+    const dx = at.x - ref.x;
+    const dy = at.y - ref.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1e-6) continue;
+    const ux = dx / length;
+    const uy = dy / length;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(ref.x - ux * 14, ref.y - uy * 14);
+    ctx.lineTo(at.x + ux * 14, at.y + uy * 14);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(ref.x - 4, ref.y - 4);
+    ctx.lineTo(ref.x + 4, ref.y + 4);
+    ctx.moveTo(ref.x + 4, ref.y - 4);
+    ctx.lineTo(ref.x - 4, ref.y + 4);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Entities connected to `start` through shared end points (for Offset). */
 export function connectedChain(sketch: Sketch, start: string): string[] {
   const first = sketch.entities[start];

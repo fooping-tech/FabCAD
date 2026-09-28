@@ -38,6 +38,8 @@ export interface ToolPick {
   snap: SnapResult;
   /** Direction inferred from the previous pick while drawing lines. */
   inferred?: "horizontal" | "vertical";
+  /** Points the position was lined up with: the one above or below it, the one beside it. */
+  aligned?: { vertical?: Vec2; horizontal?: Vec2 };
 }
 
 export interface CreateToolDef {

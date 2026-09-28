@@ -4,6 +4,8 @@ import {
   type Vec3,
   boundsOfPoints,
   boundsOfPoints3,
+  dist3,
+  makePlane,
   prismTopology,
   signedArea,
 } from "@fabcad/geometry";
@@ -16,6 +18,7 @@ import {
 } from "@fabcad/fabrication-core";
 import {
   type BoardSettings,
+  classifyBoardBody,
   defaultStrategyFor,
   edgeCompensation,
   laserBoardStrategy,
@@ -259,76 +262,7 @@ describe("laser board strategy: assembly check (margin 0)", () => {
   });
 });
 
-describe("laser board strategy: other solids", () => {
-  it("hexagon prism: 8 parts, flat side joints at 120°", () => {
-    const r = build(fx.hexBody());
-    expect(r.parts).toHaveLength(8);
-    const sideJoints = r.connections.filter((c) => c.joint !== "tab-slot");
-    expect(sideJoints).toHaveLength(6);
-    for (const c of sideJoints) {
-      expect(c.joint).toBe("flat");
-      expect(c.angle).toBeCloseTo(120, 6);
-      expect([c.a.role, c.b.role]).toEqual(["through", "butt"]);
-    }
-    expect(r.connections.filter((c) => c.joint === "tab-slot")).toHaveLength(12);
-    // every wall is through at one end and butt at the other, so all walls are equal
-    const widths = r.parts
-      .filter((p) => p.name.startsWith("side"))
-      .map((p) => fx.polygonSize(p.outline).width);
-    for (const w of widths) expect(w).toBeCloseTo(widths[0]!, 6);
-    const m = 3;
-    const theta = (120 * Math.PI) / 180;
-    const expected =
-      40 -
-      edgeCompensation("through", m, m, T, theta) -
-      edgeCompensation("butt", m, m, T, theta);
-    expect(widths[0]).toBeCloseTo(expected, 6);
-    expect(expectTabsMatchSlots(r)).toBe(12);
-    expect(r.parts.every((p) => p.joints.every((j) => j.kind !== "finger"))).toBe(true);
-  });
-
-  it("star prism: 12 parts with concave and acute warnings", () => {
-    const r = build(fx.starBody());
-    expect(r.parts).toHaveLength(12);
-    const codes = new Set(r.warnings.map((w) => w.code));
-    expect(codes.has("concave-corner")).toBe(true);
-    expect(codes.has("acute-angle")).toBe(true);
-    const concave = r.warnings.find((w) => w.code === "concave-corner");
-    expect(concave?.message).toContain("cannot be reproduced accurately with 5.5 mm MDF");
-    expect(concave?.position).toBeDefined();
-    expect(concave?.connectionId).toBeDefined();
-    expect(r.connections.filter((c) => c.angle > 180)).toHaveLength(5);
-    expectTabsMatchSlots(r);
-  });
-
-  it("triangle prism: 5 parts", () => {
-    const r = build(fx.triangleBody());
-    expect(r.parts).toHaveLength(5);
-    expect(r.connections.filter((c) => c.joint === "flat")).toHaveLength(3);
-    expect(expectTabsMatchSlots(r)).toBeGreaterThan(0);
-  });
-
-  it("pyramid (not a prism): oblique edges get flat joints only", () => {
-    const r = build(fx.pyramidBody());
-    expect(r.parts).toHaveLength(5);
-    expect(r.connections).toHaveLength(8);
-    for (const c of r.connections) expect(c.joint).toBe("flat");
-    for (const p of r.parts) {
-      expect(p.joints).toHaveLength(0);
-      expect(p.paths).toHaveLength(1);
-    }
-    expect(r.warnings.some((w) => w.code === "acute-angle")).toBe(true);
-    expect(r.warnings.some((w) => w.code === "joint-fallback")).toBe(false);
-  });
-
-  it("never forces finger joints on oblique corners", () => {
-    const r = build(fx.frustumBody(), { sideJoint: "finger", capJoint: "finger" });
-    expect(r.parts).toHaveLength(6);
-    for (const c of r.connections) expect(c.joint).toBe("flat");
-    expect(r.parts.every((p) => p.joints.length === 0)).toBe(true);
-    expect(r.warnings.filter((w) => w.code === "joint-fallback").length).toBeGreaterThan(0);
-  });
-
+describe("laser board strategy: box joints", () => {
   it("finger joints on a box are complementary", () => {
     const r = build(fx.boxBody(), { sideJoint: "finger", capJoint: "finger" });
     expect(r.connections.every((c) => c.joint === "finger")).toBe(true);
@@ -378,32 +312,6 @@ describe("laser board strategy: other solids", () => {
     }
   });
 
-  it("skips curved faces with a warning", () => {
-    const r = build(fx.cylinderBody(12));
-    expect(r.parts).toHaveLength(2);
-    expect(r.warnings.some((w) => w.code === "curved-face")).toBe(true);
-    for (const p of r.parts) expect(p.joints).toHaveLength(0);
-  });
-
-  it("handles faces with holes (inner walls tab into the caps)", () => {
-    const hole = [
-      { x: 30, y: 25 },
-      { x: 70, y: 25 },
-      { x: 70, y: 55 },
-      { x: 30, y: 55 },
-    ];
-    const r = build(fx.body(prismTopology(fx.rectangle(100, 80), 50, [hole]), "frame"));
-    expect(r.parts).toHaveLength(10);
-    const top = byName(r, "top");
-    expect(top.holes).toHaveLength(1);
-    expect(fx.polygonSize(top.holes[0]!)).toEqual({ width: 40, height: 30 });
-    expect(top.paths.filter((p) => p.role === "hole")).toHaveLength(1);
-    expect(r.connections.filter((c) => c.joint === "tab-slot")).toHaveLength(16);
-    expect(r.connections.filter((c) => c.angle > 180)).toHaveLength(4);
-    expect(r.warnings.filter((w) => w.code === "concave-corner")).toHaveLength(4);
-    expect(expectTabsMatchSlots(r)).toBeGreaterThanOrEqual(16);
-  });
-
   it("honours role overrides", () => {
     const base = build(fx.boxBody());
     const caps = base.parts.filter((p) => p.joints.some((j) => j.kind === "slot"));
@@ -413,6 +321,356 @@ describe("laser board strategy: other solids", () => {
     expect(forced.length).toBe(2);
     expect(forced.some((p) => p.sourceFaces[0] === 0 || p.sourceFaces[0] === 1)).toBe(false);
     expectTabsMatchSlots(r);
+  });
+});
+
+const kindOf = (b: ReturnType<typeof fx.body>, material = fx.MDF) =>
+  classifyBoardBody(b, material);
+
+function expectUnsupported(b: ReturnType<typeof fx.body>, reason: RegExp): FabricationResult {
+  const c = kindOf(b);
+  expect(c.kind).toBe("unsupported");
+  expect(c.reason).toMatch(reason);
+  const r = build(b);
+  expect(r.parts).toHaveLength(0);
+  expect(r.connections).toHaveLength(0);
+  expect(r.classification).toMatchObject({
+    kind: "unsupported",
+    label: "Unsupported body",
+    supported: false,
+  });
+  expect(r.classification?.reason).toBe(c.reason);
+  expect(r.warnings).toHaveLength(1);
+  const w = r.warnings[0]!;
+  expect(w.code).toBe("unsupported-board-shape");
+  expect(w.severity).toBe("error");
+  expect(w.message).toContain("cannot be automatically fabricated from 5.5 mm MDF");
+  expect(w.message).toContain("flat sheet parts");
+  expect(w.message).toContain("rectangular boxes");
+  expect(w.message).toContain(c.reason!);
+  return r;
+}
+
+function expectFlatPart(b: ReturnType<typeof fx.body>, settings: Partial<BoardSettings> = {}): FlatPart {
+  expect(kindOf(b).kind).toBe("flat-part");
+  const r = build(b, settings);
+  expect(r.classification).toEqual({ kind: "flat-part", label: "Flat Part", supported: true });
+  expect(r.parts).toHaveLength(1);
+  expect(r.connections).toEqual([]);
+  expect(r.warnings).toEqual([]);
+  const part = r.parts[0]!;
+  expect(part.joints).toEqual([]);
+  expect(part.folds).toEqual([]);
+  expect(part.paths.every((p) => p.role === "outline" || p.role === "hole")).toBe(true);
+  expect(part.paths.every((p) => p.type === "cut" && p.closed)).toBe(true);
+  expect(part.paths.filter((p) => p.role === "outline")).toHaveLength(1);
+  expect(part.edges.every((e) => e.connectionId === undefined)).toBe(true);
+  expect(part.thickness).toBe(5.5);
+  expect(part.sourceFaces).toHaveLength(2);
+  expect(signedArea(part.outline)).toBeGreaterThan(0);
+  return part;
+}
+
+/** Every outline vertex of the part is a vertex of the body's source face, in order. */
+function expectOutlineIsFace(part: FlatPart, b: ReturnType<typeof fx.body>): void {
+  const face = b.topology.faces[part.sourceFaces[0]!]!;
+  const loops = [part.outline, ...part.holes];
+  expect(loops).toHaveLength(face.loops.length);
+  loops.forEach((loop, li) => {
+    expect(loop).toHaveLength(face.loops[li]!.length);
+    loop.forEach((p, i) => {
+      const v = b.topology.vertices[face.loops[li]![i]!]!;
+      expect(dist3(fx.toWorld(part, p), v)).toBeLessThan(1e-9);
+    });
+  });
+}
+
+const tilted = makePlane({ x: 12, y: -7, z: 30 }, { x: 1, y: 2, z: 3 }, { x: 3, y: 0, z: -1 });
+
+describe("board classification: flat part", () => {
+  it("A. 5.5 mm hexagonal sheet: one part, the original hexagon, no joints", () => {
+    const hex = fx.regularPolygon(6, 40);
+    const b = fx.body(prismTopology(hex, 5.5), "hex-sheet");
+    const part = expectFlatPart(b);
+    expect(part.outline).toHaveLength(6);
+    expect(part.holes).toEqual([]);
+    expect(part.paths).toHaveLength(1);
+    expect(part.paths[0]!.points).toHaveLength(6);
+    expect(part.paths[0]!.points).toEqual(part.outline);
+    expect(signedArea(part.outline)).toBeCloseTo(signedArea(hex), 6);
+    for (const e of part.edges) expect(e.length).toBeCloseTo(40, 6);
+    expectOutlineIsFace(part, b);
+    // Seen from above: the part is drawn from the top face.
+    expect(part.frame?.normal.z).toBeCloseTo(1, 9);
+    expect(part.sourceFaces).toEqual([1, 0]);
+  });
+
+  it("B. 5.5 mm rectangular sheet", () => {
+    const b = fx.body(prismTopology(fx.rectangle(120, 70), 5.5), "plate");
+    const part = expectFlatPart(b);
+    expect(fx.polygonSize(part.outline)).toEqual({ width: 120, height: 70 });
+    expect(fx.size(part)).toEqual({ width: 120, height: 70 });
+    expectOutlineIsFace(part, b);
+  });
+
+  it("C. sheet with holes: one outline, holes preserved", () => {
+    const holes = [
+      [
+        { x: 10, y: 10 },
+        { x: 30, y: 10 },
+        { x: 30, y: 25 },
+        { x: 10, y: 25 },
+      ],
+      fx.regularPolygon(5, 8).map((p) => ({ x: p.x + 70, y: p.y + 40 })),
+    ];
+    const b = fx.body(prismTopology(fx.rectangle(100, 80), 5.5, holes), "holes");
+    const part = expectFlatPart(b);
+    expect(part.outline).toHaveLength(4);
+    expect(part.holes).toHaveLength(2);
+    expect(part.paths.filter((p) => p.role === "hole")).toHaveLength(2);
+    const sizes = part.holes.map((h) => fx.polygonSize(h));
+    expect(sizes[0]!.width).toBeCloseTo(20, 6);
+    expect(sizes[0]!.height).toBeCloseTo(15, 6);
+    expect(part.holes[1]).toHaveLength(5);
+    expect(part.edges).toHaveLength(4 + 4 + 5);
+    expect(part.edges.map((e) => e.loop)).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2]);
+    expectOutlineIsFace(part, b);
+  });
+
+  it("works for triangles, stars and tilted sheets", () => {
+    for (const profile of [fx.regularPolygon(3, 50), fx.starPolygon(5, 60, 25)]) {
+      const b = fx.body(prismTopology(profile, 5.5, [], tilted), "sheet");
+      const part = expectFlatPart(b);
+      expect(part.outline).toHaveLength(profile.length);
+      expect(signedArea(part.outline)).toBeCloseTo(Math.abs(signedArea(profile)), 6);
+      expectOutlineIsFace(part, b);
+    }
+  });
+
+  it("accepts facetted round walls: a disc and a plate with a round hole", () => {
+    const curve = (topology: ReturnType<typeof prismTopology>, from: number) => {
+      for (const face of topology.faces) {
+        if (face.id >= from) {
+          face.surface = "curved";
+          face.sourceFace = from;
+        }
+      }
+      for (const edge of topology.edges) {
+        if (edge.faces.every((f) => f >= from)) edge.smooth = true;
+      }
+      return topology;
+    };
+    const disc = fx.body(curve(prismTopology(fx.regularPolygon(24, 30), 5.5), 2), "disc");
+    const discPart = expectFlatPart(disc);
+    expect(discPart.outline).toHaveLength(24);
+    expectOutlineIsFace(discPart, disc);
+
+    const round = fx.regularPolygon(16, 10).map((p) => ({ x: p.x + 50, y: p.y + 40 }));
+    // Faces 0, 1 = caps, 2..5 = outer walls, 6.. = wall of the round hole.
+    const plate = fx.body(curve(prismTopology(fx.rectangle(100, 80), 5.5, [round]), 6), "plate");
+    const platePart = expectFlatPart(plate);
+    expect(platePart.holes).toHaveLength(1);
+    expect(platePart.holes[0]).toHaveLength(16);
+    expectOutlineIsFace(platePart, plate);
+  });
+
+  it("applies kerf compensation and nothing else", () => {
+    const b = fx.body(prismTopology(fx.rectangle(100, 80), 5.5, [
+      [
+        { x: 30, y: 25 },
+        { x: 70, y: 25 },
+        { x: 70, y: 55 },
+        { x: 30, y: 55 },
+      ],
+    ]), "frame");
+    const part = expectFlatPart(b, { kerfCompensation: true });
+    const kerf = fx.MDF.kerf;
+    expect(fx.size(part).width).toBeCloseTo(100 + kerf, 6);
+    expect(fx.size(part).height).toBeCloseTo(80 + kerf, 6);
+    const hole = fx.polygonSize(part.paths.find((p) => p.role === "hole")!.points);
+    expect(hole.width).toBeCloseTo(40 - kerf, 6);
+    expect(hole.height).toBeCloseTo(30 - kerf, 6);
+    // Nominal geometry is untouched; the fit offset plays no part.
+    expect(fx.polygonSize(part.outline)).toEqual({ width: 100, height: 80 });
+    const noFit = fabricate(b, { ...fx.MDF, fitOffset: 0.7 }, laserBoardStrategy, {
+      kerfCompensation: true,
+    });
+    expect(noFit.parts[0]!.paths).toEqual(part.paths);
+  });
+
+  it("J. thickness mismatch: a 6.0 mm body is not a flat part of 5.5 mm MDF", () => {
+    const b = fx.body(prismTopology(fx.regularPolygon(6, 40), 6), "hex-6");
+    expect(kindOf(b).reasonCode).toBe("thickness-mismatch");
+    expectUnsupported(b, /6 mm thick.*5\.5 mm MDF/);
+    const plate = fx.body(prismTopology(fx.rectangle(120, 70), 6), "plate-6");
+    expect(kindOf(plate).kind).not.toBe("flat-part");
+    expectUnsupported(plate, /6 mm thick/);
+    // Within the tolerance (default 0.1 mm) the body is the sheet.
+    const close = fx.body(prismTopology(fx.regularPolygon(6, 40), 5.58), "hex-5.58");
+    expect(kindOf(close).kind).toBe("flat-part");
+    expect(classifyBoardBody(close, fx.MDF, { thicknessTolerance: 0.05 }).kind).toBe("unsupported");
+    expect(build(close, { thicknessTolerance: 0.05 }).parts).toHaveLength(0);
+    // The same body is a flat part of a 6 mm material.
+    expect(classifyBoardBody(b, { ...fx.MDF, thickness: 6 }).kind).toBe("flat-part");
+  });
+
+  it("does not take a body with sloped or stepped walls for a sheet", () => {
+    // Frustum 5.5 mm high: parallel faces at the right distance, but different profiles.
+    const frustum = fx.topologyFromLoops(
+      [
+        { x: 0, y: 0, z: 0 },
+        { x: 100, y: 0, z: 0 },
+        { x: 100, y: 100, z: 0 },
+        { x: 0, y: 100, z: 0 },
+        { x: 2, y: 2, z: 5.5 },
+        { x: 98, y: 2, z: 5.5 },
+        { x: 98, y: 98, z: 5.5 },
+        { x: 2, y: 98, z: 5.5 },
+      ],
+      [
+        [0, 3, 2, 1],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7],
+      ],
+    );
+    expectUnsupported(fx.body(frustum, "chamfered"), /non-90°/);
+    // An L-shaped bar 5.5 mm wide: its largest faces are not 5.5 mm apart.
+    const l = [
+      { x: 0, y: 0 },
+      { x: 60, y: 0 },
+      { x: 60, y: 20 },
+      { x: 20, y: 20 },
+      { x: 20, y: 50 },
+      { x: 0, y: 50 },
+    ];
+    expectUnsupported(fx.body(prismTopology(l, 40), "l-bar"), /not a rectangular box/);
+  });
+});
+
+describe("board classification: rectangular box", () => {
+  it("D. 100 × 80 × 50 box: six parts", () => {
+    const c = kindOf(fx.boxBody());
+    expect(c.kind).toBe("rectangular-box");
+    expect(c.box?.size).toEqual([50, 80, 100]);
+    expect(c.box?.pairs).toHaveLength(3);
+    const r = build();
+    expect(r.classification).toEqual({
+      kind: "rectangular-box",
+      label: "Rectangular Box",
+      supported: true,
+    });
+    expect(r.parts).toHaveLength(6);
+    expect(r.connections).toHaveLength(12);
+  });
+
+  it("I. rotated box: recognised, same panels as the axis-aligned box", () => {
+    const b = fx.body(prismTopology(fx.rectangle(100, 80), 50, [], tilted), "tilted");
+    expect(kindOf(b).kind).toBe("rectangular-box");
+    const r = build(b);
+    const straight = build();
+    expect(r.parts).toHaveLength(6);
+    expect(r.warnings).toEqual([]);
+    expect(r.connections.map((c) => c.joint)).toEqual(straight.connections.map((c) => c.joint));
+    r.parts.forEach((p, i) => {
+      const q = straight.parts[i]!;
+      expect(p.sourceFaces).toEqual(q.sourceFaces);
+      expect(fx.size(p).width).toBeCloseTo(fx.size(q).width, 6);
+      expect(fx.size(p).height).toBeCloseTo(fx.size(q).height, 6);
+      expect(p.joints.map((j) => j.kind)).toEqual(q.joints.map((j) => j.kind));
+    });
+    expect(expectTabsMatchSlots(r)).toBe(expectTabsMatchSlots(straight));
+  });
+
+  it("rejects a box too small for two panels", () => {
+    const b = fx.body(prismTopology(fx.rectangle(100, 80), 10), "thin");
+    expect(kindOf(b).reasonCode).toBe("thickness-mismatch");
+    const cube = fx.body(prismTopology(fx.rectangle(10, 10), 10), "cube");
+    expect(kindOf(cube).reasonCode).toBe("thickness-mismatch");
+    expect(build(cube).parts).toHaveLength(0);
+  });
+
+  it("rejects a sheared box (parallelepiped)", () => {
+    const sheared = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 130, y: 80 },
+      { x: 30, y: 80 },
+    ];
+    expectUnsupported(fx.body(prismTopology(sheared, 50), "sheared"), /non-90°/);
+  });
+});
+
+describe("board classification: unsupported", () => {
+  it("E. 60 mm hexagonal prism", () => {
+    const r = expectUnsupported(fx.hexBody(), /non-90° panel joints/);
+    expect(kindOf(fx.hexBody()).reasonCode).toBe("non-right-angle");
+    expect(r.warnings[0]!.message).toContain("120°");
+  });
+
+  it("F. triangular prism", () => {
+    expectUnsupported(fx.triangleBody(), /non-90° panel joints/);
+  });
+
+  it("G. pyramid", () => {
+    expectUnsupported(fx.pyramidBody(), /non-90° panel joints/);
+  });
+
+  it("H. frustum: no flat-joint fallback", () => {
+    expectUnsupported(fx.frustumBody(), /non-90° panel joints/);
+    const r = build(fx.frustumBody(), { sideJoint: "finger", capJoint: "finger" });
+    expect(r.parts).toHaveLength(0);
+    expect(r.warnings.some((w) => w.code === "joint-fallback")).toBe(false);
+  });
+
+  it("star prism and box with an opening", () => {
+    expectUnsupported(fx.starBody(), /non-90° panel joints/);
+    const hole = [
+      { x: 30, y: 25 },
+      { x: 70, y: 25 },
+      { x: 70, y: 55 },
+      { x: 30, y: 55 },
+    ];
+    const frame = fx.body(prismTopology(fx.rectangle(100, 80), 50, [hole]), "frame");
+    expectUnsupported(frame, /not a rectangular box/);
+  });
+
+  it("curved body", () => {
+    expectUnsupported(fx.cylinderBody(12), /curved face/);
+    expect(kindOf(fx.cylinderBody(12)).reasonCode).toBe("curved-faces");
+  });
+
+  it("open and broken bodies", () => {
+    const open = fx.boxBody();
+    open.topology.faces.pop();
+    for (const e of open.topology.edges) e.faces = e.faces.filter((f) => f < 5);
+    expectUnsupported(open, /not a closed solid/);
+    const broken = {
+      id: "broken",
+      name: "broken",
+      topology: {
+        vertices: [{ x: 0, y: 0, z: 0 }],
+        faces: [
+          {
+            id: 0,
+            sourceFace: 0,
+            surface: "plane" as const,
+            normal: { x: 0, y: 0, z: 1 },
+            loops: [[0, 5, 9]],
+          },
+        ],
+        edges: [{ id: 0, a: 0, b: 7, faces: [0, 3], smooth: false }],
+      },
+    };
+    expectUnsupported(broken, /no usable solid geometry/);
+  });
+
+  it("is deterministic", () => {
+    for (const b of [fx.boxBody(), fx.hexBody(), fx.pyramidBody()]) {
+      expect(classifyBoardBody(b, fx.MDF)).toEqual(classifyBoardBody(b, fx.MDF));
+    }
   });
 });
 

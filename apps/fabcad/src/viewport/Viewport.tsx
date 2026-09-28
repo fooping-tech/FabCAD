@@ -1,5 +1,11 @@
 import { planeToWorld, type Vec3 } from "@fabcad/geometry";
-import { resolveSketchPlane } from "@fabcad/features";
+import {
+  type PlanePatch,
+  facePlanePatch,
+  offsetPlanePatch,
+  originPlanePatch,
+  resolveSketchPlane,
+} from "@fabcad/features";
 import { profileRefOf, sketchBounds } from "@fabcad/sketch";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import {
@@ -12,12 +18,14 @@ import {
   pickInDialog,
   startSketchOnFace,
   startSketchOnOrigin,
+  startSketchOnPlane,
 } from "../app/actions";
 import {
   type Dialog,
   type Selection,
   type SolidDialog,
   appState,
+  isAdditiveClick,
   select,
   selectionKey,
   toast,
@@ -32,13 +40,21 @@ import {
   facesOfFeatures,
   vertexPointOf,
 } from "../app/topology";
-import type { TopologyRef } from "@fabcad/cad-document";
-import { documentStore, editSketchSolved, modelState, sketchView, useDocument } from "../app/session";
+import { type PlaneReference, type TopologyRef, evaluateAs } from "@fabcad/cad-document";
+import {
+  currentScope,
+  documentStore,
+  editSketchSolved,
+  modelState,
+  sketchView,
+  useDocument,
+} from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { useNumericKeypad } from "../panels/ExpressionInput";
 import { projectPick } from "../sketch/projectTool";
 import { type HoverProfile, SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
+import { createDoubleTapDetector } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
 import {
@@ -72,6 +88,8 @@ function pickToSelection(pick: Pick3D): Selection {
       return { ...pick };
     case "origin-plane":
       return { kind: "origin-plane", plane: pick.plane };
+    case "plane":
+      return { kind: "plane", featureId: pick.featureId };
   }
 }
 
@@ -87,6 +105,8 @@ function selectionToHighlight(s: Selection): Highlight | null {
       return { kind: "vertex", bodyId: s.bodyId, point: s.point };
     case "origin-plane":
       return { kind: "origin-plane", plane: s.plane };
+    case "plane":
+      return { kind: "plane", featureId: s.featureId };
     default:
       return null;
   }
@@ -132,8 +152,31 @@ function dialogHighlights(dialog: Dialog | null, scene: ViewportScene): Highligh
       if (point && p.type === "vertex") out.push({ kind: "vertex", bodyId: p.bodyId, point });
     }
     for (const plane of refs.originPlanes) out.push({ kind: "origin-plane", plane });
+    for (const featureId of refs.planes) out.push({ kind: "plane", featureId });
   }
   return out;
+}
+
+/** The patch of a plane reference as the view shows it, or null while it cannot be told. */
+function referencePatch(ref: PlaneReference): PlanePatch | null {
+  if (ref.type === "origin-plane") return originPlanePatch(ref.plane);
+  if (ref.type === "plane") return modelState.get().planes[ref.featureId] ?? null;
+  const geometry = modelState.get().bodies[ref.bodyId]?.geometry;
+  const index = faceIndexOf(ref.bodyId, ref.ref);
+  return geometry && index >= 0 ? facePlanePatch(geometry, index) : null;
+}
+
+/** The plane that the Offset Plane dialog would make, for the preview. */
+function offsetPlanePreview(dialog: Dialog | null): PlanePatch | null {
+  if (dialog?.type !== "offset-plane" || !dialog.base) return null;
+  const base = referencePatch(dialog.base);
+  if (!base) return null;
+  try {
+    const offset = evaluateAs(dialog.offset, "length", currentScope());
+    return Number.isFinite(offset) ? offsetPlanePatch(base, offset) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function Viewport(): ReactElement {
@@ -175,12 +218,13 @@ export function Viewport(): ReactElement {
       return {
         x: e.clientX - r.left,
         y: e.clientY - r.top,
-        shift: e.shiftKey,
+        // The multi-selection mode stands in for Shift where there is no keyboard.
+        shift: e.shiftKey || appState.get().multiSelect,
         meta: e.metaKey || e.ctrlKey,
       };
     };
 
-    let down: { x: number; y: number; button: number } | null = null;
+    let down: { x: number; y: number; button: number; time: number } | null = null;
 
     /** What the active input of a feature dialog would take from under the pointer. */
     const hoverForDialog = (dialog: SolidDialog, x: number, y: number): void => {
@@ -226,7 +270,7 @@ export function Viewport(): ReactElement {
           vertices: false,
           originPlanes: wants.originPlanes === true,
         });
-        if (pick?.kind === "origin-plane") hover = pickToSelection(pick);
+        if (pick?.kind === "origin-plane" || pick?.kind === "plane") hover = pickToSelection(pick);
         else if (pick?.kind === "face" && (wants.faces === "any" || pick.planar)) {
           hover = pickToSelection(pick);
         }
@@ -296,7 +340,8 @@ export function Viewport(): ReactElement {
       // Sketches lie on top of the face or origin plane they were drawn on: their curves and
       // profiles win over what is below. Edges and vertices of bodies keep their priority,
       // and so does an explicit selection filter.
-      const below = hover?.kind === "face" || hover?.kind === "origin-plane";
+      const below =
+        hover?.kind === "face" || hover?.kind === "origin-plane" || hover?.kind === "plane";
       if (!dialog && (hover === null || (below && filter === "auto"))) {
         const entity = controller.entityAt(x, y);
         if (entity) {
@@ -321,6 +366,7 @@ export function Viewport(): ReactElement {
 
       if (dialog?.type === "pick-sketch-plane") {
         if (hover?.kind === "origin-plane") startSketchOnOrigin(hover.plane);
+        else if (hover?.kind === "plane") startSketchOnPlane(hover.featureId);
         else if (hover?.kind === "face" && hover.planar) {
           startSketchOnFace(hover.bodyId, hover.point, hover.normal, hover.faceIndex);
         } else if (hover?.kind === "face") {
@@ -495,7 +541,10 @@ export function Viewport(): ReactElement {
 
     const projectHover = (x: number, y: number): Selection | null => {
       const pick = scene.pick(x, y, { faces: true, edges: true, vertices: true });
-      const hover = pick && pick.kind !== "origin-plane" ? pickToSelection(pick) : null;
+      const hover =
+        pick && pick.kind !== "origin-plane" && pick.kind !== "plane"
+          ? pickToSelection(pick)
+          : null;
       const prev = appState.get().hover;
       if ((prev ? selectionKey(prev) : "") !== (hover ? selectionKey(hover) : "")) {
         appState.set({ hover });
@@ -526,7 +575,6 @@ export function Viewport(): ReactElement {
 
     const onPointerDown = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
-      lastPointerType = e.pointerType;
       controller.setCoarse(touch);
       scene.setTouchInput(touch);
       if (touch) {
@@ -534,27 +582,13 @@ export function Viewport(): ReactElement {
         if (e.isPrimary) touches.clear();
         touches.add(e.pointerId);
       }
-      down = { x: e.clientX, y: e.clientY, button: e.button };
-      cancelLongPress();
+      down = { x: e.clientX, y: e.clientY, button: e.button, time: e.timeStamp };
       if (e.button !== 0) return;
       const p = info(e);
 
-      if (touch && touches.size === 1) {
-        const origin = { clientX: e.clientX, clientY: e.clientY };
-        longPress = setTimeout(() => {
-          longPress = null;
-          if (touches.size !== 1 || manipulator || appState.get().contextMenu) return;
-          // The finger is still down: whatever it started is called off in favour of the menu.
-          if (touchPick) touchPick.aborted = true;
-          touchPan = null;
-          controller.cancelDrag();
-          down = null;
-          contextAt(origin, p, true);
-        }, 550);
-      }
-
       if (touch && touches.size > 1) {
         // A second finger means pan / zoom: whatever the first finger started is called off.
+        doubleTap.reset();
         if (touchPick) touchPick.aborted = true;
         touchPan = null;
         controller.cancelDrag();
@@ -614,9 +648,6 @@ export function Viewport(): ReactElement {
 
     const onPointerMove = (e: PointerEvent): void => {
       const p = info(e);
-      if (longPress && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) {
-        cancelLongPress();
-      }
       if (manipulator) {
         if (e.pointerId !== manipulator.pointerId) return;
         const t = scene.axisParameter(p.x, p.y, manipulator.base, manipulator.normal);
@@ -657,7 +688,10 @@ export function Viewport(): ReactElement {
       hover3d(p.x, p.y);
     };
 
-    /** Right-click or long-press: select what is under the pointer and open the menu. */
+    /**
+     * Right-click, or double tap on a touch screen: select what is under the pointer and open
+     * the menu.
+     */
     const contextAt = (
       e: { clientX: number; clientY: number },
       p: ReturnType<typeof info>,
@@ -688,16 +722,47 @@ export function Viewport(): ReactElement {
       openContextMenu(e.clientX, e.clientY, held);
     };
 
-    let lastPointerType = "mouse";
-    let longPress: ReturnType<typeof setTimeout> | null = null;
-    const cancelLongPress = (): void => {
-      if (longPress) clearTimeout(longPress);
-      longPress = null;
+    /**
+     * Double tap is what opens the context menu on a touch screen. The first tap selects as
+     * usual; the selection from before it comes back with the second tap, so that the menu
+     * acts on what was selected, as a right-click on a selected object does.
+     */
+    const doubleTap = createDoubleTapDetector<{ selection: Selection[] }>();
+    /** When the last double tap opened the menu: the `dblclick` that follows is part of it. */
+    let doubleTapAt = -Infinity;
+
+    /** Whether a double tap opens the context menu in the state the editor is in. */
+    const doubleTapOpensMenu = (): boolean => {
+      const state = appState.get();
+      if (state.workspace !== "design" || state.measuring) return false;
+      // A running sketch tool places points with taps; its commands are on the touch bar.
+      if (state.activeSketchId) return state.tool === "select";
+      return true;
+    };
+
+    /** True when the lifted finger was the second tap of a double tap and the menu opened. */
+    const handleDoubleTap = (e: PointerEvent, start: NonNullable<typeof down>): boolean => {
+      if (!doubleTapOpensMenu() || manipulator || touches.size > 0) {
+        doubleTap.reset();
+        return false;
+      }
+      const second = doubleTap.tap(
+        { x: start.x, y: start.y, time: start.time },
+        { x: e.clientX, y: e.clientY, time: e.timeStamp },
+        { selection: appState.get().selection },
+      );
+      if (!second) return false;
+      doubleTapAt = e.timeStamp;
+      touchPick = null;
+      touchPan = null;
+      controller.cancelDrag();
+      appState.set({ selection: second.first.selection });
+      contextAt(e, info(e));
+      return true;
     };
 
     const onPointerUp = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
-      cancelLongPress();
       if (touch) touches.delete(e.pointerId);
       if (e.button === 2 && !manipulator) {
         const start = down;
@@ -720,6 +785,7 @@ export function Viewport(): ReactElement {
       down = null;
       if (e.button !== 0) return;
       const p = info(e);
+      if (touch && start && e.target === webgl && handleDoubleTap(e, start)) return;
       if (appState.get().activeSketchId) {
         if (touchPan) {
           const pan = touchPan;
@@ -746,10 +812,11 @@ export function Viewport(): ReactElement {
       if (!start || start.button !== 0) return;
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > (touch ? 12 : 4)) return;
       if (appState.get().workspace !== "design") return;
-      click3d(p.x, p.y, p.shift || p.meta);
+      click3d(p.x, p.y, isAdditiveClick(e));
     };
     const onPointerCancel = (e: PointerEvent): void => {
       touches.delete(e.pointerId);
+      doubleTap.reset();
       if (touchPick?.id === e.pointerId) touchPick = null;
       if (touchPan?.id === e.pointerId) touchPan = null;
       if (manipulator?.pointerId === e.pointerId) {
@@ -760,6 +827,8 @@ export function Viewport(): ReactElement {
       down = null;
     };
     const onDoubleClick = (e: MouseEvent): void => {
+      // The double tap that opened the context menu is not a double click as well.
+      if (e.timeStamp - doubleTapAt < 600) return;
       const state = appState.get();
       if (state.activeSketchId) {
         controller.doubleClick(info(e));
@@ -778,15 +847,10 @@ export function Viewport(): ReactElement {
       appState.set({ cursor: null });
     };
     const onContextMenu = (e: MouseEvent): void => {
+      // The menu of the mouse opens on the release of the right button (a right-drag orbits).
+      // Android reports a long press as a context menu event: on a touch screen the menu
+      // belongs to the double tap, so there is nothing to do but keep the browser's menu away.
       e.preventDefault();
-      // Android reports a long press as a context menu event (and cancels the touch).
-      if (lastPointerType !== "touch" || appState.get().contextMenu) return;
-      cancelLongPress();
-      if (touchPick) touchPick.aborted = true;
-      touchPan = null;
-      controller.cancelDrag();
-      down = null;
-      contextAt(e, info(e), touches.size > 0);
     };
     // iOS Safari: keep the page itself from zooming while the view is pinched.
     const onGesture = (e: Event): void => e.preventDefault();
@@ -888,6 +952,21 @@ export function Viewport(): ReactElement {
     scene.invalidate();
   }, [model.bodies, doc.bodies, doc.origin, ready]);
 
+  // ------------------------------------------------- construction planes
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const sketching = app.activeSketchId !== null;
+    scene.setPlanes(
+      Object.values(model.planes).flatMap((p) => {
+        const f = doc.features[p.id];
+        if (f?.type !== "offset-plane") return [];
+        // Like the origin planes, construction planes step back while sketching.
+        return [{ id: p.id, patch: p, visible: f.visible && !sketching }];
+      }),
+    );
+  }, [model.planes, doc.features, app.activeSketchId, ready]);
+
   // ------------------------------------------------------------- highlights
   useEffect(() => {
     const scene = sceneRef.current;
@@ -897,6 +976,9 @@ export function Viewport(): ReactElement {
     for (const s of app.selection) {
       const h = selectionToHighlight(s);
       if (h) items.push({ highlight: h, mode: "selected" });
+      if (s.kind === "feature" && doc.features[s.featureId]?.type === "offset-plane") {
+        items.push({ highlight: { kind: "plane", featureId: s.featureId }, mode: "selected" });
+      }
       if (s.kind === "feature") {
         for (const b of Object.values(doc.bodies)) {
           if (b.createdBy === s.featureId) {
@@ -911,7 +993,15 @@ export function Viewport(): ReactElement {
     }
     scene.setHighlights(items);
     controllerRef.current?.requestDraw();
-  }, [app.selection, app.hover, app.dialog, model.bodies, doc.bodies, ready]);
+  }, [app.selection, app.hover, app.dialog, model.bodies, model.planes, doc.bodies, ready]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const showing = !app.activeSketchId && app.workspace === "design";
+    scene.setPlanePreview(showing ? offsetPlanePreview(app.dialog) : null);
+    // `doc.parameters`: the offset may be an expression.
+  }, [app.dialog, app.activeSketchId, app.workspace, doc.parameters, model.planes, model.bodies, ready]);
 
   // ---------------------------------------------------- extrude preview
   useEffect(() => {

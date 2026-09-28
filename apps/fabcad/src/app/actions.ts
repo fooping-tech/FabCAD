@@ -84,6 +84,7 @@ const titleCase = (id: string): string =>
 /** Names and icons of the commands that open a feature dialog. */
 export const DIALOG_COMMANDS: Partial<Record<Dialog["type"], { label: string; icon: string }>> = {
   "pick-sketch-plane": { label: "Create Sketch", icon: "new-sketch" },
+  "offset-plane": { label: "Offset Plane", icon: "offset-plane" },
   extrude: { label: "Extrude", icon: "extrude" },
   revolve: { label: "Revolve", icon: "revolve" },
   sweep: { label: "Sweep", icon: "sweep" },
@@ -171,12 +172,27 @@ export function beginSketchPlanePick(tool: string | null = null): void {
     startSketchOnFace(first.bodyId, first.point, first.normal, first.faceIndex);
     return;
   }
+  if (first?.kind === "plane" && startSketchOnPlane(first.featureId)) return;
   appState.set({
     dialog: { type: "pick-sketch-plane" },
     tool: "select",
     selection: [],
-    hint: "Select an origin plane or a planar face for the sketch",
+    hint: "Select a plane or a planar face for the sketch",
   });
+}
+
+/**
+ * A pick made while Create Sketch asks for its plane, outside the viewport (in the browser).
+ * Returns true when the command is waiting for a plane, whether or not this was one.
+ */
+export function pickSketchPlane(item: Selection): boolean {
+  if (appState.get().dialog?.type !== "pick-sketch-plane") return false;
+  if (item.kind === "origin-plane") startSketchOnOrigin(item.plane);
+  else if (item.kind === "plane") startSketchOnPlane(item.featureId);
+  else if (item.kind === "face" && item.planar) {
+    startSketchOnFace(item.bodyId, item.point, item.normal, item.faceIndex);
+  }
+  return true;
 }
 
 export function startSketch(plane: SketchPlaneRef, prepare?: (sketch: Sketch) => Sketch): void {
@@ -195,6 +211,17 @@ export function startSketch(plane: SketchPlaneRef, prepare?: (sketch: Sketch) =>
 
 export function startSketchOnOrigin(plane: OriginPlaneName): void {
   startSketch({ type: "origin", plane });
+}
+
+/** Sketch on a construction plane. False when the plane has not been evaluated (yet). */
+export function startSketchOnPlane(featureId: string): boolean {
+  const plane = modelState.get().planes[featureId]?.plane;
+  if (!plane) {
+    toast("This plane is not available. It may be suppressed or its reference is missing.", "warning");
+    return false;
+  }
+  startSketch({ type: "plane", featureId, plane });
+  return true;
 }
 
 /**
@@ -461,7 +488,11 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
         selection,
         (p, d) =>
           sourcePlan(p) ??
-          (p.kind === "origin-plane" || p.kind === "face" ? (d.plane ? null : "plane") : null),
+          (p.kind === "origin-plane" || p.kind === "face" || p.kind === "plane"
+            ? d.plane
+              ? null
+              : "plane"
+            : null),
       );
     case "move":
       return preselect<Extract<SolidDialog, { type: "move" }>>(
@@ -515,7 +546,12 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
           picking: "body",
         },
         selection,
-        (p, d) => (p.kind === "origin-plane" || p.kind === "face" ? (d.tool ? null : "tool") : null),
+        (p, d) =>
+          p.kind === "origin-plane" || p.kind === "face" || p.kind === "plane"
+            ? d.tool
+              ? null
+              : "tool"
+            : null,
       );
     }
     case "sweep":
@@ -544,6 +580,15 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
         selection,
         (p) => (p.kind === "profile" || p.kind === "face" ? "" : null),
       );
+    case "offset-plane":
+      return preselect<Extract<SolidDialog, { type: "offset-plane" }>>(
+        { type, editing: null, base: null, offset: "10", picking: "base" },
+        selection,
+        (p, d) =>
+          (p.kind === "origin-plane" || p.kind === "face" || p.kind === "plane") && !d.base
+            ? "base"
+            : null,
+      );
   }
 }
 
@@ -568,6 +613,7 @@ export function openDialog(type: Dialog["type"]): void {
     case "split":
     case "sweep":
     case "loft":
+    case "offset-plane":
       dialog = newSolidDialog(type, [...inSketch, ...selection]);
       break;
     case "extrude":
@@ -777,6 +823,7 @@ export function editFeature(featureId: string): void {
     case "split":
     case "sweep":
     case "loft":
+    case "offset-plane":
       dialog = dialogFromFeature(f);
       break;
   }
@@ -1061,7 +1108,7 @@ export function deleteSelection(): void {
   const features = new Set<string>();
   const doc = documentStore.document;
   for (const s of selection) {
-    if (s.kind === "feature") features.add(s.featureId);
+    if (s.kind === "feature" || s.kind === "plane") features.add(s.featureId);
     if (s.kind === "body") {
       const b = doc.bodies[s.bodyId];
       if (b) features.add(b.createdBy);
@@ -1103,6 +1150,8 @@ export const featureIcon = (feature: Feature): string => {
   switch (feature.type) {
     case "sketch":
       return "sketch";
+    case "offset-plane":
+      return "offset-plane";
     case "extrude":
       return "extrude";
     case "revolve":

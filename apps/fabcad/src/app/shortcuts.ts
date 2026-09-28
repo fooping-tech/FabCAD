@@ -10,7 +10,7 @@ import {
   stopMeasure,
 } from "./actions";
 import { appState, setSelection } from "./appState";
-import { setBodyVisible, setSketchVisible } from "@fabcad/cad-document";
+import { setBodyVisible, setPlaneVisible, setSketchVisible } from "@fabcad/cad-document";
 import { documentStore, redo, run, saveProject, undo } from "./session";
 
 export interface ShortcutHooks {
@@ -78,7 +78,7 @@ function pressPull(): void {
   openDialog(edges ? "fillet" : "extrude");
 }
 
-/** V: show or hide the selected bodies and sketches. */
+/** V: show or hide the selected bodies, sketches and construction planes. */
 function toggleVisibility(): boolean {
   const { selection } = appState.get();
   const doc = documentStore.document;
@@ -86,10 +86,15 @@ function toggleVisibility(): boolean {
   const bodies = new Set<string>();
   for (const s of selection) {
     if ("bodyId" in s) bodies.add(s.bodyId);
+    if (s.kind === "plane") {
+      const f = doc.features[s.featureId];
+      if (f?.type === "offset-plane") done = run(setPlaneVisible(f.id, !f.visible)) || done;
+    }
     if (s.kind === "feature" || s.kind === "profile" || s.kind === "entity") {
       const id = s.kind === "feature" ? s.featureId : s.sketchId;
       const f = doc.features[id];
       if (f?.type === "sketch") done = run(setSketchVisible(id, !f.visible)) || done;
+      if (f?.type === "offset-plane") done = run(setPlaneVisible(id, !f.visible)) || done;
       for (const b of Object.values(doc.bodies)) if (b.createdBy === id) bodies.add(b.id);
     }
   }

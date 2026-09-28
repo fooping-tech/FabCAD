@@ -42,6 +42,8 @@ import {
   sketchTexts,
   textBox,
   sketchFillet,
+  alignPoint,
+  alignmentReferences,
   snapPoint,
   trimCurve,
   windowBounds,
@@ -92,6 +94,7 @@ import {
   drawDimensions,
   drawGrid,
   drawSketchGeometry,
+  drawAlignmentGuides,
   drawSnapMarker,
   fillRegion,
   labelPositionOf,
@@ -110,6 +113,15 @@ const toGrid = (v: number): number => {
   return Object.is(r, -0) ? 0 : r;
 };
 const snapToGrid = (p: Vec2): Vec2 => ({ x: toGrid(p.x), y: toGrid(p.y) });
+
+/** Reach of the horizontal / vertical inference, in pixels. */
+const ALIGN_PX = 6;
+/**
+ * A finger reaches further than a mouse, but less so for lining up than for picking: every
+ * point of the sketch pulls along two lines, and a wide band around each would make the
+ * cursor stick.
+ */
+const ALIGN_REACH_MAX = 1.5;
 
 const HIT_PX = 7;
 const SNAP_PX = 9;
@@ -172,6 +184,8 @@ export class SketchController {
   private picks: ToolPick[] = [];
   private entityPicks: EntityId[] = [];
   private cursor: ToolPick | null = null;
+  /** What the point being dragged is lined up with, for the guides. */
+  private dragAlignment: { at: Vec2; aligned: NonNullable<ToolPick["aligned"]> } | null = null;
   private preview: BuiltShape | null = null;
   private previewSketch: Sketch | null = null;
   private drag: Drag | null = null;
@@ -222,13 +236,55 @@ export class SketchController {
       ? { point: raw, kind: "none" }
       : snapPoint(sketch, raw, px * SNAP_PX * this.reach, exclude);
     if (snap.kind !== "none") return { position: snap.point, snap };
-    // Nothing to snap to: land on whole millimetres (Ctrl / Cmd switches all snapping off).
-    const position = this.gridSnap(p) ? snapToGrid(raw) : raw;
-    return { position, snap: { point: position, kind: "none" } };
+    // Nothing to snap to: line up with other points, and land on whole millimetres along the
+    // axes that are left (Ctrl / Cmd switches all snapping off).
+    const free = this.freePosition(sketch, raw, p, px, exclude);
+    const pick: ToolPick = { position: free.position, snap: { point: free.position, kind: "none" } };
+    if (free.aligned) pick.aligned = free.aligned;
+    return pick;
   }
 
   private gridSnap(p: PointerInfo): boolean {
     return !p.meta && appState.get().toolOptions.gridSnap;
+  }
+
+  private alignSnap(p: PointerInfo): boolean {
+    return !p.meta && appState.get().toolOptions.alignSnap;
+  }
+
+  /**
+   * Where a position that snapped to nothing goes. Horizontal / vertical inference comes
+   * first: above, below or beside a point of the sketch or a pick of the running command the
+   * position takes the coordinate of that point. The other coordinate, or both, fall on the
+   * grid. `px` is the size of a pixel in the sketch, so the reach is the same at every zoom.
+   */
+  private freePosition(
+    sketch: Sketch,
+    raw: Vec2,
+    p: PointerInfo,
+    px: number,
+    exclude: EntityId[] = [],
+  ): { position: Vec2; aligned?: NonNullable<ToolPick["aligned"]> } {
+    const grid = this.gridSnap(p);
+    const onGrid = grid ? snapToGrid(raw) : raw;
+    if (!this.alignSnap(p)) return { position: onGrid };
+    const references = [
+      ...alignmentReferences(sketch, exclude),
+      ...this.picks.map((pick) => pick.position),
+    ];
+    const tolerance = px * ALIGN_PX * Math.min(this.reach, ALIGN_REACH_MAX);
+    const found = alignPoint(raw, references, tolerance);
+    if (!found.vertical && !found.horizontal) return { position: onGrid };
+    const aligned: NonNullable<ToolPick["aligned"]> = {};
+    if (found.vertical) aligned.vertical = found.vertical;
+    if (found.horizontal) aligned.horizontal = found.horizontal;
+    return {
+      position: {
+        x: found.vertical ? found.point.x : onGrid.x,
+        y: found.horizontal ? found.point.y : onGrid.y,
+      },
+      aligned,
+    };
   }
 
   private hitEntity(sketch: Sketch, p: PointerInfo, options?: { points?: boolean; curves?: boolean }): SketchEntity | null {
@@ -516,6 +572,17 @@ export class SketchController {
       const inferred = inferAxis(previous.position, pick.position, px * 6 * this.reach);
       pick.position = inferred.position;
       if (inferred.inferred) pick.inferred = inferred.inferred;
+      // The guides show what the position is lined up with now.
+      if (pick.aligned) {
+        const { vertical, horizontal } = pick.aligned;
+        const kept: NonNullable<ToolPick["aligned"]> = {};
+        if (vertical && Math.abs(vertical.x - pick.position.x) < 1e-9) kept.vertical = vertical;
+        if (horizontal && Math.abs(horizontal.y - pick.position.y) < 1e-9) {
+          kept.horizontal = horizontal;
+        }
+        if (kept.vertical || kept.horizontal) pick.aligned = kept;
+        else delete pick.aligned;
+      }
     }
     return pick;
   }
@@ -846,6 +913,7 @@ export class SketchController {
       return;
     }
 
+    this.dragAlignment = null;
     let next: Sketch | null;
     if (drag.circle) {
       const c = drag.base.entities[drag.circle];
@@ -866,7 +934,7 @@ export class SketchController {
           target: grid && drag.points.length === 1 ? snapToGrid(target) : target,
         };
       });
-      // A single dragged point snaps to other geometry.
+      // A single dragged point snaps to other geometry, and lines up with other points.
       if (targets.length === 1 && !p.meta) {
         const only = targets[0]!;
         const at = add2(drag.points[0]!.start, free);
@@ -874,9 +942,19 @@ export class SketchController {
         const snap = snapPoint(drag.base, at, px * SNAP_PX * this.reach, [only.pointId]);
         if (snap.kind === "point" || snap.kind === "center") {
           targets = [{ pointId: only.pointId, target: snap.point }];
+        } else {
+          const lined = this.freePosition(drag.base, at, p, px, [only.pointId]);
+          targets = [{ pointId: only.pointId, target: lined.position }];
+          if (lined.aligned) this.dragAlignment = { at: lined.position, aligned: lined.aligned };
         }
       }
       next = solveDrag(drag.base, targets);
+      // Constraints may have kept the point from getting there: no guide to where it is not.
+      if (this.dragAlignment && next) {
+        const moved = next.entities[drag.points[0]!.id];
+        const at = this.dragAlignment.at;
+        if (moved?.type !== "point" || dist2(moved, at) > 1e-6) this.dragAlignment = null;
+      }
     }
     if (!next) return;
     const solved = next;
@@ -1501,7 +1579,25 @@ export class SketchController {
       for (const pick of this.picks) {
         drawSnapMarker(ctx, projector.toScreen(pick.position), "point");
       }
-      const toolUsesSnap = createTool(state.tool) !== undefined || SELECTION_TOOLS.has(state.tool);
+      const toolUsesSnap =
+        createTool(state.tool) !== undefined ||
+        SELECTION_TOOLS.has(state.tool) ||
+        state.tool === "text";
+      const lined =
+        this.drag?.kind === "entities" && this.drag.started
+          ? this.dragAlignment
+          : this.cursor?.aligned && toolUsesSnap
+            ? { at: this.cursor.position, aligned: this.cursor.aligned }
+            : null;
+      if (lined) {
+        drawAlignmentGuides(
+          ctx,
+          projector.toScreen(lined.at),
+          [lined.aligned.vertical, lined.aligned.horizontal].flatMap((ref) =>
+            ref ? [projector.toScreen(ref)] : [],
+          ),
+        );
+      }
       if (this.cursor && toolUsesSnap) {
         drawSnapMarker(
           ctx,

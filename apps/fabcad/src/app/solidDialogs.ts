@@ -14,6 +14,7 @@ import {
   type MirrorFeature,
   type MoveFeature,
   type MoveTransform,
+  type OffsetPlaneFeature,
   type PatternAxis,
   type PatternSource,
   type PlaneReference,
@@ -28,6 +29,7 @@ import {
   addLoft,
   addMirror,
   addMove,
+  addOffsetPlane,
   addRectangularPattern,
   addSplit,
   addSweep,
@@ -51,6 +53,7 @@ import type {
   LoftDialog,
   MirrorDialog,
   MoveDialog,
+  OffsetPlaneDialog,
   OperationPick,
   RectangularPatternDialog,
   SolidDialog,
@@ -60,8 +63,8 @@ import type {
 } from "./appState";
 
 /**
- * The dialogs of Hole, the patterns, Mirror, Move/Copy, Align, Split Body, Sweep and Loft as
- * plain functions of the dialog and the document: what the active input accepts, what a pick
+ * The dialogs of Hole, the patterns, Mirror, Move/Copy, Align, Split Body, Sweep, Loft and
+ * Offset Plane as plain functions of the dialog and the document: what the active input accepts, what a pick
  * does to the dialog, why it cannot be applied yet, and the command it turns into. Nothing here
  * touches the stores, so all of it can be tested without a browser.
  */
@@ -76,6 +79,7 @@ const SOLID_TYPES: ReadonlySet<string> = new Set<SolidDialog["type"]>([
   "split",
   "sweep",
   "loft",
+  "offset-plane",
 ]);
 
 export const isSolidDialogType = (type: string): type is SolidDialog["type"] =>
@@ -208,7 +212,8 @@ export function canRepeatFeature(
   featureId: string,
 ): boolean {
   const f = doc.features[featureId];
-  if (!f || f.type === "sketch" || featureId === dialog.editing) return false;
+  if (!f || f.type === "sketch" || f.type === "offset-plane") return false;
+  if (featureId === dialog.editing) return false;
   if (!dialog.editing) return true;
   const own = doc.timeline.indexOf(dialog.editing);
   return own < 0 || doc.timeline.indexOf(featureId) < own;
@@ -236,6 +241,7 @@ export interface PickWants {
   /** "linear": straight edges; "axis": straight or circular ones. */
   edges?: "linear" | "axis";
   vertices?: boolean;
+  /** Origin planes and construction planes. */
   originPlanes?: boolean;
   sketchPoints?: boolean;
   sketchLines?: boolean;
@@ -277,6 +283,8 @@ export function dialogWants(dialog: SolidDialog): PickWants {
       return dialog.picking === "profile" ? { profiles: true } : { sketchCurves: true };
     case "loft":
       return { profiles: true, faces: "planar" };
+    case "offset-plane":
+      return PLANE;
   }
 }
 
@@ -295,6 +303,7 @@ export type Picked =
   | { kind: "edge"; bodyId: string; ref: EdgeRef; curve: "line" | "circle" | "other" }
   | { kind: "vertex"; ref: Extract<Point3Ref, { type: "vertex" }> }
   | { kind: "origin-plane"; plane: OriginPlaneName }
+  | { kind: "plane"; featureId: string }
   | { kind: "entity"; sketchId: string; entityId: EntityId }
   | { kind: "profile"; sketchId: string; ref: ProfileRef }
   | { kind: "feature"; featureId: string };
@@ -348,8 +357,34 @@ function pickAxis(picked: Picked, ctx: PickContext, circular: boolean): PatternA
   return null;
 }
 
-function pickPlane(picked: Picked): PlaneReference | null {
+/**
+ * Whether a construction plane can be referred to by the feature in the dialog: it must come
+ * before the feature being edited, which also keeps a plane from referring to itself.
+ */
+export function canUsePlane(
+  doc: CadDocument,
+  dialog: { editing: string | null },
+  featureId: string,
+): boolean {
+  const f = doc.features[featureId];
+  if (f?.type !== "offset-plane" || featureId === dialog.editing) return false;
+  if (!dialog.editing) return true;
+  const own = doc.timeline.indexOf(dialog.editing);
+  return own < 0 || doc.timeline.indexOf(featureId) < own;
+}
+
+function pickPlane(
+  picked: Picked,
+  ctx: PickContext,
+  dialog: { editing: string | null },
+): PlaneReference | null {
   if (picked.kind === "origin-plane") return { type: "origin-plane", plane: picked.plane };
+  // A construction plane, picked in the view or as a feature in the timeline or the browser.
+  if (picked.kind === "plane" || picked.kind === "feature") {
+    return canUsePlane(ctx.doc, dialog, picked.featureId)
+      ? { type: "plane", featureId: picked.featureId }
+      : null;
+  }
   if (picked.kind === "face" && picked.planar) {
     return { type: "face", bodyId: picked.bodyId, ref: picked.ref };
   }
@@ -465,7 +500,7 @@ export function applyPick(
     }
     case "mirror": {
       if (dialog.picking === "source") return pickSource(dialog, picked, ctx);
-      const plane = pickPlane(picked);
+      const plane = pickPlane(picked, ctx, dialog);
       const patch: Partial<MirrorDialog> | null = plane ? { plane } : null;
       return patch;
     }
@@ -509,7 +544,7 @@ export function applyPick(
           patch = { bodyId: picked.bodyId, picking: "tool" };
         }
       } else {
-        const tool = pickPlane(picked);
+        const tool = pickPlane(picked, ctx, dialog);
         if (tool) patch = { tool };
       }
       return patch;
@@ -534,6 +569,11 @@ export function applyPick(
           ? dialog.sections.filter((s) => !sameSection(s, added, ctx))
           : [...dialog.sections, added],
       };
+      return patch;
+    }
+    case "offset-plane": {
+      const base = pickPlane(picked, ctx, dialog);
+      const patch: Partial<OffsetPlaneDialog> | null = base ? { base } : null;
       return patch;
     }
   }
@@ -566,6 +606,7 @@ export function nextPicking<D extends SolidDialog>(dialog: D): D {
     case "sweep":
       return at(dialog.profiles.length > 0 ? "path" : "profile");
     case "loft":
+    case "offset-plane":
       return dialog;
   }
 }
@@ -579,6 +620,8 @@ export interface DialogReferences {
   edges: { bodyId: string; ref: EdgeRef }[];
   points: Extract<Point3Ref, { type: "vertex" | "fixed" }>[];
   originPlanes: OriginPlaneName[];
+  /** Construction planes, by feature id. */
+  planes: string[];
   /** Features whose faces are highlighted. */
   features: string[];
   entities: { sketchId: string; entityId: EntityId }[];
@@ -592,6 +635,7 @@ export function dialogReferences(dialog: SolidDialog): DialogReferences {
     edges: [],
     points: [],
     originPlanes: [],
+    planes: [],
     features: [],
     entities: [],
     profiles: [],
@@ -607,6 +651,7 @@ export function dialogReferences(dialog: SolidDialog): DialogReferences {
   const plane = (p: PlaneReference | null): void => {
     if (p?.type === "origin-plane") out.originPlanes.push(p.plane);
     else if (p?.type === "face") out.faces.push({ bodyId: p.bodyId, ref: p.ref });
+    else if (p?.type === "plane") out.planes.push(p.featureId);
   };
   const point = (p: Point3Ref | null): void => {
     if (p?.type === "sketch-point") out.entities.push({ sketchId: p.sketchId, entityId: p.entityId });
@@ -668,6 +713,9 @@ export function dialogReferences(dialog: SolidDialog): DialogReferences {
         if (s.type === "profile") out.profiles.push({ sketchId: s.sketchId, ref: s.profile });
         else out.faces.push({ bodyId: s.bodyId, ref: s.ref });
       }
+      break;
+    case "offset-plane":
+      plane(dialog.base);
       break;
   }
   return out;
@@ -844,6 +892,9 @@ export function solidDialogProblem(dialog: SolidDialog, doc: CadDocument, scope:
         return dialog.sections.length === 0 ? "Select the sections" : "Select a second section";
       }
       return operationProblem(dialog);
+    case "offset-plane":
+      if (!dialog.base) return "Select a flat face or a plane";
+      return check("Offset", dialog.offset, "length", scope, "any");
   }
 }
 
@@ -979,6 +1030,8 @@ export function dialogFromFeature(f: Feature): SolidDialog | null {
         operation: f.operation,
         targetBodyIds: f.targetBodyIds,
       };
+    case "offset-plane":
+      return { type: "offset-plane", editing: f.id, base: f.base, offset: f.offset, picking: "base" };
     default:
       return null;
   }
@@ -1134,6 +1187,13 @@ export function solidDialogCommand(dialog: SolidDialog, out: CreatedRef = {}): C
       return editing
         ? updateFeature<LoftFeature>(editing, input, "Edit loft")
         : addLoft(input, out);
+    }
+    case "offset-plane": {
+      if (!dialog.base) return null;
+      const input = { base: dialog.base, offset: dialog.offset };
+      return editing
+        ? updateFeature<OffsetPlaneFeature>(editing, input, "Edit offset plane")
+        : addOffsetPlane(input, out);
     }
   }
 }

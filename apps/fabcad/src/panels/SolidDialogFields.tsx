@@ -14,6 +14,7 @@ import type {
   HoleDialog,
   LoftDialog,
   MoveDialog,
+  OffsetPlaneDialog,
   SolidDialog,
   SourcePick,
   SplitDialog,
@@ -25,7 +26,10 @@ import { Icon } from "../ui/Icon";
 import { Field, OperationFields, PickBox } from "./dialogFields";
 import { ExpressionInput } from "./ExpressionInput";
 
-/** Fields of the dialogs of Hole, the patterns, Mirror, Move/Copy, Align, Split, Sweep, Loft. */
+/**
+ * Fields of the dialogs of Hole, the patterns, Mirror, Move/Copy, Align, Split, Sweep, Loft
+ * and Offset Plane.
+ */
 
 const featureName = (doc: CadDocument, id: string | null): string =>
   (id ? doc.features[id]?.name : undefined) ?? "Missing sketch";
@@ -257,7 +261,7 @@ const PLANES: readonly (readonly [OriginPlaneName, string])[] = [
   ["YZ", "YZ"],
 ];
 
-/** A plane: an origin plane or a planar face. */
+/** A plane: an origin plane, a construction plane or a planar face. */
 function PlaneField({
   label,
   value,
@@ -276,7 +280,9 @@ function PlaneField({
     ? "Click a flat face or a plane"
     : value.type === "origin-plane"
       ? `${value.plane} plane`
-      : `Face · ${bodyName(doc, value.bodyId)}`;
+      : value.type === "plane"
+        ? (doc.features[value.featureId]?.name ?? "Missing plane")
+        : `Face · ${bodyName(doc, value.bodyId)}`;
   return (
     <Field label={label}>
       <PickBox
@@ -775,6 +781,27 @@ function LoftFields({ dialog }: { dialog: LoftDialog }): ReactElement {
   );
 }
 
+function OffsetPlaneFields({ dialog }: { dialog: OffsetPlaneDialog }): ReactElement {
+  return (
+    <>
+      <PlaneField
+        label="From"
+        value={dialog.base}
+        active
+        onActivate={() => patchDialog({ picking: "base" })}
+        onChange={(base) => patchDialog({ base })}
+      />
+      <Value
+        label="Offset"
+        kind="length"
+        autoFocus
+        value={dialog.offset}
+        onChange={(offset) => patchDialog({ offset })}
+      />
+    </>
+  );
+}
+
 export function SolidDialogBody({ dialog }: { dialog: SolidDialog }): ReactElement {
   switch (dialog.type) {
     case "hole":
@@ -914,5 +941,7 @@ export function SolidDialogBody({ dialog }: { dialog: SolidDialog }): ReactEleme
       return <SweepFields dialog={dialog} />;
     case "loft":
       return <LoftFields dialog={dialog} />;
+    case "offset-plane":
+      return <OffsetPlaneFields dialog={dialog} />;
   }
 }

@@ -7,7 +7,7 @@ import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
 
 /**
- * On-screen stand-ins for Esc, Enter and Delete. Shown on touch devices and small screens,
+ * On-screen stand-ins for Esc, Enter, Delete and Shift (Multi-Select). Shown on touch devices and small screens,
  * where there is no keyboard to cancel or finish a command.
  */
 export function TouchBar(): ReactElement | null {
@@ -17,6 +17,7 @@ export function TouchBar(): ReactElement | null {
   const dialog = useStore(appState, (s) => s.dialog);
   const workspace = useStore(appState, (s) => s.workspace);
   const open = useStore(appState, (s) => s.sidePanelOpen);
+  const multi = useStore(appState, (s) => s.multiSelect);
 
   const openEnded = createTool(tool)?.clicks === "many";
   const running = sketching && tool !== "select";
@@ -45,6 +46,23 @@ export function TouchBar(): ReactElement | null {
             <button className="touch-btn primary" onClick={() => pressEnter()}>
               <Icon name="check" size={15} />
               Done
+            </button>
+          )}
+          {!running && !featureDialog && (
+            <button
+              className={`touch-btn${multi ? " on" : ""}`}
+              aria-pressed={multi}
+              title="Multi-Select: every tap adds to the selection or removes from it"
+              onClick={() => appState.set({ multiSelect: !multi })}
+            >
+              <Icon name="multi-select" size={15} />
+              Multi{multi && selection > 0 ? ` · ${selection}` : ""}
+            </button>
+          )}
+          {multi && selection > 0 && !featureDialog && (
+            <button className="touch-btn" onClick={() => appState.set({ selection: [], hover: null })}>
+              <Icon name="close" size={15} />
+              Clear
             </button>
           )}
           {selection > 0 && !featureDialog && (

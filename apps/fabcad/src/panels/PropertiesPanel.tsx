@@ -16,7 +16,13 @@ import {
   toggleConstruction,
 } from "@fabcad/sketch";
 import type { ReactElement, ReactNode } from "react";
-import { deleteSelection, editFeature, enterSketch, openDialog } from "../app/actions";
+import {
+  deleteSelection,
+  editFeature,
+  enterSketch,
+  openDialog,
+  startSketchOnPlane,
+} from "../app/actions";
 import { type Selection, appState } from "../app/appState";
 import {
   editSketchSolved,
@@ -346,6 +352,11 @@ function FeatureProperties({ feature }: { feature: Feature }): ReactElement {
         </div>
       ))}
       <div className="form-actions">
+        {feature.type === "offset-plane" && (
+          <button className="btn small" onClick={() => startSketchOnPlane(feature.id)}>
+            Create Sketch
+          </button>
+        )}
         {feature.type === "sketch" && (
           <>
             <button className="btn small" onClick={() => exportSketchSvg(feature.id)}>
@@ -376,7 +387,7 @@ function FeatureProperties({ feature }: { feature: Feature }): ReactElement {
 function ModelSelection({ selection }: { selection: Selection }): ReactElement {
   const doc = useDocument();
   const bodies = useStore(modelState, (s) => s.bodies);
-  if (selection.kind === "feature") {
+  if (selection.kind === "feature" || selection.kind === "plane") {
     const f = doc.features[selection.featureId];
     return f ? <FeatureProperties feature={f} /> : <p className="empty">Nothing to show.</p>;
   }

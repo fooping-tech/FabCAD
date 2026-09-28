@@ -45,6 +45,7 @@ import {
   featureExpressions,
   featureInputBodies,
   featureInputFeatures,
+  featureInputPlanes,
   featureInputSketches,
   parameterScope,
   parseDynamicBodyId,
@@ -93,6 +94,7 @@ import {
   updateProjection,
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
+import { type PlanePatch, facePlanePatch, offsetPlanePatch, originPlanePatch } from "./planes";
 import { resolveSketchPlane, solveSketchWithParameters } from "./sketchSolve";
 
 /**
@@ -136,8 +138,14 @@ export interface BodyResult {
   record?: Omit<DynamicBodyInfo, "id">;
 }
 
+/** A construction plane as evaluated, with the patch of it that is shown. */
+export interface PlaneResult extends PlanePatch {
+  id: string;
+}
+
 export interface RecomputeResult {
   bodies: BodyResult[];
+  planes: PlaneResult[];
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
   /**
@@ -240,6 +248,8 @@ export class FeatureEngine {
   private bodies = new Map<string, BodyState>();
   private topologyCache = new Map<string, { hash: string; topology: SolidTopology }>();
   private sketches = new Map<string, SketchEval>();
+  /** Construction planes evaluated so far by the recompute under way, by feature id. */
+  private planes = new Map<string, PlaneResult>();
   /** Results of the features that ran without error in the recompute under way, by feature id. */
   private ran = new Map<string, CacheEntry>();
   private features: Record<string, Feature> = {};
@@ -264,6 +274,7 @@ export class FeatureEngine {
     this.lastEvaluated = [];
     this.ran = new Map();
     this.features = doc.features;
+    this.planes = new Map();
 
     const limit = doc.timelineCursor ?? doc.timeline.length;
     for (let index = 0; index < doc.timeline.length; index++) {
@@ -276,6 +287,20 @@ export class FeatureEngine {
       }
       if (feature.suppressed) {
         statuses[id] = { id, state: "suppressed", cached: false };
+        continue;
+      }
+      if (feature.type === "offset-plane") {
+        try {
+          this.planes.set(id, this.evaluateOffsetPlane(feature, scope, bodies));
+          statuses[id] = { id, state: "ok", cached: false };
+        } catch (err) {
+          statuses[id] = {
+            id,
+            state: "error",
+            message: err instanceof Error ? err.message : String(err),
+            cached: false,
+          };
+        }
         continue;
       }
       if (feature.type === "sketch") {
@@ -390,6 +415,7 @@ export class FeatureEngine {
 
     return {
       bodies: results,
+      planes: [...this.planes.values()],
       features: statuses,
       sketches: sketchStatuses,
       sketchUpdates,
@@ -473,7 +499,7 @@ export class FeatureEngine {
    * point of the timeline. Returns the same sketch object when nothing moved.
    */
   private reproject(sketch: Sketch, bodies: Map<string, BodyState>): Sketch {
-    let current = this.followFace(sketch, bodies);
+    let current = this.followPlane(this.followFace(sketch, bodies));
     if (sketch.projections.length === 0) return current;
     const plane = resolveSketchPlane(current.plane);
     for (const ref of sketch.projections) {
@@ -545,6 +571,41 @@ export class FeatureEngine {
     return same ? sketch : { ...sketch, plane: { ...plane, plane: next, hint: face.center } };
   }
 
+  /** A sketch drawn on a construction plane stays on it when the plane moves. */
+  private followPlane(sketch: Sketch): Sketch {
+    const plane = sketch.plane;
+    if (plane.type !== "plane") return sketch;
+    const next = this.planes.get(plane.featureId)?.plane;
+    if (!next || JSON.stringify(next) === JSON.stringify(plane.plane)) return sketch;
+    return { ...sketch, plane: { ...plane, plane: next } };
+  }
+
+  private evaluateOffsetPlane(
+    feature: Extract<Feature, { type: "offset-plane" }>,
+    scope: Scope,
+    bodies: Map<string, BodyState>,
+  ): PlaneResult {
+    const offset = evaluateAs(feature.offset, "length", scope);
+    if (!Number.isFinite(offset)) throw new Error("The offset is not a number.");
+    const patch = offsetPlanePatch(this.planePatch(feature.base, bodies), offset);
+    return { id: feature.id, ...patch };
+  }
+
+  /** A plane together with the square patch of it that the view shows. */
+  private planePatch(ref: PlaneReference, bodies: Map<string, BodyState>): PlanePatch {
+    if (ref.type === "origin-plane") return originPlanePatch(ref.plane);
+    if (ref.type === "plane") {
+      const found = this.planes.get(ref.featureId);
+      if (!found) throw new Error("The plane this feature refers to is missing or suppressed.");
+      return found;
+    }
+    const body = this.requireBody(bodies, ref.bodyId);
+    const { index } = this.planeOfFace(body, ref.ref);
+    const patch = facePlanePatch(body.geometry, index);
+    if (!patch) throw new Error("The selected face is not planar. Select a flat face.");
+    return patch;
+  }
+
   private evaluateSketch(feature: Extract<Feature, { type: "sketch" }>, scope: Scope): SketchEval {
     const info = solveSketchWithParameters(feature.sketch, this.solver, scope);
     const sketch = info.converged ? info.sketch : feature.sketch;
@@ -600,6 +661,9 @@ export class FeatureEngine {
     // A pattern of features repeats what those features did when they ran.
     for (const id of featureInputFeatures(feature)) {
       parts.push([id, this.ran.get(id)?.hash ?? "missing"]);
+    }
+    for (const id of featureInputPlanes(feature)) {
+      parts.push([id, this.planes.get(id)?.plane ?? "missing"]);
     }
     const lookup = (id: string): Feature | undefined => this.features[id];
     for (const b of featureInputBodies(feature, lookup)) {
@@ -813,6 +877,7 @@ export class FeatureEngine {
 
   private resolvePlane(ref: PlaneReference, bodies: Map<string, BodyState>): Plane3 {
     if (ref.type === "origin-plane") return ORIGIN_PLANES[ref.plane];
+    if (ref.type === "plane") return this.planePatch(ref, bodies).plane;
     const body = this.requireBody(bodies, ref.bodyId);
     return this.planeOfFace(body, ref.ref).plane;
   }

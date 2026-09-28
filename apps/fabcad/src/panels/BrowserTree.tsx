@@ -5,12 +5,19 @@ import {
   renameFeature,
   setBodyVisible,
   setOriginVisible,
+  setPlaneVisible,
   setSketchVisible,
 } from "@fabcad/cad-document";
 import type { OriginPlaneName } from "@fabcad/geometry";
 import { type ReactElement, type ReactNode, useState } from "react";
-import { enterSketch, pickInDialog } from "../app/actions";
-import { type Selection, appState, isSelected, select } from "../app/appState";
+import { editFeature, enterSketch, pickInDialog, pickSketchPlane } from "../app/actions";
+import {
+  type Selection,
+  appState,
+  isAdditiveClick,
+  isSelected,
+  select,
+} from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
@@ -181,10 +188,11 @@ export function BrowserTree(): ReactElement {
     components: false,
   });
   const toggle = (key: string): void => setOpen((o) => ({ ...o, [key]: !o[key] }));
-  const additive = (e: React.MouseEvent): boolean => e.shiftKey || e.metaKey || e.ctrlKey;
+  const additive = (e: React.MouseEvent): boolean => isAdditiveClick(e);
   /** A click on a row: a pick for the open feature dialog, otherwise a selection. */
   const pick = (sel: Selection, e: React.MouseEvent): void => {
-    if (!pickInDialog(sel, additive(e))) select(sel, additive(e));
+    if (pickSketchPlane(sel) || pickInDialog(sel, additive(e))) return;
+    select(sel, additive(e));
   };
   const menuFor = (sel: Selection) => (e: React.MouseEvent): void => {
     if (!isSelected(appState.get().selection, sel)) appState.set({ selection: [sel] });
@@ -194,6 +202,10 @@ export function BrowserTree(): ReactElement {
   const root = doc.assembly.rootComponentId;
   const sketches = listSketchFeatures(doc, root);
   const bodies = listBodies(doc, root);
+  const planes = doc.timeline.flatMap((id) => {
+    const f = doc.features[id];
+    return f?.type === "offset-plane" && f.componentId === root ? [f] : [];
+  });
   const children = Object.values(doc.assembly.components).filter((c) => c.id !== root);
 
   return (
@@ -238,6 +250,40 @@ export function BrowserTree(): ReactElement {
                     selected={sel ? isSelected(selection, sel) : false}
                     onClick={sel ? (e) => pick(sel, e) : undefined}
                     onMenu={sel ? menuFor(sel) : undefined}
+                  />
+                );
+              })}
+
+            {planes.length > 0 && (
+              <Row
+                depth={1}
+                icon="folder"
+                name="Planes"
+                caret
+                open={open.planes ?? true}
+                onToggle={() => setOpen((o) => ({ ...o, planes: !(o.planes ?? true) }))}
+                onClick={() => setOpen((o) => ({ ...o, planes: !(o.planes ?? true) }))}
+                badge={<span className="tree-badge">{planes.length}</span>}
+              />
+            )}
+            {(open.planes ?? true) &&
+              planes.map((f) => {
+                const sel: Selection = { kind: "plane", featureId: f.id };
+                return (
+                  <Row
+                    key={f.id}
+                    depth={2}
+                    icon="plane"
+                    name={f.name}
+                    visible={f.visible}
+                    onVisible={(v) => run(setPlaneVisible(f.id, v))}
+                    selected={isSelected(selection, sel)}
+                    error={statuses[f.id]?.state === "error"}
+                    title={statuses[f.id]?.message ?? "Double-click to edit the plane"}
+                    onClick={(e) => pick(sel, e)}
+                    onDoubleClick={() => editFeature(f.id)}
+                    onMenu={menuFor(sel)}
+                    onRename={(name) => run(renameFeature(f.id, name))}
                   />
                 );
               })}

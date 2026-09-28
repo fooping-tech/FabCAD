@@ -168,10 +168,14 @@ export type PatternSource =
   | { kind: "features"; featureIds: string[] }
   | { kind: "bodies"; bodyIds: string[] };
 
-/** A plane: an origin plane, or the (infinite) plane of a planar face. */
+/**
+ * A plane: an origin plane, the (infinite) plane of a planar face, or a construction plane
+ * (the feature that defines it).
+ */
 export type PlaneReference =
   | { type: "origin-plane"; plane: OriginPlaneName }
-  | { type: "face"; bodyId: string; ref: FaceRef };
+  | { type: "face"; bodyId: string; ref: FaceRef }
+  | { type: "plane"; featureId: string };
 
 export type MirrorPlane = PlaneReference;
 export type SplitTool = PlaneReference;
@@ -377,8 +381,24 @@ export interface LoftFeature extends FeatureBase {
   ruled?: boolean;
 }
 
+// ------------------------------------------------------- construction planes
+
+/**
+ * A construction plane parallel to `base`, moved along the normal of `base` by `offset`.
+ * Negative offsets go against the normal. The plane has the axes of its base, so sketches on
+ * it line up with sketches on the base.
+ */
+export interface OffsetPlaneFeature extends FeatureBase {
+  type: "offset-plane";
+  base: PlaneReference;
+  /** Length expression; may be negative. */
+  offset: string;
+  visible: boolean;
+}
+
 export type Feature =
   | SketchFeature
+  | OffsetPlaneFeature
   | ExtrudeFeature
   | RevolveFeature
   | BooleanFeature
@@ -400,6 +420,7 @@ export type FeatureType = Feature["type"];
 
 export const FEATURE_LABELS: Record<FeatureType, string> = {
   sketch: "Sketch",
+  "offset-plane": "Plane",
   extrude: "Extrude",
   revolve: "Revolve",
   boolean: "Combine",
@@ -452,6 +473,8 @@ export function featureExpressions(feature: Feature): FeatureExpression[] {
           })),
         ),
       ];
+    case "offset-plane":
+      return [{ key: "offset", expression: feature.offset, kind: "length" }];
     case "extrude":
       return [{ key: "distance", expression: feature.distance, kind: "length" }];
     case "revolve":
@@ -577,11 +600,16 @@ const sketchOf = (ref: { type: string; sketchId?: string }): string[] =>
     ? [ref.sketchId]
     : [];
 
+const planeOf = (ref: { type: string; featureId?: string }): string[] =>
+  ref.featureId !== undefined && ref.type === "plane" ? [ref.featureId] : [];
+
 /** The geometry references of a feature other than the bodies it works on. */
 function featureReferences(
   feature: Feature,
-): { type: string; bodyId?: string; sketchId?: string }[] {
+): { type: string; bodyId?: string; sketchId?: string; featureId?: string }[] {
   switch (feature.type) {
+    case "offset-plane":
+      return [feature.base];
     case "rectangular-pattern":
       return feature.direction2 ? [feature.direction, feature.direction2] : [feature.direction];
     case "circular-pattern":
@@ -618,6 +646,15 @@ export function featureInputFeatures(feature: Feature): string[] {
     return feature.source.featureIds.slice();
   }
   return [];
+}
+
+/** Construction planes (feature ids) a feature takes its plane from. */
+export function featureInputPlanes(feature: Feature): string[] {
+  if (feature.type === "sketch") {
+    const plane = feature.sketch.plane;
+    return plane.type === "plane" ? [plane.featureId] : [];
+  }
+  return unique(featureReferences(feature).flatMap(planeOf));
 }
 
 /**
@@ -686,6 +723,8 @@ export function featureInputBodies(feature: Feature, lookup?: FeatureLookup): st
     case "align":
     case "split":
       return unique([feature.bodyId, ...references]);
+    case "offset-plane":
+      return unique(references);
     case "import":
       return [];
   }
@@ -709,6 +748,7 @@ function outputBodies(feature: Feature, lookup: FeatureLookup | undefined, seen:
     case "import":
       return [feature.bodyId];
     case "sketch":
+    case "offset-plane":
       return [];
     case "rectangular-pattern":
     case "circular-pattern":

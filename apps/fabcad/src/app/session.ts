@@ -18,6 +18,7 @@ import {
 import {
   type BodyNames,
   type FeatureStatus,
+  type PlaneResult,
   type SketchSolveInfo,
   type SketchStatus,
   resolveDocumentSketches,
@@ -53,6 +54,8 @@ export interface ModelState {
   kernelError: string;
   busy: boolean;
   bodies: Record<string, BodyModel>;
+  /** Construction planes as evaluated, by feature id. */
+  planes: Record<string, PlaneResult>;
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
   lastDurationMs: number;
@@ -63,6 +66,7 @@ export const modelState = new TinyStore<ModelState>({
   kernelError: "",
   busy: false,
   bodies: {},
+  planes: {},
   features: {},
   sketches: {},
   lastDurationMs: 0,
@@ -260,6 +264,7 @@ async function recomputeLoop(): Promise<void> {
       }
       modelState.set({
         bodies,
+        planes: Object.fromEntries((result.planes ?? []).map((p) => [p.id, p])),
         features: result.features,
         sketches: result.sketches,
         lastDurationMs: result.durationMs,
@@ -347,7 +352,7 @@ function resetUi(): void {
 export function loadDocument(doc: CadDocument): void {
   resetUi();
   lastComputed = null;
-  modelState.set({ bodies: {}, features: {}, sketches: {} });
+  modelState.set({ bodies: {}, planes: {}, features: {}, sketches: {} });
   documentStore.load(doc);
   requestRecompute();
 }

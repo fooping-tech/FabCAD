@@ -51,7 +51,10 @@ const body = (id: string, polygon: Vec2[], height: number): CadBody => ({
   topology: prismTopology(polygon, height),
 });
 
+/** A star prism 40 mm tall: not something rigid board can be folded or joined into. */
 const starBody = (id = "star"): CadBody => body(id, starPolygon(5, 60, 25), 40);
+/** The same star as a sheet of the thickness of the default material (MDF 5.5 mm). */
+const starSheet = (id = "star"): CadBody => body(id, starPolygon(5, 60, 25), 5.5);
 const boxBody = (id = "box"): CadBody => body(id, rectangle(100, 80), 50);
 
 const settings = (patch: Partial<LaserFabricationSettings> = {}): LaserFabricationSettings => ({
@@ -212,17 +215,20 @@ describe("number input", () => {
 });
 
 describe("compileFabrication", () => {
-  it("scenario B: star prism in MDF 5.5", () => {
-    const out = compileFabrication([starBody()], settings());
+  it("scenario B: box in MDF 5.5", () => {
+    const out = compileFabrication([boxBody()], settings());
     expect(out.material.id).toBe("mdf-5.5");
     expect(out.strategyId).toBe("laser.board");
-    expect(out.parts).toHaveLength(12);
+    expect(out.parts).toHaveLength(6);
     expect(out.results).toHaveLength(1);
+    expect(out.detections).toEqual([
+      expect.objectContaining({ bodyId: "box", kind: "rectangular-box", supported: true, parts: 6 }),
+    ]);
     expect(out.connections.some((c) => c.joint === "tab-slot")).toBe(true);
     expect(out.warnings.every((w) => w.severity !== "error" || w.code === "part-too-large")).toBe(true);
-    expect(out.layout.placements.length + out.layout.unplaced.length).toBe(12);
+    expect(out.layout.placements.length + out.layout.unplaced.length).toBe(6);
 
-    const files = buildSheetFiles("svg", out, "star", false);
+    const files = buildSheetFiles("svg", out, "box", false);
     expect(files.length).toBe(usedSheets(out).length);
     expect(files.length).toBeGreaterThan(0);
     const svg = files[0]!.data;
@@ -230,12 +236,56 @@ describe("compileFabrication", () => {
     expect(svg).toMatch(/height="300mm"/);
     expect(svg).toContain('<g id="cut"');
     expect(svg).not.toContain('<g id="labels"');
-    expect(files[0]!.fileName).toBe(files.length > 1 ? "star-sheet-1.svg" : "star.svg");
+    expect(files[0]!.fileName).toBe(files.length > 1 ? "box-sheet-1.svg" : "box.svg");
 
     const stats = fabricationStats(out);
-    expect(stats.parts).toBe(12);
+    expect(stats.parts).toBe(6);
     expect(stats.cutLength).toBeGreaterThan(1000);
     expect(Number.isFinite(stats.cutLength)).toBe(true);
+  });
+
+  it("a sheet of the thickness of the material is one flat part", () => {
+    const out = compileFabrication([starSheet()], settings());
+    expect(out.detections).toEqual([
+      expect.objectContaining({ kind: "flat-part", label: "Flat Part", supported: true, parts: 1 }),
+    ]);
+    expect(out.parts).toHaveLength(1);
+    expect(out.parts[0]!.outline).toHaveLength(10);
+    expect(out.parts[0]!.joints).toHaveLength(0);
+    expect(out.connections).toHaveLength(0);
+    expect(usedSheets(out)).toHaveLength(1);
+    expect(out.layout.placements).toHaveLength(1);
+  });
+
+  it("stops at a body that board cannot be made into, with the reason", () => {
+    const out = compileFabrication([starBody()], settings());
+    expect(out.strategyId).toBe("laser.board");
+    expect(out.parts).toHaveLength(0);
+    expect(out.connections).toHaveLength(0);
+    expect(out.detections).toHaveLength(1);
+    const detected = out.detections[0]!;
+    expect(detected).toMatchObject({ bodyId: "star", kind: "unsupported", supported: false, parts: 0 });
+    expect(detected.reason ?? "").not.toBe("");
+    const error = out.warnings.find((w) => w.code === "unsupported-board-shape");
+    expect(error?.severity).toBe("error");
+    expect(error?.message).toMatch(/flat sheet parts/);
+    expect(error?.message).toMatch(/rectangular boxes/);
+    // Nothing reaches a sheet: no placements, no paths, no files.
+    expect(out.layout.placements).toHaveLength(0);
+    expect(out.geometry.paths).toHaveLength(0);
+    expect(usedSheets(out)).toHaveLength(0);
+    expect(buildSheetFiles("svg", out, "star", false)).toHaveLength(0);
+  });
+
+  it("fabricates the supported bodies when another one is not", () => {
+    const out = compileFabrication([boxBody("a"), starBody("b"), starSheet("c")], settings());
+    expect(out.detections.map((d) => [d.bodyId, d.kind, d.parts])).toEqual([
+      ["a", "rectangular-box", 6],
+      ["b", "unsupported", 0],
+      ["c", "flat-part", 1],
+    ]);
+    expect(out.parts).toHaveLength(7);
+    expect(out.parts.some((p) => p.id.startsWith("b."))).toBe(false);
   });
 
   it("scenario C: box in paper", () => {
@@ -264,9 +314,9 @@ describe("compileFabrication", () => {
   });
 
   it("keeps part ids unique across bodies", () => {
-    const out = compileFabrication([boxBody("body-1"), boxBody("body-2"), starBody("body-3")], settings());
+    const out = compileFabrication([boxBody("body-1"), boxBody("body-2"), starSheet("body-3")], settings());
     expect(out.results).toHaveLength(3);
-    expect(out.parts).toHaveLength(6 + 6 + 12);
+    expect(out.parts).toHaveLength(6 + 6 + 1);
     const ids = out.parts.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(new Set(out.connections.map((c) => c.id)).size).toBe(out.connections.length);
@@ -312,7 +362,11 @@ describe("compileFabrication", () => {
   });
 
   it("draws preview and export from the same geometry", () => {
-    const out = compileFabrication([starBody()], settings({ allowRotation: true, nesting: "shelf" }));
+    const out = compileFabrication(
+      [boxBody(), starSheet()],
+      settings({ allowRotation: true, nesting: "shelf" }),
+    );
+    expect(usedSheets(out).length).toBeGreaterThan(0);
     for (const sheet of usedSheets(out)) {
       const onSheet = out.geometry.paths.filter((p) => p.sheet === sheet && p.points.length >= 2);
       const preview = renderSheetSvg(out.geometry, { sheet, labels: true });
@@ -341,13 +395,13 @@ describe("compileFabrication", () => {
 
   it("numbers the files of several sheets", () => {
     const out = compileFabrication(
-      [starBody()],
+      [boxBody()],
       settings({ sheet: { width: 200, height: 150, margin: 5, gap: 3 } }),
     );
     const sheets = usedSheets(out);
     expect(sheets.length).toBeGreaterThan(1);
-    const files = buildSheetFiles("svg", out, "star", true);
-    expect(files.map((f) => f.fileName)).toEqual(sheets.map((_, i) => `star-sheet-${i + 1}.svg`));
+    const files = buildSheetFiles("svg", out, "box", true);
+    expect(files.map((f) => f.fileName)).toEqual(sheets.map((_, i) => `box-sheet-${i + 1}.svg`));
     expect(files[0]!.data).toContain('<g id="labels"');
     expect(files[0]!.data).toMatch(/width="200mm"/);
   });

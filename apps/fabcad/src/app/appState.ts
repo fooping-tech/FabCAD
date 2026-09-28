@@ -10,6 +10,7 @@ import type {
   MirrorPlane,
   PatternAxis,
   PatternDirection,
+  PlaneReference,
   Point3Ref,
   RevolveAxis,
   SplitFeature,
@@ -35,7 +36,9 @@ export type Selection =
   | { kind: "dimension"; sketchId: string; id: string }
   | { kind: "profile"; sketchId: string; regionId: string; ref: ProfileRef }
   | { kind: "feature"; featureId: string }
-  | { kind: "origin-plane"; plane: OriginPlaneName };
+  | { kind: "origin-plane"; plane: OriginPlaneName }
+  /** A construction plane, by the feature that defines it. */
+  | { kind: "plane"; featureId: string };
 
 export const selectionKey = (s: Selection): string => {
   switch (s.kind) {
@@ -61,6 +64,8 @@ export const selectionKey = (s: Selection): string => {
       return `feature:${s.featureId}`;
     case "origin-plane":
       return `origin-plane:${s.plane}`;
+    case "plane":
+      return `plane:${s.featureId}`;
   }
 };
 
@@ -186,6 +191,15 @@ export type LoftDialog = OperationPick & {
   ruled: boolean;
 };
 
+export type OffsetPlaneDialog = {
+  type: "offset-plane";
+  editing: string | null;
+  base: PlaneReference | null;
+  /** Length expression; negative values go against the normal of the base. */
+  offset: string;
+  picking: "base";
+};
+
 /** The dialogs of the solid features that pick through `dialogWants` / `applyPick`. */
 export type SolidDialog =
   | HoleDialog
@@ -196,7 +210,8 @@ export type SolidDialog =
   | AlignDialog
   | SplitDialog
   | SweepDialog
-  | LoftDialog;
+  | LoftDialog
+  | OffsetPlaneDialog;
 
 /** Feature dialogs. `editing` is the id of an existing feature being edited. */
 export type Dialog =
@@ -269,6 +284,21 @@ export interface DimensionEdit {
   fresh: boolean;
 }
 
+/** A help id (see `help/content.ts`) with what is known about the tool when it has no entry. */
+export interface HelpTopic {
+  id: string;
+  title: string;
+  summary?: string;
+}
+
+/** The help menu of a tool: the topic and where the menu goes, in client coordinates. */
+export interface HelpRequest extends HelpTopic {
+  x: number;
+  y: number;
+  /** Opened by a long press: the finger is still on the screen. */
+  held?: boolean;
+}
+
 export interface Toast {
   id: number;
   kind: "info" | "warning" | "error";
@@ -288,6 +318,8 @@ export interface ToolOptions {
   mirrorSymmetry: boolean;
   /** Snap picked and dragged sketch positions to whole millimetres. */
   gridSnap: boolean;
+  /** Line picked and dragged sketch positions up with other points, horizontally and vertically. */
+  alignSnap: boolean;
 }
 
 export type FabricationProcess = "laser" | "print";
@@ -315,6 +347,16 @@ export interface AppState {
   hint: string;
   showConstraints: boolean;
   showDimensions: boolean;
+  /**
+   * Multi-selection mode: every click adds to the selection or takes away from it, as if
+   * Shift were held. It is how several things are selected without a keyboard.
+   */
+  multiSelect: boolean;
+  /**
+   * In-app help: the small menu at a tool icon, and the topic shown in the overlay. Both are
+   * state of the session only; opening help changes nothing of the command that is running.
+   */
+  help: { menu: HelpRequest | null; topic: HelpTopic | null };
   /** Open context menu, in client coordinates. */
   contextMenu: { x: number; y: number; held?: boolean } | null;
   /** The command that "Repeat" in the context menu starts again. */
@@ -348,6 +390,7 @@ export const appState = new TinyStore<AppState>({
     scaleFactor: 2,
     mirrorSymmetry: true,
     gridSnap: true,
+    alignSnap: true,
   },
   selection: [],
   hover: null,
@@ -360,6 +403,8 @@ export const appState = new TinyStore<AppState>({
   hint: "",
   showConstraints: true,
   showDimensions: true,
+  multiSelect: false,
+  help: { menu: null, topic: null },
   contextMenu: null,
   lastCommand: null,
   pendingSketchTool: null,
@@ -381,7 +426,16 @@ export function setSelection(selection: Selection[]): void {
   appState.set({ selection });
 }
 
-/** Click selection: replace, or toggle when `additive` (Shift / Ctrl / Cmd held). */
+/**
+ * Whether a click adds to the selection instead of replacing it: a modifier key is held, or
+ * the multi-selection mode is on. Every place that selects by click asks here, so that the
+ * viewport, the browser and the timeline behave alike.
+ */
+export function isAdditiveClick(e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }): boolean {
+  return e.shiftKey || e.metaKey || e.ctrlKey || appState.get().multiSelect;
+}
+
+/** Click selection: replace, or toggle when `additive` (see `isAdditiveClick`). */
 export function select(item: Selection | null, additive: boolean): void {
   const { selection, measuring } = appState.get();
   if (measuring) {

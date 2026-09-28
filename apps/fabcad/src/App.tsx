@@ -10,6 +10,8 @@ import {
   exportSheets,
   useFabrication,
 } from "./fabrication";
+import { HelpMenu } from "./help/HelpMenu";
+import { HelpOverlay } from "./help/HelpOverlay";
 import { BrowserTree } from "./panels/BrowserTree";
 import { MeasurePanel } from "./measure/MeasurePanel";
 import { ContextMenu } from "./panels/ContextMenu";
@@ -140,6 +142,8 @@ export function App(): ReactElement {
       <StatusBar />
       <Toasts />
       <ContextMenu />
+      <HelpMenu />
+      <HelpOverlay />
       {dialog?.type === "parameters" && <ParametersDialog />}
       {dialog?.type === "about" && <AboutDialog />}
       {dialog?.type === "import-dxf" && (

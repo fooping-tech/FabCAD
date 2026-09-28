@@ -11,7 +11,21 @@ export {
   defaultBoardSettings,
   edgeCompensation,
   laserBoardStrategy,
+  unsupportedBoardMessage,
 } from "./board";
+export {
+  type BoardBodyKind,
+  type BoardClassification,
+  type BoardClassifierOptions,
+  type BoardUnsupportedCode,
+  type FlatPartInfo,
+  type RectangularBoxInfo,
+  BOARD_KIND_LABELS,
+  BOARD_SUPPORT_TEXT,
+  classifyBoardBody,
+} from "./boardClassifier";
+export { compileFlatPart } from "./flatPart";
+export { compileRectangularBox } from "./rectangularBox";
 export { type PaperSettings, defaultPaperSettings, laserPaperStrategy } from "./paper";
 
 /** Add the laser strategies to a registry (the laser workspace calls this once). */

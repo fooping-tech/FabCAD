@@ -266,6 +266,7 @@ const TITLES: Partial<Record<Dialog["type"], string>> = {
   split: FEATURE_LABELS.split,
   sweep: FEATURE_LABELS.sweep,
   loft: FEATURE_LABELS.loft,
+  "offset-plane": DIALOG_COMMANDS["offset-plane"]?.label,
 };
 
 /** Floating dialog of the running solid feature command. */

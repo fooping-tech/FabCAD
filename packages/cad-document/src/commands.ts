@@ -36,9 +36,11 @@ import {
   type MirrorPlane,
   type MoveFeature,
   type MoveTransform,
+  type OffsetPlaneFeature,
   type PatternAxis,
   type PatternDirection,
   type PatternSource,
+  type PlaneReference,
   type Point3Ref,
   type RectangularPatternFeature,
   type RevolveAxis,
@@ -261,6 +263,53 @@ export function applySketchEdit(
   const sketch = edit(f.sketch);
   if (sketch === f.sketch) return doc;
   return { ...doc, features: { ...doc.features, [featureId]: { ...f, sketch } } };
+}
+
+// ------------------------------------------------------- construction planes
+
+/** Whether the base of a construction plane exists in the document. */
+function validPlaneBase(doc: CadDocument, base: PlaneReference, self?: string): boolean {
+  if (base.type === "origin-plane") return true;
+  if (base.type === "face") return doc.bodies[base.bodyId] !== undefined;
+  const feature = doc.features[base.featureId];
+  // A plane cannot be measured from itself.
+  return feature?.type === "offset-plane" && feature.id !== self;
+}
+
+export function addOffsetPlane(
+  input: { base: PlaneReference; offset: string },
+  out: CreatedRef = {},
+): Command {
+  return command("Offset plane", (doc) => {
+    if (!validPlaneBase(doc, input.base)) return doc;
+    const [id, d] = allocateId(doc, "plane");
+    const owner =
+      input.base.type === "face"
+        ? doc.bodies[input.base.bodyId]?.componentId
+        : input.base.type === "plane"
+          ? doc.features[input.base.featureId]?.componentId
+          : undefined;
+    const feature: OffsetPlaneFeature = {
+      id,
+      type: "offset-plane",
+      name: nextFeatureName(doc, "offset-plane"),
+      componentId: owner ?? doc.assembly.rootComponentId,
+      suppressed: false,
+      base: input.base,
+      offset: input.offset,
+      visible: true,
+    };
+    out.id = id;
+    return withFeature(d, feature);
+  });
+}
+
+export function setPlaneVisible(id: string, visible: boolean): Command {
+  return command(visible ? "Show plane" : "Hide plane", (doc) => {
+    const f = doc.features[id];
+    if (!f || f.type !== "offset-plane" || f.visible === visible) return doc;
+    return { ...doc, features: { ...doc.features, [id]: { ...f, visible } } };
+  });
 }
 
 // ------------------------------------------------------------------- features
@@ -518,7 +567,7 @@ function validSource(doc: CadDocument, source: PatternSource): PatternSource | n
   }
   const featureIds = [...new Set(source.featureIds)].filter((f) => {
     const feature = doc.features[f];
-    return feature !== undefined && feature.type !== "sketch";
+    return feature !== undefined && feature.type !== "sketch" && feature.type !== "offset-plane";
   });
   // In timeline order: that is the order in which their effect is applied again.
   featureIds.sort((a, b) => doc.timeline.indexOf(a) - doc.timeline.indexOf(b));

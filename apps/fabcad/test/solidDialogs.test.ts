@@ -8,6 +8,7 @@ import {
   type Scope,
   type SketchFeature,
   addExtrude,
+  addOffsetPlane,
   addParameter,
   addSketch,
   createDocument,
@@ -40,6 +41,7 @@ import type {
   LoftDialog,
   MirrorDialog,
   MoveDialog,
+  OffsetPlaneDialog,
   RectangularPatternDialog,
   SolidDialog,
   SplitDialog,
@@ -49,6 +51,7 @@ import {
   type Picked,
   applyPick,
   canRepeatFeature,
+  canUsePlane,
   consumedSketches,
   dialogFromFeature,
   dialogReferences,
@@ -1109,5 +1112,124 @@ describe("the command of a dialog", () => {
     });
     expect(feature(store, loftId, "loft")).toMatchObject({ bodyId: "", targetBodyIds: [swept] });
     expect(store.document.bodies[lofted.bodyId]).toBeUndefined();
+  });
+});
+
+describe("offset plane dialog", () => {
+  const dialog = (patch: Partial<OffsetPlaneDialog> = {}): OffsetPlaneDialog => ({
+    type: "offset-plane",
+    editing: null,
+    base: null,
+    offset: "10",
+    picking: "base",
+    ...patch,
+  });
+  const scope: Scope = parameterScope(evaluateParameters([]));
+
+  function withPlane(): { doc: CadDocument; store: DocumentStore; planeId: string } {
+    const store = new DocumentStore(createDocument());
+    const out: CreatedRef = {};
+    store.execute(addOffsetPlane({ base: { type: "origin-plane", plane: "XY" }, offset: "5" }, out));
+    return { doc: store.document, store, planeId: out.id! };
+  }
+
+  it("is one of the dialogs that pick through the shared functions", () => {
+    expect(isSolidDialog(dialog())).toBe(true);
+    expect(dialogWants(dialog())).toEqual({ faces: "planar", originPlanes: true });
+  });
+
+  it("takes an origin plane, a flat face or a construction plane as its base", () => {
+    const { doc, planeId } = withPlane();
+    const ctx = { doc };
+    expect(applyPick(dialog(), { kind: "origin-plane", plane: "XZ" }, ctx)).toEqual({
+      base: { type: "origin-plane", plane: "XZ" },
+    });
+    expect(applyPick(dialog(), { kind: "plane", featureId: planeId }, ctx)).toEqual({
+      base: { type: "plane", featureId: planeId },
+    });
+    // Picked as a feature, in the timeline.
+    expect(applyPick(dialog(), { kind: "feature", featureId: planeId }, ctx)).toEqual({
+      base: { type: "plane", featureId: planeId },
+    });
+    const ref = { kind: "face" as const, point: { x: 0, y: 0, z: 0 } };
+    const face = { kind: "face" as const, bodyId: "b", faceIndex: 0, ref, featureId: null };
+    expect(applyPick(dialog(), { ...face, planar: true }, ctx)).toEqual({
+      base: { type: "face", bodyId: "b", ref },
+    });
+    expect(applyPick(dialog(), { ...face, planar: false }, ctx)).toBeNull();
+    expect(applyPick(dialog(), { kind: "body", bodyId: "b" }, ctx)).toBeNull();
+  });
+
+  it("does not let a plane be measured from itself or from a later plane", () => {
+    const { store, planeId } = withPlane();
+    const later: CreatedRef = {};
+    store.execute(addOffsetPlane({ base: { type: "plane", featureId: planeId }, offset: "5" }, later));
+    const doc = store.document;
+    const editing = dialog({ editing: planeId });
+    expect(applyPick(editing, { kind: "plane", featureId: planeId }, { doc })).toBeNull();
+    expect(applyPick(editing, { kind: "plane", featureId: later.id! }, { doc })).toBeNull();
+    expect(canUsePlane(doc, { editing: later.id! }, planeId)).toBe(true);
+    // A sketch is not a plane.
+    const sketch: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, sketch));
+    expect(canUsePlane(store.document, { editing: null }, sketch.id!)).toBe(false);
+  });
+
+  it("asks for a base and accepts any offset, negative and zero included", () => {
+    const { doc } = withPlane();
+    expect(solidDialogProblem(dialog(), doc, scope)).toBe("Select a flat face or a plane");
+    const base = { type: "origin-plane" as const, plane: "XY" as const };
+    for (const offset of ["10", "-10", "0", "2 * 3.5 - 20"]) {
+      expect(solidDialogProblem(dialog({ base, offset }), doc, scope), offset).toBeNull();
+    }
+    expect(solidDialogProblem(dialog({ base, offset: "" }), doc, scope)).toMatch(/^Offset/);
+    expect(solidDialogProblem(dialog({ base, offset: "nope" }), doc, scope)).toMatch(/^Offset/);
+  });
+
+  it("creates the feature, and edits it through the same dialog", () => {
+    const store = new DocumentStore(createDocument());
+    const out: CreatedRef = {};
+    const base = { type: "origin-plane" as const, plane: "YZ" as const };
+    expect(solidDialogCommand(dialog(), out)).toBeNull();
+    store.execute(solidDialogCommand(dialog({ base, offset: "-12" }), out)!);
+    const made = store.document.features[out.id!]!;
+    expect(made).toMatchObject({ type: "offset-plane", base, offset: "-12" });
+
+    const edit = dialogFromFeature(made)!;
+    expect(edit).toEqual({ type: "offset-plane", editing: out.id, base, offset: "-12", picking: "base" });
+    store.execute(solidDialogCommand({ ...edit, offset: "30" } as SolidDialog)!);
+    expect(store.document.features[out.id!]).toMatchObject({ offset: "30", name: made.name });
+    expect(store.document.timeline).toHaveLength(1);
+    expect(store.undoLabel).toBe("Edit offset plane");
+    store.undo();
+    expect(store.document.features[out.id!]).toMatchObject({ offset: "-12" });
+  });
+
+  it("shows its base among the references, and consumes no sketch", () => {
+    const { planeId } = withPlane();
+    expect(dialogReferences(dialog({ base: { type: "plane", featureId: planeId } })).planes).toEqual([
+      planeId,
+    ]);
+    expect(
+      dialogReferences(dialog({ base: { type: "origin-plane", plane: "XY" } })).originPlanes,
+    ).toEqual(["XY"]);
+    expect(consumedSketches(dialog())).toEqual([]);
+    expect(nextPicking(dialog()).picking).toBe("base");
+  });
+
+  it("offers construction planes to Mirror and Split, but not as something to repeat", () => {
+    const { doc, planeId } = withPlane();
+    const split: SplitDialog = {
+      type: "split",
+      editing: null,
+      bodyId: "b",
+      tool: null,
+      keep: "both",
+      picking: "tool",
+    };
+    expect(applyPick(split, { kind: "plane", featureId: planeId }, { doc })).toEqual({
+      tool: { type: "plane", featureId: planeId },
+    });
+    expect(canRepeatFeature(doc, { editing: null }, planeId)).toBe(false);
   });
 });

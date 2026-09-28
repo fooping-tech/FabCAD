@@ -12,6 +12,7 @@ export function measureContext(): MeasureContext {
   return {
     doc,
     bodies: modelState.get().bodies,
+    planes: modelState.get().planes,
     regions: (sketchId) => {
       const f = doc.features[sketchId];
       return f?.type === "sketch" ? sketchView(f.sketch, doc).regions : [];

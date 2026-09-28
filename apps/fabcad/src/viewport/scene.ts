@@ -6,6 +6,7 @@ import {
   type Vec2,
   type Vec3,
 } from "@fabcad/geometry";
+import type { PlanePatch } from "@fabcad/features";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { COLORS } from "./theme";
@@ -21,12 +22,14 @@ export type Pick3D =
   | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean }
   | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
   | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
-  | { kind: "origin-plane"; plane: OriginPlaneName };
+  | { kind: "origin-plane"; plane: OriginPlaneName }
+  | { kind: "plane"; featureId: string };
 
 export interface PickOptions {
   faces?: boolean;
   edges?: boolean;
   vertices?: boolean;
+  /** Origin planes and construction planes. */
   originPlanes?: boolean;
 }
 
@@ -35,7 +38,8 @@ export type Highlight =
   | { kind: "face"; bodyId: string; faceIndex: number }
   | { kind: "edge"; bodyId: string; edgeIndex: number }
   | { kind: "vertex"; bodyId: string; point: Vec3 }
-  | { kind: "origin-plane"; plane: OriginPlaneName };
+  | { kind: "origin-plane"; plane: OriginPlaneName }
+  | { kind: "plane"; featureId: string };
 
 interface BodyEntry {
   id: string;
@@ -80,6 +84,9 @@ export class ViewportScene {
   private highlightRoot = new THREE.Group();
   private originPlanes = new Map<OriginPlaneName, THREE.Mesh>();
   private originAxes = new Map<string, THREE.Object3D>();
+  private planeRoot = new THREE.Group();
+  private planes = new Map<string, { key: string; mesh: THREE.Mesh }>();
+  private planePreview: THREE.Mesh | null = null;
   private raycaster = new THREE.Raycaster();
   private width = 1;
   private height = 1;
@@ -135,7 +142,7 @@ export class ViewportScene {
     this.scene.add(hemi, rig);
     this.lightRig = rig;
 
-    this.scene.add(this.originRoot, this.bodyRoot, this.highlightRoot);
+    this.scene.add(this.originRoot, this.planeRoot, this.bodyRoot, this.highlightRoot);
     this.buildOrigin();
     this.loop();
   }
@@ -571,6 +578,84 @@ export class ViewportScene {
     this.invalidate();
   }
 
+  // ------------------------------------------------------ construction planes
+
+  private planeMesh(patch: PlanePatch, color: number, opacity: number): THREE.Mesh {
+    const geometry = new THREE.PlaneGeometry(patch.size, patch.size);
+    const mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    const basis = new THREE.Matrix4().makeBasis(
+      toV3(patch.plane.xDir),
+      toV3(patch.plane.yDir),
+      toV3(patch.plane.normal),
+    );
+    mesh.quaternion.setFromRotationMatrix(basis);
+    mesh.position.copy(toV3(patch.center));
+    mesh.renderOrder = 1;
+    mesh.add(
+      new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 }),
+      ),
+    );
+    return mesh;
+  }
+
+  private disposePlaneMesh(mesh: THREE.Mesh): void {
+    mesh.parent?.remove(mesh);
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+    for (const child of mesh.children) {
+      const line = child as THREE.LineSegments;
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    }
+  }
+
+  /** Show exactly these construction planes. */
+  setPlanes(planes: { id: string; patch: PlanePatch; visible: boolean }[]): void {
+    const wanted = new Set(planes.map((p) => p.id));
+    for (const [id, entry] of this.planes) {
+      if (wanted.has(id)) continue;
+      this.disposePlaneMesh(entry.mesh);
+      this.planes.delete(id);
+    }
+    for (const p of planes) {
+      const key = JSON.stringify(p.patch);
+      let entry = this.planes.get(p.id);
+      if (!entry || entry.key !== key) {
+        if (entry) this.disposePlaneMesh(entry.mesh);
+        const mesh = this.planeMesh(p.patch, COLORS.constructionPlane, 0.12);
+        mesh.userData.planeFeature = p.id;
+        this.planeRoot.add(mesh);
+        entry = { key, mesh };
+        this.planes.set(p.id, entry);
+      }
+      entry.mesh.visible = p.visible;
+    }
+    this.invalidate();
+  }
+
+  /** The plane a command is about to create, or null to remove the preview. */
+  setPlanePreview(patch: PlanePatch | null): void {
+    if (this.planePreview) this.disposePlaneMesh(this.planePreview);
+    this.planePreview = null;
+    if (patch) {
+      this.planePreview = this.planeMesh(patch, COLORS.selected, 0.28);
+      this.planePreview.renderOrder = 3;
+      this.scene.add(this.planePreview);
+    }
+    this.invalidate();
+  }
+
   // ------------------------------------------------------------------- bodies
 
   setBody(id: string, hash: string, geometry: BodyGeometry): void {
@@ -664,10 +749,22 @@ export class ViewportScene {
       (mesh.material as THREE.MeshBasicMaterial).opacity = 0.1;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(PLANE_COLORS[name]);
     }
+    for (const { mesh } of this.planes.values()) {
+      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.12;
+      (mesh.material as THREE.MeshBasicMaterial).color.setHex(COLORS.constructionPlane);
+    }
     for (const b of this.bodies.values()) b.material.color.setHex(COLORS.body);
 
     for (const { highlight: h, mode } of items) {
       const color = mode === "selected" ? COLORS.selected : COLORS.highlight;
+      if (h.kind === "plane") {
+        const mesh = this.planes.get(h.featureId)?.mesh;
+        if (mesh) {
+          (mesh.material as THREE.MeshBasicMaterial).opacity = 0.35;
+          (mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
+        }
+        continue;
+      }
       if (h.kind === "origin-plane") {
         const mesh = this.originPlanes.get(h.plane);
         if (mesh) {
@@ -872,12 +969,17 @@ export class ViewportScene {
     }
 
     if (options.originPlanes) {
-      const planes = [...this.originPlanes.values()].filter((m) => m.visible);
+      const planes = [
+        ...this.originPlanes.values(),
+        ...[...this.planes.values()].map((p) => p.mesh),
+      ].filter((m) => m.visible);
       const planeHit = this.raycaster.intersectObjects(planes, false)[0];
       // An origin plane only wins when it is clearly in front: a face lying in the plane
       // (e.g. the bottom of a body on XY) is what the user is pointing at.
       const margin = hit ? Math.max(0.05, hit.distance * 0.004) : 0;
       if (planeHit && (!hit || planeHit.distance < hit.distance - margin)) {
+        const featureId = planeHit.object.userData.planeFeature as string | undefined;
+        if (featureId !== undefined) return { kind: "plane", featureId };
         return { kind: "origin-plane", plane: planeHit.object.userData.plane as OriginPlaneName };
       }
     }

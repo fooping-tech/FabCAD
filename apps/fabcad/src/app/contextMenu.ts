@@ -2,6 +2,7 @@ import { editText, explodeTexts } from "../text/textCommands";
 import {
   setBodyVisible,
   setFeatureSuppressed,
+  setPlaneVisible,
   setSketchVisible,
 } from "@fabcad/cad-document";
 import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
@@ -22,6 +23,7 @@ import {
   openDialog,
   repeatLastCommand,
   setTool,
+  startSketchOnPlane,
 } from "./actions";
 import { type Dialog, appState, setSelection } from "./appState";
 import { documentStore, editSketchSolved, redo, run, undo } from "./session";
@@ -203,7 +205,21 @@ export function buildContextMenu(): MenuItem[] {
         icon: f.type === "sketch" ? "sketch" : "parameters",
         onSelect: () => editFeature(f.id),
       });
-      if (f.type === "sketch") {
+      if (f.type === "offset-plane") {
+        items.push(
+          {
+            label: "Create Sketch",
+            icon: "new-sketch",
+            onSelect: () => void startSketchOnPlane(f.id),
+          },
+          {
+            label: f.visible ? "Hide" : "Show",
+            icon: f.visible ? "eye-off" : "eye",
+            kbd: "V",
+            onSelect: () => run(setPlaneVisible(f.id, !f.visible)),
+          },
+        );
+      } else if (f.type === "sketch") {
         items.push({
           label: f.visible ? "Hide" : "Show",
           icon: f.visible ? "eye-off" : "eye",
@@ -288,6 +304,7 @@ export function buildContextMenu(): MenuItem[] {
         icon: "new-sketch",
         onSelect: () => beginSketchPlanePick(null),
       });
+      items.push(dialogItem("offset-plane"));
     }
     items.push({ label: "Shell", icon: "shell", onSelect: () => openDialog("shell") });
     if (selection.every((s) => s.kind === "face" && s.planar)) items.push(dialogItem("align"));
@@ -298,7 +315,25 @@ export function buildContextMenu(): MenuItem[] {
       icon: "new-sketch",
       onSelect: () => beginSketchPlanePick(null),
     });
+    items.push(dialogItem("offset-plane"));
     sep();
+  } else if (first?.kind === "plane" && selection.length === 1) {
+    const f = doc.features[first.featureId];
+    if (f?.type === "offset-plane") {
+      items.push(
+        { label: "Create Sketch", icon: "new-sketch", onSelect: () => beginSketchPlanePick(null) },
+        { label: "Edit Plane", icon: "parameters", onSelect: () => editFeature(f.id) },
+        dialogItem("offset-plane"),
+        {
+          label: f.visible ? "Hide" : "Show",
+          icon: f.visible ? "eye-off" : "eye",
+          kbd: "V",
+          onSelect: () => run(setPlaneVisible(f.id, !f.visible)),
+        },
+        { label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection },
+      );
+      sep();
+    }
   }
 
   const bodyIds = [...new Set(selection.flatMap((s) => ("bodyId" in s ? [s.bodyId] : [])))];

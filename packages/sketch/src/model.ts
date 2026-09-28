@@ -243,6 +243,13 @@ export type SketchPlaneRef =
       plane: Plane3;
       /** Persistent name of the face: the sketch follows the face when the body changes. */
       ref?: TopologyRef;
+    }
+  | {
+      /** A construction plane, by the id of the feature that defines it. */
+      type: "plane";
+      featureId: string;
+      /** The plane when the sketch was last evaluated. */
+      plane: Plane3;
     };
 
 export interface Sketch {

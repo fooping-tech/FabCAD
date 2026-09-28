@@ -1,29 +1,16 @@
-import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactElement, useEffect, useRef } from "react";
 import { appState } from "../app/appState";
 import { buildContextMenu, closeContextMenu } from "../app/contextMenu";
 import { useStore } from "../app/tinyStore";
 import { Icon, hasIcon } from "../ui/Icon";
+import { Popover } from "../ui/Popover";
 
-/** Right-click (or long-press) menu at the pointer. */
+/** Context menu at the pointer: right-click with a mouse, double tap on a touch screen. */
 export function ContextMenu(): ReactElement | null {
   const at = useStore(appState, (s) => s.contextMenu);
   const ref = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
-  // After a long press the menu opens under the finger: lifting it must not pick an item.
+  // A menu opened while the finger is still down: lifting it must not pick an item.
   const armed = useRef(true);
-
-  useLayoutEffect(() => {
-    if (!at || !ref.current) {
-      setPosition(null);
-      return;
-    }
-    // Keep the menu inside the window.
-    const r = ref.current.getBoundingClientRect();
-    setPosition({
-      left: Math.max(6, Math.min(at.x, window.innerWidth - r.width - 6)),
-      top: Math.max(6, Math.min(at.y, window.innerHeight - r.height - 6)),
-    });
-  }, [at]);
 
   useEffect(() => {
     if (!at) return;
@@ -60,15 +47,10 @@ export function ContextMenu(): ReactElement | null {
   if (!at) return null;
   const items = buildContextMenu();
   return (
-    <div
-      ref={ref}
+    <Popover
+      anchor={{ x: at.x, y: at.y }}
       className="menu context-menu"
-      role="menu"
-      style={{
-        left: position?.left ?? at.x,
-        top: position?.top ?? at.y,
-        visibility: position ? "visible" : "hidden",
-      }}
+      popoverRef={ref}
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, i) => {
@@ -97,6 +79,6 @@ export function ContextMenu(): ReactElement | null {
           </button>
         );
       })}
-    </div>
+    </Popover>
   );
 }

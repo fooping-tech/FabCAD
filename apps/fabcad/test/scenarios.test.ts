@@ -78,18 +78,70 @@ const star = (outer: number, inner: number) => (sketch: Sketch): Sketch =>
   });
 
 describe("milestone scenarios", () => {
-  it("Scenario B: star → extrude → MDF 5.5 mm → panels → tab & slot → SVG", async () => {
-    const body = await model(star(110, 50), { x: 0, y: 0 }, "40");
+  it("Scenario A: star → extrude 5.5 → MDF 5.5 mm → one flat part → SVG", async () => {
+    const body = await model(star(110, 50), { x: 0, y: 0 }, "5.5");
     expect(body.topology.faces).toHaveLength(12);
+
+    const out = compileFabrication([body], defaultFabricationSettings());
+    expect(out.strategyId).toBe("laser.board");
+    expect(out.detections).toEqual([
+      expect.objectContaining({ kind: "flat-part", supported: true, parts: 1 }),
+    ]);
+    expect(out.parts).toHaveLength(1);
+    const part = out.parts[0]!;
+    // The part is the star that was drawn: ten corners, no joints added to it.
+    expect(part.outline).toHaveLength(10);
+    expect(part.holes).toHaveLength(0);
+    expect(part.joints).toHaveLength(0);
+    expect(out.connections).toHaveLength(0);
+    expect(out.warnings.filter((w) => w.severity === "error")).toHaveLength(0);
+    expect(out.layout.placements).toHaveLength(1);
+
+    const svg = renderSheetSvg(out.geometry, { sheet: 0 });
+    expect(svg).toContain('<g id="cut"');
+    expect((svg.match(/<path/g) ?? []).length).toBe(1);
+    expect(renderSheetDxf(out.geometry, { sheet: 0 })).toContain("ENTITIES");
+  });
+
+  it("a star prism is not made of board: no parts, and the reason is given", async () => {
+    const body = await model(star(110, 50), { x: 0, y: 0 }, "40");
+    const out = compileFabrication([body], defaultFabricationSettings());
+    expect(out.parts).toHaveLength(0);
+    expect(out.connections).toHaveLength(0);
+    expect(out.detections).toEqual([
+      expect.objectContaining({ kind: "unsupported", supported: false, parts: 0 }),
+    ]);
+    expect(out.detections[0]!.reason ?? "").not.toBe("");
+    const error = out.warnings.find((w) => w.code === "unsupported-board-shape");
+    expect(error?.severity).toBe("error");
+    expect(error?.message).toMatch(/5\.5 mm MDF/);
+    expect(out.geometry.paths).toHaveLength(0);
+  });
+
+  it("Scenario B: rectangle → extrude → MDF 5.5 mm → panels → tab & slot → SVG", async () => {
+    const body = await model(
+      (sketch) =>
+        editSketch(sketch, (b) => {
+          const r = createRectangle2Point(b, { x: 0, y: 0 }, { x: 98, y: 81 });
+          b.dimension("distance", [r.entities[0]!], "100");
+          b.dimension("distance", [r.entities[1]!], "80");
+        }),
+      { x: 10, y: 10 },
+      "50",
+    );
+    expect(body.topology.faces).toHaveLength(6);
 
     const out = compileFabrication([body], defaultFabricationSettings());
     expect(out.material.id).toBe("mdf-5.5");
     expect(out.strategyId).toBe("laser.board");
-    expect(out.parts).toHaveLength(12);
-    expect(out.connections).toHaveLength(30);
+    expect(out.detections).toEqual([
+      expect.objectContaining({ kind: "rectangular-box", supported: true, parts: 6 }),
+    ]);
+    expect(out.parts).toHaveLength(6);
+    expect(out.connections).toHaveLength(12);
     const tabSlot = out.connections.filter((c) => c.joint === "tab-slot");
-    expect(tabSlot).toHaveLength(20);
-    expect(out.connections.filter((c) => c.joint === "flat")).toHaveLength(10);
+    expect(tabSlot).toHaveLength(8);
+    expect(out.connections.filter((c) => c.joint === "flat")).toHaveLength(4);
 
     // Every tab has its slot, connection by connection.
     for (const c of tabSlot) {
@@ -101,11 +153,7 @@ describe("milestone scenarios", () => {
       expect(count("tab")).toBeGreaterThan(0);
       expect(count("slot")).toBe(count("tab"));
     }
-    // The star has concave and acute corners: the analyzer must say so.
-    const codes = new Set(out.warnings.map((w) => w.code));
-    expect(codes.has("concave-corner")).toBe(true);
-    expect(codes.has("acute-angle")).toBe(true);
-    expect(out.warnings.some((w) => /5\.5 mm MDF/.test(w.message))).toBe(true);
+    expect(out.warnings.filter((w) => w.severity === "error")).toHaveLength(0);
 
     const svg = renderSheetSvg(out.geometry, { sheet: 0 });
     expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="[\d.]+mm" height="[\d.]+mm" viewBox="0 0 [\d.]+ [\d.]+"/);
@@ -157,11 +205,11 @@ describe("milestone scenarios", () => {
     const curved = body.topology.faces.filter((f) => f.surface === "curved");
     expect(curved.length).toBeGreaterThan(16);
 
-    // Board: the flat rings are cut, the curved walls are reported as not producible.
+    // Board: a tube 25 mm tall is neither a sheet nor a box. Nothing is cut.
     const board = compileFabrication([body], defaultFabricationSettings());
-    expect(board.parts).toHaveLength(2);
-    expect(board.parts.every((p) => p.holes.length === 1)).toBe(true);
-    expect(board.warnings.some((w) => w.code === "curved-face")).toBe(true);
+    expect(board.parts).toHaveLength(0);
+    expect(board.detections[0]).toMatchObject({ kind: "unsupported", supported: false });
+    expect(board.warnings.some((w) => w.code === "unsupported-board-shape")).toBe(true);
 
     // Paper: every facet is unfolded, without overlaps being produced silently.
     const paper = compileFabrication([body], {
@@ -170,5 +218,33 @@ describe("milestone scenarios", () => {
     });
     const faces = paper.parts.reduce((n, p) => n + p.sourceFaces.length, 0);
     expect(faces).toBe(body.topology.faces.length);
+  });
+
+  it("a washer of the thickness of the material is one flat part with its hole", async () => {
+    const body = await model(
+      (sketch) =>
+        editSketch(sketch, (b) => {
+          createCircle(b, { x: 0, y: 0 }, 30);
+          createCircle(b, { x: 0, y: 0 }, 10);
+        }),
+      { x: 20, y: 0 },
+      "5.5",
+    );
+    const out = compileFabrication([body], defaultFabricationSettings());
+    expect(out.detections[0]).toMatchObject({ kind: "flat-part", supported: true, parts: 1 });
+    expect(out.parts).toHaveLength(1);
+    const part = out.parts[0]!;
+    expect(part.holes).toHaveLength(1);
+    expect(part.joints).toHaveLength(0);
+    // Outline and hole are the circles that were drawn, as the kernel facets them.
+    const radius = (loop: { x: number; y: number }[]): number[] => {
+      const cx = loop.reduce((s, p) => s + p.x, 0) / loop.length;
+      const cy = loop.reduce((s, p) => s + p.y, 0) / loop.length;
+      return loop.map((p) => Math.hypot(p.x - cx, p.y - cy));
+    };
+    for (const r of radius(part.outline)) expect(r).toBeCloseTo(30, 1);
+    for (const r of radius(part.holes[0]!)) expect(r).toBeCloseTo(10, 1);
+    expect(part.paths.filter((p) => p.role === "outline")).toHaveLength(1);
+    expect(part.paths.filter((p) => p.role === "hole")).toHaveLength(1);
   });
 });

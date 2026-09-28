@@ -15,6 +15,7 @@ import {
   planeToWorld,
   polygonPerimeter,
 } from "@fabcad/geometry";
+import type { Plane3 } from "@fabcad/geometry";
 import { type SketchRegion, entityToCurves, getPoint } from "@fabcad/sketch";
 import type { Selection } from "../app/appState";
 
@@ -27,6 +28,8 @@ import type { Selection } from "../app/appState";
 export interface MeasureContext {
   doc: CadDocument;
   bodies: Record<string, { geometry: BodyGeometry } | undefined>;
+  /** Construction planes as evaluated, by feature id. */
+  planes?: Record<string, { plane: Plane3 } | undefined>;
   regions: (sketchId: string) => SketchRegion[];
 }
 
@@ -79,6 +82,11 @@ export function measureItemOf(s: Selection, ctx: MeasureContext): MeasureItem | 
     }
     case "origin-plane": {
       const plane = ORIGIN_PLANES[s.plane];
+      return { kind: "plane", point: plane.origin, normal: plane.normal, points: [plane.origin] };
+    }
+    case "plane": {
+      const plane = ctx.planes?.[s.featureId]?.plane;
+      if (!plane) return null;
       return { kind: "plane", point: plane.origin, normal: plane.normal, points: [plane.origin] };
     }
     case "entity": {
@@ -153,6 +161,8 @@ export function describePick(s: Selection, ctx: MeasureContext): string {
       return body(s.bodyId);
     case "origin-plane":
       return `${s.plane} plane`;
+    case "plane":
+      return ctx.doc.features[s.featureId]?.name ?? "Plane";
     case "profile":
       return `Profile of ${ctx.doc.features[s.sketchId]?.name ?? "sketch"}`;
     case "entity": {

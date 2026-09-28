@@ -1,7 +1,7 @@
 import { listFeatures, setFeatureSuppressed, setTimelineCursor } from "@fabcad/cad-document";
 import type { ReactElement } from "react";
 import { editFeature, featureIcon, pickInDialog } from "../app/actions";
-import { appState, isSelected, select } from "../app/appState";
+import { appState, isAdditiveClick, isSelected, select } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
@@ -75,7 +75,7 @@ export function Timeline(): ReactElement {
                   run(setFeatureSuppressed(f.id, !f.suppressed));
                   return;
                 }
-                const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+                const additive = isAdditiveClick(e);
                 // An open feature dialog takes the click as a pick (the source of a pattern).
                 if (pickInDialog({ kind: "feature", featureId: f.id }, additive)) return;
                 select({ kind: "feature", featureId: f.id }, additive);

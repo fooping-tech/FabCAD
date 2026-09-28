@@ -8,7 +8,12 @@ import { exportSheets } from "./export";
 import "./fabrication.css";
 import { CheckField, NumberField, Section, SegmentedField } from "./fields";
 import { formatNumber } from "./numberInput";
-import { type FabricationOutput, fabricationRegistry, fabricationStats } from "./pipeline";
+import {
+  type BodyDetection,
+  type FabricationOutput,
+  fabricationRegistry,
+  fabricationStats,
+} from "./pipeline";
 import {
   type BodyChoice,
   type LaserFabricationSettings,
@@ -233,6 +238,27 @@ function WarningList({ warnings, selectedPartId }: WarningListProps): ReactNode 
   );
 }
 
+/** What was detected in every body: the user never has to guess how a body was interpreted. */
+function DetectionList({ detections }: { detections: BodyDetection[] }): ReactNode {
+  if (detections.length === 0) return null;
+  const single = detections.length === 1;
+  return (
+    <div className="fab-detections">
+      {detections.map((d) => (
+        <div key={d.bodyId} className={`fab-detection${d.supported ? "" : " unsupported"}`}>
+          {single ? null : <div className="fab-detection-body">{d.bodyName}</div>}
+          <div className="fab-detection-kind">
+            {d.supported ? `Detected: ${d.label}` : d.label}
+          </div>
+          {!d.supported && d.reason ? (
+            <div className="fab-detection-reason">{`Reason: ${d.reason}`}</div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AnalysisSection({ state }: { state: FabricationState }): ReactNode {
   const { output, status } = state;
   const selectedPartId = useStore(fabricationUiState, (s) => s.selectedPartId);
@@ -256,6 +282,7 @@ function AnalysisSection({ state }: { state: FabricationState }): ReactNode {
       ) : null}
       {output && stats ? (
         <>
+          <DetectionList detections={output.detections} />
           <dl className="kv" style={{ margin: "0 0 8px" }}>
             <dt>Parts</dt>
             <dd>{stats.parts}</dd>
