@@ -11,11 +11,15 @@ import {
   type Vec2,
   type Vec3,
   add3,
+  cross3,
   curveEnd,
   curvePointAt,
   curveStart,
   dist2,
   dist3,
+  len3,
+  makePlane,
+  norm3,
   scale3,
   subCurve,
 } from "@fabcad/geometry";
@@ -23,11 +27,17 @@ import {
   type BodyGeometry,
   type BooleanOp,
   type GeometryKernel,
+  type HoleSpec,
   type KernelShape,
   KernelError,
+  type LoftOptions,
+  type LoftSectionInput,
   type MeshEdgeGroup,
   type MeshFaceGroup,
+  type PathCurve3,
   type PointRef,
+  type ShapeTransform,
+  type SweepOptions,
   type SurfaceKind,
   type TessellationOptions,
 } from "./kernel";
@@ -215,6 +225,70 @@ function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: numbe
   };
 }
 
+/**
+ * The parts of OpenCASCADE used directly, where Replicad has no function for the job. Replicad
+ * hands out the instance untyped enough that spelling out these few members is the safer way.
+ */
+interface OcDeletable {
+  delete(): void;
+}
+interface OcPipeShell extends OcDeletable {
+  SetTransitionMode(mode: unknown): void;
+  SetMode(binormal: unknown): void;
+  Add(profile: unknown, withContact: boolean, withCorrection: boolean): void;
+  Build(): void;
+  IsDone(): boolean;
+  MakeSolid(): boolean;
+  Shape(): unknown;
+}
+interface OcSubset {
+  BRepOffsetAPI_MakePipeShell: new (spine: unknown) => OcPipeShell;
+  BRepBuilderAPI_TransitionMode: { BRepBuilderAPI_RightCorner: unknown };
+  gp_Dir: new (x: number, y: number, z: number) => OcDeletable;
+}
+const openCascade = (): OcSubset => replicad.getOC() as unknown as OcSubset;
+
+type RawShape = Parameters<typeof replicad.cast>[0];
+
+function asShape3D(shape: replicad.AnyShape, what: string): Shape3D {
+  if (shape.isNull || !("solids" in shape || "faces" in shape)) {
+    throw new KernelError(`${what} did not produce a solid.`);
+  }
+  return shape as Shape3D;
+}
+
+/** Throw unless the shape is a solid with volume; `advice` tells the user what to try. */
+function requireSolid(shape: Shape3D, what: string, advice: string): Shape3D {
+  let volume = 0;
+  try {
+    volume = shape.isNull ? 0 : replicad.measureVolume(shape);
+  } catch {
+    volume = 0;
+  }
+  if (!(Math.abs(volume) > 1e-9)) throw new KernelError(`${what} failed: ${advice}`);
+  return shape;
+}
+
+/** Wire of the outer boundary of a profile, placed on its plane. */
+function outerWire(profile: Profile2, plane: Plane3): replicad.Wire {
+  const sketch = loopToDrawing(profile.outer).sketchOnPlane(toReplicadPlane(plane));
+  return (sketch as replicad.Sketch).wire;
+}
+
+function pathToWire(path: PathCurve3[]): replicad.Wire {
+  const edges = path.map((c) => {
+    switch (c.type) {
+      case "line":
+        return replicad.makeLine(tuple3(c.from), tuple3(c.to));
+      case "arc":
+        return replicad.makeThreePointArc(tuple3(c.from), tuple3(c.via), tuple3(c.to));
+      case "bezier":
+        return replicad.makeBezierCurve(c.points.map(tuple3));
+    }
+  });
+  return replicad.assembleWire(edges);
+}
+
 class ReplicadKernel implements GeometryKernel {
   readonly name = "replicad-opencascade";
 
@@ -356,6 +430,188 @@ class ReplicadKernel implements GeometryKernel {
         );
       }
       return wrap(result);
+    });
+  }
+
+  hole(holes: HoleSpec[]): KernelShape {
+    if (holes.length === 0) throw new KernelError("Hole: select at least one point.");
+    const solids = holes.map((h) => {
+      const r = h.diameter / 2;
+      if (!(r > 0)) throw new KernelError("The hole diameter must be positive.");
+      if (!(h.depth > 0)) throw new KernelError("The hole depth must be positive.");
+      // Half of the cross-section, x = distance from the axis, y = depth: turned about the
+      // axis it gives the cylinder, the counterbore and the countersink in one solid.
+      const outline: Vec2[] = [{ x: 0, y: 0 }];
+      if (h.counterbore) {
+        const R = h.counterbore.diameter / 2;
+        if (!(R > r)) {
+          throw new KernelError("The counterbore diameter must be larger than the hole diameter.");
+        }
+        if (!(h.counterbore.depth > 0)) {
+          throw new KernelError("The counterbore depth must be positive.");
+        }
+        if (!(h.counterbore.depth < h.depth)) {
+          throw new KernelError("The counterbore must be less deep than the hole.");
+        }
+        outline.push({ x: R, y: 0 }, { x: R, y: h.counterbore.depth }, { x: r, y: h.counterbore.depth });
+      } else if (h.countersink) {
+        const R = h.countersink.diameter / 2;
+        if (!(R > r)) {
+          throw new KernelError("The countersink diameter must be larger than the hole diameter.");
+        }
+        if (!(h.countersink.angle > 0 && h.countersink.angle < 180)) {
+          throw new KernelError("The countersink angle must be between 0° and 180°.");
+        }
+        const height = (R - r) / Math.tan((h.countersink.angle * Math.PI) / 360);
+        if (!(height < h.depth)) {
+          throw new KernelError(
+            "The countersink is deeper than the hole. Use a larger angle, a smaller countersink diameter or a deeper hole.",
+          );
+        }
+        outline.push({ x: R, y: 0 }, { x: r, y: height });
+      } else {
+        outline.push({ x: r, y: 0 });
+      }
+      outline.push({ x: r, y: h.depth }, { x: 0, y: h.depth });
+      const curves: Curve2[] = outline.map((a, i) => ({
+        type: "line",
+        a,
+        b: outline[(i + 1) % outline.length]!,
+      }));
+      const axis = norm3(h.direction);
+      if (len3(axis) < 0.5) throw new KernelError("The hole has no direction.");
+      const side = makePlane(h.position, axis).xDir;
+      // A plane through the axis: x runs away from the axis, y along it.
+      const plane = makePlane(h.position, cross3(side, axis), side);
+      return unwrap(this.revolve([{ outer: { curves }, holes: [] }], plane, h.position, axis, 360));
+    });
+    return guard("Hole", () =>
+      wrap(requireSolid(fuseAll(solids), "Hole", "the hole has no volume. Check its sizes.")),
+    );
+  }
+
+  transform(shape: KernelShape, steps: ShapeTransform[]): KernelShape {
+    return guard("Move", () => {
+      const source = unwrap(shape);
+      let current: RawShape = source.wrapped;
+      const release = (): void => {
+        if (current !== source.wrapped) (current as unknown as OcDeletable).delete();
+      };
+      for (const step of steps) {
+        let next: RawShape;
+        if (step.type === "translate") {
+          next = replicad.translate(current, tuple3(step.vector));
+        } else if (step.type === "rotate") {
+          if (len3(step.axis) < 1e-9) throw new KernelError("The rotation axis has no direction.");
+          next = replicad.rotate(current, step.angle, tuple3(step.origin), tuple3(norm3(step.axis)));
+        } else {
+          if (len3(step.normal) < 1e-9) throw new KernelError("The mirror plane has no normal.");
+          next = replicad.mirror(current, tuple3(norm3(step.normal)), tuple3(step.origin));
+        }
+        release();
+        current = next;
+      }
+      // Without steps the result is still a shape of its own: the caller owns what it gets.
+      if (current === source.wrapped) current = replicad.translate(current, [0, 0, 0]);
+      return wrap(asShape3D(replicad.cast(current), "Move"));
+    });
+  }
+
+  split(
+    shape: KernelShape,
+    plane: Plane3,
+  ): { positive: KernelShape | null; negative: KernelShape | null } {
+    return guard("Split", () => {
+      const s = unwrap(shape);
+      const half = (keep: "positive" | "negative"): KernelShape | null => {
+        const part = s.cutPlane(toReplicadPlane(plane), 0, keep);
+        if (!part) return null;
+        if (part.isNull || !(replicad.measureVolume(part) > 1e-9)) {
+          part.delete();
+          return null;
+        }
+        return wrap(part as Shape3D);
+      };
+      return { positive: half("positive"), negative: half("negative") };
+    });
+  }
+
+  sweep(
+    profiles: Profile2[],
+    plane: Plane3,
+    path: PathCurve3[],
+    options: SweepOptions = {},
+  ): KernelShape {
+    if (path.length === 0) throw new KernelError("Sweep: select a path.");
+    return guard("Sweep", () => {
+      const oc = openCascade();
+      const advice =
+        "the profile cannot follow this path. Check that the path does not bend more tightly than the profile is wide.";
+      const along = (wire: replicad.Wire): Shape3D => {
+        const spine = pathToWire(path);
+        const builder = new oc.BRepOffsetAPI_MakePipeShell(spine.wrapped);
+        try {
+          builder.SetTransitionMode(oc.BRepBuilderAPI_TransitionMode.BRepBuilderAPI_RightCorner);
+          if (options.pathNormal && len3(options.pathNormal) > 1e-9) {
+            const n = norm3(options.pathNormal);
+            const direction = new oc.gp_Dir(n.x, n.y, n.z);
+            builder.SetMode(direction);
+            direction.delete();
+          }
+          builder.Add(wire.wrapped, false, false);
+          builder.Build();
+          if (!builder.IsDone()) throw new KernelError(`Sweep failed: ${advice}`);
+          builder.MakeSolid();
+          const solid = asShape3D(replicad.cast(builder.Shape() as RawShape), "Sweep");
+          return requireSolid(solid, "Sweep", advice);
+        } finally {
+          builder.delete();
+          spine.delete();
+          wire.delete();
+        }
+      };
+      const solids = profiles.map((p) => {
+        let solid = along(outerWire(p, plane));
+        for (const hole of p.holes) {
+          solid = solid.cut(along(outerWire({ outer: hole, holes: [] }, plane)));
+        }
+        return solid;
+      });
+      return wrap(requireSolid(fuseAll(solids), "Sweep", advice));
+    });
+  }
+
+  loft(sections: LoftSectionInput[], options: LoftOptions = {}): KernelShape {
+    if (sections.length < 2) throw new KernelError("Loft: select at least two sections.");
+    return guard("Loft", () => {
+      const wires = sections.map((section) => {
+        if (section.type === "profile") {
+          if (section.profile.holes.length > 0) {
+            throw new KernelError(
+              "Loft: a section with a hole in it is not supported. Select profiles without inner loops.",
+            );
+          }
+          return outerWire(section.profile, section.plane);
+        }
+        const face = unwrap(section.shape).faces[section.faceIndex];
+        if (!face) throw new KernelError("Loft: a selected face no longer exists.");
+        if (face.geomType !== "PLANE") {
+          throw new KernelError("Loft: only planar faces can be used as a section.");
+        }
+        return face.outerWire();
+      });
+      try {
+        const solid = replicad.loft(wires, { ruled: options.ruled ?? false });
+        return wrap(
+          requireSolid(
+            solid,
+            "Loft",
+            "the sections do not enclose a volume. Check that they do not lie in the same plane and do not cross each other.",
+          ),
+        );
+      } finally {
+        for (const w of wires) w.delete();
+      }
     });
   }
 

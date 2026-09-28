@@ -1,7 +1,7 @@
 import { type AssemblyModel, createAssembly } from "@fabcad/assembly";
 import type { Sketch } from "@fabcad/sketch";
 import type { Feature, FeatureType, SketchFeature } from "./features";
-import { FEATURE_LABELS, featureCreatedBodies } from "./features";
+import { FEATURE_LABELS, featureCreatedBodies, parseDynamicBodyId } from "./features";
 import type { Parameter } from "./parameters";
 
 export const DOCUMENT_SCHEMA = "fabcad.document";
@@ -135,12 +135,85 @@ export function listBodies(doc: CadDocument, componentId?: string): BodyRecord[]
   );
 }
 
-/** Drop body records whose creating feature no longer exists or no longer creates them. */
+/**
+ * Drop body records whose creating feature no longer exists or no longer creates them.
+ *
+ * Records of dynamic bodies (see `dynamicBodyId`) are kept as long as the feature named in
+ * their id exists: which of them are alive is only known after evaluation, and that is
+ * `syncBodyRecords`' business.
+ */
 export function pruneBodies(doc: CadDocument): CadDocument {
   const alive = new Set<string>();
   for (const f of Object.values(doc.features)) {
     for (const id of featureCreatedBodies(f)) alive.add(id);
   }
-  const bodies = Object.fromEntries(Object.entries(doc.bodies).filter(([id]) => alive.has(id)));
+  const bodies = Object.fromEntries(
+    Object.entries(doc.bodies).filter(([id]) => {
+      if (alive.has(id)) return true;
+      const dynamic = parseDynamicBodyId(id);
+      return dynamic !== null && doc.features[dynamic.featureId] !== undefined;
+    }),
+  );
   return Object.keys(bodies).length === Object.keys(doc.bodies).length ? doc : { ...doc, bodies };
+}
+
+/** What the feature engine reports about a body that has no record in the document yet. */
+export interface DynamicBodyInfo {
+  id: string;
+  /** Feature that created the body. */
+  createdBy: string;
+  /** Body it was derived from (pattern instance, mirror image, copy, other half of a split). */
+  sourceBodyId?: string;
+  suggestedName: string;
+  componentId: string;
+}
+
+/**
+ * Bring the body records in line with the bodies that the last recompute produced.
+ *
+ * Bodies whose number depends on evaluated values (see `dynamicBodyId`) get their record here
+ * rather than from the command that added the feature. `records` are the bodies the engine
+ * found without a record, `liveBodyIds` all bodies that exist at the end of the active
+ * timeline. Records of dynamic bodies that are not alive are removed, but only when the
+ * feature that makes them is gone or did run: while it is suppressed or behind the history
+ * marker the record stays, and with it the name and colour the user gave the body.
+ *
+ * The result is a function of the document, to be applied without a history entry:
+ * `store.amend(syncBodyRecords(records, liveBodyIds))`. It returns the same document when
+ * there is nothing to do.
+ */
+export function syncBodyRecords(
+  records: readonly DynamicBodyInfo[],
+  liveBodyIds: readonly string[],
+): (doc: CadDocument) => CadDocument {
+  return (doc) => {
+    const live = new Set(liveBodyIds);
+    const active = new Set(doc.timeline.slice(0, doc.timelineCursor ?? doc.timeline.length));
+    let bodies = doc.bodies;
+    const edit = (): Record<string, BodyRecord> => {
+      if (bodies === doc.bodies) bodies = { ...doc.bodies };
+      return bodies;
+    };
+    for (const id of Object.keys(doc.bodies)) {
+      const dynamic = parseDynamicBodyId(id);
+      if (!dynamic || live.has(id)) continue;
+      const owner = doc.features[dynamic.featureId];
+      const ran = owner !== undefined && active.has(owner.id) && !owner.suppressed;
+      if (!owner || ran) delete edit()[id];
+    }
+    for (const r of records) {
+      if (bodies[r.id] || !live.has(r.id) || !doc.features[r.createdBy]) continue;
+      const used = new Set(Object.values(bodies).map((b) => b.name));
+      let name = r.suggestedName;
+      for (let i = 2; used.has(name); i++) name = `${r.suggestedName} ${i}`;
+      edit()[r.id] = {
+        id: r.id,
+        name,
+        componentId: r.componentId,
+        visible: true,
+        createdBy: r.createdBy,
+      };
+    }
+    return bodies === doc.bodies ? doc : { ...doc, bodies };
+  };
 }

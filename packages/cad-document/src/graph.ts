@@ -2,10 +2,13 @@ import type { CadDocument } from "./document";
 import { listFeatures } from "./document";
 import { expressionReferences } from "./expression";
 import {
+  type Feature,
   featureExpressions,
   featureInputBodies,
+  featureInputFeatures,
   featureInputSketches,
   featureOutputBodies,
+  parseDynamicBodyId,
 } from "./features";
 import { evaluateParameters } from "./parameters";
 
@@ -49,6 +52,8 @@ export function buildDependencyGraph(doc: CadDocument): DependencyGraph {
 
   // The last feature that wrote each body, while walking the timeline in order.
   const lastWriter = new Map<string, string>();
+  const lookup = (id: string): Feature | undefined => doc.features[id];
+  const earlier = new Set<string>();
   for (const f of listFeatures(doc)) {
     const node = featureNode(f.id);
     addNode(node);
@@ -56,11 +61,18 @@ export function buildDependencyGraph(doc: CadDocument): DependencyGraph {
       for (const ref of expressionReferences(e.expression)) addEdge(paramNode(ref), node);
     }
     for (const s of featureInputSketches(f)) addEdge(featureNode(s), node);
-    for (const b of featureInputBodies(f)) {
-      const writer = lastWriter.get(b);
-      if (writer) addEdge(featureNode(writer), node);
+    // A pattern of features applies what those features recorded when they ran.
+    for (const s of featureInputFeatures(f)) {
+      if (earlier.has(s)) addEdge(featureNode(s), node);
     }
-    for (const b of featureOutputBodies(f)) lastWriter.set(b, f.id);
+    for (const b of featureInputBodies(f, lookup)) {
+      // Bodies whose number depends on evaluated values are not announced by
+      // `featureOutputBodies`; the feature that makes them is part of their id.
+      const writer = lastWriter.get(b) ?? parseDynamicBodyId(b)?.featureId;
+      if (writer && earlier.has(writer)) addEdge(featureNode(writer), node);
+    }
+    for (const b of featureOutputBodies(f, lookup)) lastWriter.set(b, f.id);
+    earlier.add(f.id);
   }
   return graph;
 }

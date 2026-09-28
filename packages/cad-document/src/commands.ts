@@ -9,26 +9,48 @@ import {
 } from "./document";
 import { isValidParameterName } from "./expression";
 import {
+  type AlignFeature,
   type BodyOperation,
   type ChamferFeature,
+  type CircularPatternFeature,
   type EdgeRef,
   type ExtrudeDirection,
   type ExtrudeFeature,
   type FaceRef,
   type Feature,
   type FilletFeature,
+  type HoleExtent,
+  type HoleFeature,
+  type HoleType,
   type ImportFeature,
+  type LoftFeature,
+  type LoftSection,
+  type MirrorFeature,
+  type MirrorPlane,
+  type MoveFeature,
+  type MoveTransform,
+  type PatternAxis,
+  type PatternDirection,
+  type PatternSource,
+  type Point3Ref,
+  type RectangularPatternFeature,
   type RevolveAxis,
   type RevolveFeature,
   type ShellFeature,
   type SketchFeature,
+  type SplitFeature,
+  type SplitTool,
+  type SweepFeature,
+  type SweepPath,
   type BooleanFeature,
   featureCreatedBodies,
   featureExpressions,
+  parseDynamicBodyId,
+  setFeatureExpression,
 } from "./features";
 import { type Parameter, type ParameterUnit, renameInExpression } from "./parameters";
 import { type Command, command } from "./store";
-import type { ProfileRef } from "@fabcad/sketch";
+import type { EntityId, ProfileRef } from "@fabcad/sketch";
 
 /**
  * Commands: the only way the UI changes a document. Each factory returns a `Command` that the
@@ -149,8 +171,14 @@ function renameInFeature(feature: Feature, from: string, to: string): Feature {
       return { ...feature, distance: r(feature.distance) };
     case "shell":
       return { ...feature, thickness: r(feature.thickness) };
-    default:
-      return feature;
+    default: {
+      // Every other feature: by the keys under which it reports its expressions.
+      let next: Feature = feature;
+      for (const e of featureExpressions(feature)) {
+        next = setFeatureExpression(next, e.key, r(e.expression));
+      }
+      return next;
+    }
   }
 }
 
@@ -438,6 +466,387 @@ export function addImport(
   });
 }
 
+/**
+ * Records for the bodies a feature creates under a derived id (see `dynamicBodyId`), as far
+ * as its definition tells which ones there are. Made by the command so that the body is there
+ * in the same undo step; bodies that only evaluation can tell follow through
+ * `syncBodyRecords`.
+ */
+function derivedBodies(doc: CadDocument, feature: Feature): BodyRecord[] {
+  const out: BodyRecord[] = [];
+  const used = new Set(Object.values(doc.bodies).map((b) => b.name));
+  for (const id of featureCreatedBodies(feature)) {
+    const dynamic = parseDynamicBodyId(id);
+    if (!dynamic || doc.bodies[id]) continue;
+    const source = doc.bodies[dynamic.sourceBodyId];
+    const base = `${source?.name ?? "Body"} (${feature.name})`;
+    let name = base;
+    for (let i = 2; used.has(name); i++) name = `${base} ${i}`;
+    used.add(name);
+    out.push({
+      id,
+      name,
+      componentId: source?.componentId ?? feature.componentId,
+      visible: true,
+      createdBy: feature.id,
+    });
+  }
+  return out;
+}
+
+/** Bodies and features named by a pattern source that exist in the document. */
+function validSource(doc: CadDocument, source: PatternSource): PatternSource | null {
+  if (source.kind === "bodies") {
+    const bodyIds = [...new Set(source.bodyIds)].filter((b) => doc.bodies[b]);
+    return bodyIds.length > 0 ? { kind: "bodies", bodyIds } : null;
+  }
+  const featureIds = [...new Set(source.featureIds)].filter((f) => {
+    const feature = doc.features[f];
+    return feature !== undefined && feature.type !== "sketch";
+  });
+  // In timeline order: that is the order in which their effect is applied again.
+  featureIds.sort((a, b) => doc.timeline.indexOf(a) - doc.timeline.indexOf(b));
+  return featureIds.length > 0 ? { kind: "features", featureIds } : null;
+}
+
+/** Component of the first thing a pattern repeats. */
+function sourceComponent(doc: CadDocument, source: PatternSource): string {
+  const first =
+    source.kind === "bodies"
+      ? doc.bodies[source.bodyIds[0] ?? ""]?.componentId
+      : doc.features[source.featureIds[0] ?? ""]?.componentId;
+  return first ?? doc.assembly.rootComponentId;
+}
+
+export interface HoleInput {
+  bodyId: string;
+  sketchId: string;
+  points: EntityId[];
+  holeType?: HoleType;
+  diameter: string;
+  extent?: HoleExtent;
+  depth?: string;
+  counterboreDiameter?: string;
+  counterboreDepth?: string;
+  countersinkDiameter?: string;
+  countersinkAngle?: string;
+  flip?: boolean;
+}
+
+export function addHole(input: HoleInput, out: CreatedRef = {}): Command {
+  return command("Hole", (doc) => {
+    const body = doc.bodies[input.bodyId];
+    const sketch = doc.features[input.sketchId];
+    if (!body || !sketch || sketch.type !== "sketch") return doc;
+    const points = [...new Set(input.points)].filter(
+      (p) => sketch.sketch.entities[p]?.type === "point",
+    );
+    if (points.length === 0) return doc;
+    const [id, d] = allocateId(doc, "hole");
+    const feature: HoleFeature = {
+      id,
+      type: "hole",
+      name: nextFeatureName(doc, "hole"),
+      componentId: body.componentId,
+      suppressed: false,
+      bodyId: input.bodyId,
+      sketchId: input.sketchId,
+      points,
+      holeType: input.holeType ?? "simple",
+      diameter: input.diameter,
+      extent: input.extent ?? "through-all",
+      depth: input.depth ?? "10",
+      counterboreDiameter: input.counterboreDiameter ?? `(${input.diameter}) * 1.8`,
+      counterboreDepth: input.counterboreDepth ?? `(${input.diameter}) * 0.6`,
+      countersinkDiameter: input.countersinkDiameter ?? `(${input.diameter}) * 2`,
+      countersinkAngle: input.countersinkAngle ?? "90",
+    };
+    if (input.flip) feature.flip = true;
+    out.id = id;
+    out.bodyId = input.bodyId;
+    return withFeature(d, feature);
+  });
+}
+
+export interface RectangularPatternInput {
+  source: PatternSource;
+  direction: PatternDirection;
+  count: string;
+  distance: string;
+  flip?: boolean;
+  direction2?: PatternDirection;
+  count2?: string;
+  distance2?: string;
+  flip2?: boolean;
+}
+
+export function addRectangularPattern(input: RectangularPatternInput, out: CreatedRef = {}): Command {
+  return command("Rectangular pattern", (doc) => {
+    const source = validSource(doc, input.source);
+    if (!source) return doc;
+    const [id, d] = allocateId(doc, "pattern");
+    const feature: RectangularPatternFeature = {
+      id,
+      type: "rectangular-pattern",
+      name: nextFeatureName(doc, "rectangular-pattern"),
+      componentId: sourceComponent(doc, source),
+      suppressed: false,
+      source,
+      direction: input.direction,
+      count: input.count,
+      distance: input.distance,
+    };
+    if (input.flip) feature.flip = true;
+    if (input.direction2) {
+      feature.direction2 = input.direction2;
+      feature.count2 = input.count2 ?? "2";
+      feature.distance2 = input.distance2 ?? input.distance;
+      if (input.flip2) feature.flip2 = true;
+    }
+    out.id = id;
+    return withFeature(d, feature);
+  });
+}
+
+export interface CircularPatternInput {
+  source: PatternSource;
+  axis: PatternAxis;
+  count: string;
+  /** Total angle; a full turn when omitted. */
+  angle?: string;
+  flip?: boolean;
+}
+
+export function addCircularPattern(input: CircularPatternInput, out: CreatedRef = {}): Command {
+  return command("Circular pattern", (doc) => {
+    const source = validSource(doc, input.source);
+    if (!source) return doc;
+    const [id, d] = allocateId(doc, "pattern");
+    const feature: CircularPatternFeature = {
+      id,
+      type: "circular-pattern",
+      name: nextFeatureName(doc, "circular-pattern"),
+      componentId: sourceComponent(doc, source),
+      suppressed: false,
+      source,
+      axis: input.axis,
+      count: input.count,
+      angle: input.angle ?? "360",
+    };
+    if (input.flip) feature.flip = true;
+    out.id = id;
+    return withFeature(d, feature);
+  });
+}
+
+export function addMirror(
+  input: { source: PatternSource; plane: MirrorPlane },
+  out: CreatedRef = {},
+): Command {
+  return command("Mirror", (doc) => {
+    const source = validSource(doc, input.source);
+    if (!source) return doc;
+    const [id, d] = allocateId(doc, "mirror");
+    const feature: MirrorFeature = {
+      id,
+      type: "mirror",
+      name: nextFeatureName(doc, "mirror"),
+      componentId: sourceComponent(doc, source),
+      suppressed: false,
+      source,
+      plane: input.plane,
+    };
+    const bodies = derivedBodies(d, feature);
+    out.id = id;
+    if (bodies[0]) out.bodyId = bodies[0].id;
+    return withFeature(d, feature, bodies);
+  });
+}
+
+export function addMove(
+  input: { bodyIds: string[]; transform: MoveTransform; copy?: boolean },
+  out: CreatedRef = {},
+): Command {
+  return command(input.copy ? "Copy" : "Move", (doc) => {
+    const bodyIds = [...new Set(input.bodyIds)].filter((b) => doc.bodies[b]);
+    const first = doc.bodies[bodyIds[0] ?? ""];
+    if (!first) return doc;
+    const [id, d] = allocateId(doc, "move");
+    const feature: MoveFeature = {
+      id,
+      type: "move",
+      name: nextFeatureName(doc, "move"),
+      componentId: first.componentId,
+      suppressed: false,
+      bodyIds,
+      copy: input.copy ?? false,
+      transform: input.transform,
+    };
+    const bodies = derivedBodies(d, feature);
+    out.id = id;
+    out.bodyId = bodies[0]?.id ?? first.id;
+    return withFeature(d, feature, bodies);
+  });
+}
+
+export type AlignInput =
+  | {
+      mode: "face-to-face";
+      bodyId: string;
+      from: FaceRef;
+      to: { bodyId: string; ref: FaceRef };
+      flip?: boolean;
+    }
+  | { mode: "point-to-point"; bodyId: string; from: Point3Ref; to: Point3Ref; flip?: boolean };
+
+export function addAlign(input: AlignInput, out: CreatedRef = {}): Command {
+  return command("Align", (doc) => {
+    const body = doc.bodies[input.bodyId];
+    if (!body) return doc;
+    // A body cannot be aligned with itself: it would have to move away from where it goes.
+    if (input.mode === "face-to-face" && input.to.bodyId === input.bodyId) return doc;
+    const [id, d] = allocateId(doc, "align");
+    const base = {
+      id,
+      type: "align" as const,
+      name: nextFeatureName(doc, "align"),
+      componentId: body.componentId,
+      suppressed: false,
+      bodyId: input.bodyId,
+    };
+    const feature: AlignFeature =
+      input.mode === "face-to-face"
+        ? { ...base, mode: "face-to-face", from: input.from, to: input.to }
+        : { ...base, mode: "point-to-point", from: input.from, to: input.to };
+    if (input.flip) feature.flip = true;
+    out.id = id;
+    out.bodyId = input.bodyId;
+    return withFeature(d, feature);
+  });
+}
+
+export function addSplit(
+  input: { bodyId: string; tool: SplitTool; keep?: SplitFeature["keep"] },
+  out: CreatedRef = {},
+): Command {
+  return command("Split body", (doc) => {
+    const body = doc.bodies[input.bodyId];
+    if (!body) return doc;
+    const [id, d] = allocateId(doc, "split");
+    const feature: SplitFeature = {
+      id,
+      type: "split",
+      name: nextFeatureName(doc, "split"),
+      componentId: body.componentId,
+      suppressed: false,
+      bodyId: input.bodyId,
+      tool: input.tool,
+      keep: input.keep ?? "both",
+    };
+    const bodies = derivedBodies(d, feature);
+    out.id = id;
+    // The new body when there is one: that is what the caller cannot know by itself.
+    out.bodyId = bodies[0]?.id ?? input.bodyId;
+    return withFeature(d, feature, bodies);
+  });
+}
+
+export interface SweepInput {
+  sketchId: string;
+  profiles: ProfileRef[];
+  path: SweepPath;
+  operation?: BodyOperation;
+  targetBodyIds?: string[];
+}
+
+export function addSweep(input: SweepInput, out: CreatedRef = {}): Command {
+  return command("Sweep", (doc) => {
+    const sketch = doc.features[input.sketchId];
+    const path = doc.features[input.path.sketchId];
+    if (!sketch || sketch.type !== "sketch" || !path || path.type !== "sketch") return doc;
+    if (input.profiles.length === 0 || input.path.entityIds.length === 0) return doc;
+    let d = doc;
+    let id: string;
+    [id, d] = allocateId(d, "sweep");
+    const operation = input.operation ?? "new";
+    const bodies: BodyRecord[] = [];
+    let bodyId = "";
+    if (operation === "new") {
+      let body: BodyRecord;
+      [body, d] = newBody(d, id, sketch.componentId);
+      bodies.push(body);
+      bodyId = body.id;
+    }
+    const feature: SweepFeature = {
+      id,
+      type: "sweep",
+      name: nextFeatureName(doc, "sweep"),
+      componentId: sketch.componentId,
+      suppressed: false,
+      sketchId: input.sketchId,
+      profiles: input.profiles,
+      path: { sketchId: input.path.sketchId, entityIds: [...new Set(input.path.entityIds)] },
+      operation,
+      targetBodyIds: operation === "new" ? [] : (input.targetBodyIds ?? []),
+      bodyId,
+      orientation: "perpendicular",
+    };
+    out.id = id;
+    out.bodyId = bodyId;
+    return withFeature(d, feature, bodies);
+  });
+}
+
+export interface LoftInput {
+  sections: LoftSection[];
+  operation?: BodyOperation;
+  targetBodyIds?: string[];
+  ruled?: boolean;
+}
+
+export function addLoft(input: LoftInput, out: CreatedRef = {}): Command {
+  return command("Loft", (doc) => {
+    if (input.sections.length < 2) return doc;
+    let componentId = doc.assembly.rootComponentId;
+    for (const s of input.sections) {
+      if (s.type === "profile") {
+        const sketch = doc.features[s.sketchId];
+        if (!sketch || sketch.type !== "sketch") return doc;
+        componentId = sketch.componentId;
+      } else if (!doc.bodies[s.bodyId]) {
+        return doc;
+      }
+    }
+    let d = doc;
+    let id: string;
+    [id, d] = allocateId(d, "loft");
+    const operation = input.operation ?? "new";
+    const bodies: BodyRecord[] = [];
+    let bodyId = "";
+    if (operation === "new") {
+      let body: BodyRecord;
+      [body, d] = newBody(d, id, componentId);
+      bodies.push(body);
+      bodyId = body.id;
+    }
+    const feature: LoftFeature = {
+      id,
+      type: "loft",
+      name: nextFeatureName(doc, "loft"),
+      componentId,
+      suppressed: false,
+      sections: input.sections,
+      operation,
+      targetBodyIds: operation === "new" ? [] : (input.targetBodyIds ?? []),
+      bodyId,
+    };
+    if (input.ruled) feature.ruled = true;
+    out.id = id;
+    out.bodyId = bodyId;
+    return withFeature(d, feature, bodies);
+  });
+}
+
 /** Fields of a feature that may be patched; distributes over the feature union. */
 export type FeaturePatch<T extends Feature = Feature> = T extends Feature
   ? Partial<Omit<T, "id" | "type">>
@@ -452,10 +861,31 @@ export function updateFeature<T extends Feature = Feature>(
   return command(label, (doc) => {
     const f = doc.features[id];
     if (!f) return doc;
-    const next = { ...f, ...patch } as Feature;
+    // Expressions inside nested objects are patched by their path, e.g. { "transform.x": "5" }:
+    // that is the key `featureExpressions` reports, and what a generic editor sends back.
+    const fields: Record<string, unknown> = {};
+    const paths: [string, string][] = [];
+    for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+      if (key.includes(".") && typeof value === "string") paths.push([key, value]);
+      else fields[key] = value;
+    }
+    let next = { ...f, ...fields } as Feature;
+    for (const [key, value] of paths) next = setFeatureExpression(next, key, value);
     let d: CadDocument = { ...doc, features: { ...doc.features, [id]: next } };
+    // Bodies with a derived id that the feature creates now (a move that became a copy …).
+    const derived = derivedBodies(d, next);
+    if (derived.length > 0) {
+      d = { ...d, bodies: { ...d.bodies } };
+      for (const b of derived) d.bodies[b.id] = b;
+    }
     // Switching an extrude between "new" and the modifying operations adds or drops its body.
-    if ((next.type === "extrude" || next.type === "revolve") && f.type === next.type) {
+    if (
+      (next.type === "extrude" ||
+        next.type === "revolve" ||
+        next.type === "sweep" ||
+        next.type === "loft") &&
+      f.type === next.type
+    ) {
       if (next.operation === "new" && !next.bodyId) {
         const [body, d2] = newBody(d, id, next.componentId);
         d = {
@@ -503,6 +933,11 @@ export function removeFeatures(ids: string[]): Command {
     for (const id of doomed) {
       for (const b of featureCreatedBodies(features[id]!)) delete bodies[b];
       delete features[id];
+    }
+    // Bodies with a derived id, e.g. the instances of a body pattern, go with their feature.
+    for (const b of Object.keys(bodies)) {
+      const dynamic = parseDynamicBodyId(b);
+      if (dynamic && doomed.has(dynamic.featureId)) delete bodies[b];
     }
     let cursor = doc.timelineCursor;
     if (cursor !== null) {

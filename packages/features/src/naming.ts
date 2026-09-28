@@ -1,5 +1,5 @@
 import { type BodyGeometry, type MeshEdgeGroup, edgePolyline } from "@fabcad/brep";
-import type { TopologyRef } from "@fabcad/cad-document";
+import type { Point3Ref, TopologyRef } from "@fabcad/cad-document";
 import type { Vec3 } from "@fabcad/geometry";
 
 /**
@@ -25,6 +25,12 @@ export interface FaceName {
   entity?: string;
   /** Names of the faces or edges this face was generated from (e.g. the filleted edge). */
   of?: string[];
+  /**
+   * For faces made by a pattern or a mirror: which instance the face belongs to ("1", "2", …,
+   * "i.j" in the second row and beyond of a two-directional pattern). The instance is counted
+   * from the original, so it stays the same when the number of instances changes.
+   */
+  instance?: string;
   /** Distinguishes faces that would otherwise carry the same name (a face cut in two). */
   index?: number;
 }
@@ -184,9 +190,14 @@ export function faceKey(name: Omit<FaceName, "key">): string {
   let key = `${name.feature}:${name.role}`;
   if (name.entity) key += `(${name.sketch ? `${name.sketch}/` : ""}${name.entity})`;
   if (name.of && name.of.length > 0) key += `[${name.of.join("+")}]`;
+  if (name.instance !== undefined) key += `@${name.instance}`;
   if (name.index !== undefined && name.index > 0) key += `#${name.index}`;
   return key;
 }
+
+/** The pattern instance a face name belongs to, read from its key. */
+export const instanceOfKey = (key: string): string | undefined =>
+  /@([0-9.]+)(?:#\d+)?$/.exec(key)?.[1];
 
 /** Name without the index that tells split faces apart. */
 export const baseKey = (key: string): string => key.replace(/#\d+$/, "");
@@ -313,6 +324,31 @@ export function propagateNames(
 /** Faces and edges keep their names when a body is only moved: the topology is unchanged. */
 export function namesAfterMove(names: BodyNames): BodyNames {
   return names;
+}
+
+/**
+ * Names for a copy of a shape that a pattern or a mirror made. `g` is the tessellation of the
+ * copy; a copy has the faces of its source in the same order.
+ *
+ * Every face keeps what is known about its origin (role, sketch entity) and is named after the
+ * pattern, the face it is a copy of and the instance. Such a name is unique even after the
+ * copies have been joined into one body, and it does not depend on how many instances there
+ * are. Returns null when the copy does not have the structure of its source.
+ */
+export function instanceNames(
+  source: BodyNames,
+  g: BodyGeometry,
+  featureId: string,
+  instance: string,
+): BodyNames | null {
+  if (source.faces.length !== g.faces.length) return null;
+  const faces = source.faces.map((n): FaceName => {
+    const name: Omit<FaceName, "key"> = { feature: featureId, role: n.role, of: [n.key], instance };
+    if (n.sketch) name.sketch = n.sketch;
+    if (n.entity) name.entity = n.entity;
+    return { ...name, key: faceKey(name) };
+  });
+  return { faces, edges: nameEdges(g, faces) };
 }
 
 /** Faces adjacent to every edge, from the points that edge and face tessellations share. */
@@ -489,7 +525,13 @@ export function resolveFaceRef(ref: TopologyRef, body: NamedBody): Resolution | 
     if (pick !== null) return { index: pick, by: "provenance" };
   }
   if (ref.sourceFeatureId) {
-    const sameFeature = all.filter((i) => names.faces[i]?.feature === ref.sourceFeatureId);
+    // A face of a pattern instance is never a stand-in for the same face of another instance.
+    const instance = ref.name ? instanceOfKey(ref.name) : undefined;
+    const sameFeature = all.filter(
+      (i) =>
+        names.faces[i]?.feature === ref.sourceFeatureId &&
+        (ref.name === undefined || names.faces[i]?.instance === instance),
+    );
     const sameEntity = sameFeature.filter(
       (i) =>
         ref.sourceEntityId !== undefined &&
@@ -559,4 +601,83 @@ export function nearestNamedEdge(
     }
   }
   return best;
+}
+
+// -------------------------------------------------------------------- vertices
+
+const vertexAt = (g: BodyGeometry, index: number): Vec3 => ({
+  x: g.vertices[index * 3]!,
+  y: g.vertices[index * 3 + 1]!,
+  z: g.vertices[index * 3 + 2]!,
+});
+
+/**
+ * Reference to a vertex. Vertices carry no name of their own: a vertex is where edges meet, so
+ * it is identified by the names of those edges.
+ */
+export function makeVertexRef(
+  body: NamedBody,
+  bodyId: string,
+  vertexIndex: number,
+): Extract<Point3Ref, { type: "vertex" }> | null {
+  const count = body.geometry.vertices.length / 3;
+  if (vertexIndex < 0 || vertexIndex >= count) return null;
+  const point = vertexAt(body.geometry, vertexIndex);
+  const edges: string[] = [];
+  body.geometry.edges.forEach((e, i) => {
+    const name = body.names.edges[i];
+    if (name && (distance(e.from, point) < 1e-6 || distance(e.to, point) < 1e-6)) {
+      edges.push(name.key);
+    }
+  });
+  return { type: "vertex", bodyId, edges, index: vertexIndex, count, point };
+}
+
+/**
+ * Position of the vertex a reference points at. Order: the vertex at which most of the named
+ * edges meet; the index while the body has as many vertices as it had; the nearest vertex.
+ */
+export function resolveVertexRef(
+  ref: Extract<Point3Ref, { type: "vertex" }>,
+  body: NamedBody,
+): Vec3 | null {
+  const g = body.geometry;
+  const count = g.vertices.length / 3;
+  if (count === 0) return null;
+  if (ref.edges && ref.edges.length > 0) {
+    const wanted = new Set(ref.edges);
+    const ends: Vec3[] = [];
+    g.edges.forEach((e, i) => {
+      const name = body.names.edges[i];
+      if (name && wanted.has(name.key)) ends.push(e.from, e.to);
+    });
+    let best: Vec3 | null = null;
+    let bestMeet = 0;
+    let bestD = Infinity;
+    for (const p of ends) {
+      const meet = ends.filter((q) => distance(p, q) < 1e-6).length;
+      const d = distance(p, ref.point);
+      if (meet > bestMeet || (meet === bestMeet && d < bestD)) {
+        best = p;
+        bestMeet = meet;
+        bestD = d;
+      }
+    }
+    // One edge alone does not tell which of its two ends is meant.
+    if (best && (bestMeet >= 2 || wanted.size === 1)) return best;
+  }
+  if (ref.index !== undefined && ref.count === count && ref.index < count) {
+    return vertexAt(g, ref.index);
+  }
+  let nearest: Vec3 | null = null;
+  let nearestD = Infinity;
+  for (let i = 0; i < count; i++) {
+    const v = vertexAt(g, i);
+    const d = distance(v, ref.point);
+    if (d < nearestD) {
+      nearestD = d;
+      nearest = v;
+    }
+  }
+  return nearest;
 }
