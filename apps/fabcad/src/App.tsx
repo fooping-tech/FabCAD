@@ -23,6 +23,7 @@ import { StatusBar } from "./panels/StatusBar";
 import { Timeline } from "./panels/Timeline";
 import { Toasts } from "./panels/Toasts";
 import { PrintSidePanel, PrintView, exportPrintJob, usePrintJob } from "./print";
+import { TextDialog } from "./text/TextDialog";
 import { TouchBar } from "./viewport/TouchBar";
 import { Viewport } from "./viewport/Viewport";
 
@@ -126,6 +127,7 @@ export function App(): ReactElement {
         <TouchBar />
         {!fabrication && <FeatureDialog />}
         {!fabrication && <MeasurePanel />}
+        {!fabrication && <TextDialog />}
         {fabrication && !printing && (
           <>
             <FabricationMain />

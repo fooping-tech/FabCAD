@@ -13,6 +13,7 @@ import type {
   SketchConstraint,
   SketchDimension,
   SketchEntity,
+  SketchText,
   SplineEntity,
 } from "./model";
 
@@ -41,6 +42,16 @@ export class SketchBuilder {
 
   get current(): Sketch {
     return this.sketch;
+  }
+
+  /** Continue with a sketch that was changed outside the builder (it must derive from `current`). */
+  replace(sketch: Sketch): void {
+    this.sketch = {
+      ...sketch,
+      entities: { ...sketch.entities },
+      constraints: { ...sketch.constraints },
+      dimensions: { ...sketch.dimensions },
+    };
   }
 
   build(): Sketch {
@@ -207,12 +218,28 @@ export class SketchBuilder {
       }
     }
     // Points used only by deleted curves are removed as well.
+    const texts = Object.values(this.sketch.texts ?? {});
     for (const p of candidates) {
       if (doomed.has(p)) continue;
-      const stillUsed = Object.values(this.sketch.entities).some(
-        (e) => e.type !== "point" && !doomed.has(e.id) && entityPointIds(e).includes(p),
-      );
+      const stillUsed =
+        Object.values(this.sketch.entities).some(
+          (e) => e.type !== "point" && !doomed.has(e.id) && entityPointIds(e).includes(p),
+        ) || texts.some((t) => t.origin === p);
       if (!stillUsed) doomed.add(p);
+    }
+    // A text goes with its origin; a text whose path is deleted returns to its origin.
+    if (texts.some((t) => doomed.has(t.origin) || (t.path && doomed.has(t.path.entityId)))) {
+      const kept: Record<string, SketchText> = {};
+      for (const t of texts) {
+        if (doomed.has(t.origin)) continue;
+        if (t.path && doomed.has(t.path.entityId)) {
+          const { path: _path, outline: _outline, ...rest } = t;
+          kept[t.id] = rest;
+        } else {
+          kept[t.id] = t;
+        }
+      }
+      this.sketch.texts = kept;
     }
     for (const id of doomed) delete this.sketch.entities[id];
     // A projection that lost one of its entities is released: what remains is plain geometry.

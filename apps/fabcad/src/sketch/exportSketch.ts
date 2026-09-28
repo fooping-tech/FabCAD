@@ -1,4 +1,4 @@
-import { entityToCurves, isCurve } from "@fabcad/sketch";
+import { entityToCurves, isCurve, sketchTexts, textLoops } from "@fabcad/sketch";
 import { renderCurvesDxf } from "@fabcad/dxf";
 import { type CurveSvgInput, renderCurvesSvg } from "@fabcad/svg";
 import { appState, toast } from "../app/appState";
@@ -13,7 +13,11 @@ export function sketchForExport(): string | null {
     const id =
       s.kind === "feature"
         ? s.featureId
-        : s.kind === "entity" || s.kind === "profile" || s.kind === "dimension" || s.kind === "constraint"
+        : s.kind === "entity" ||
+            s.kind === "profile" ||
+            s.kind === "dimension" ||
+            s.kind === "constraint" ||
+            s.kind === "text"
           ? s.sketchId
           : null;
     if (id && doc.features[id]?.type === "sketch") return id;
@@ -32,6 +36,13 @@ function sketchCurves(sketchId: string): CurveSvgInput[] {
       inputs.push({ id: e.id, curves: entityToCurves(f.sketch, e) });
     } catch {
       // Geometry that cannot be evaluated is skipped.
+    }
+  }
+  // Texts are exported as their outlines, one closed path per loop.
+  for (const text of sketchTexts(f.sketch)) {
+    if (text.construction) continue;
+    for (const [i, curves] of textLoops(f.sketch, text).entries()) {
+      inputs.push({ id: `${text.id}-${i}`, curves });
     }
   }
   return inputs;

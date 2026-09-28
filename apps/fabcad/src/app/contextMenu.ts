@@ -1,3 +1,4 @@
+import { editText, explodeTexts } from "../text/textCommands";
 import {
   setBodyVisible,
   setFeatureSuppressed,
@@ -114,6 +115,19 @@ export function buildContextMenu(): MenuItem[] {
           onSelect: () => viewportApi()?.editDimension(first.id),
         });
       }
+      const texts = selection.flatMap((s) =>
+        s.kind === "text" && s.sketchId === sketchId ? [s.textId] : [],
+      );
+      if (texts.length > 0) {
+        if (texts.length === 1) {
+          items.push({ label: "Edit Text", icon: "text", onSelect: () => editText(sketchId, texts[0]!) });
+        }
+        items.push({
+          label: "Explode Text",
+          icon: "explode",
+          onSelect: () => void explodeTexts(sketchId, texts),
+        });
+      }
       if (every("profile")) {
         items.push({ label: "Extrude", icon: "extrude", kbd: "E", onSelect: () => openDialog("extrude") });
         items.push({ label: "Revolve", icon: "revolve", onSelect: () => openDialog("revolve") });
@@ -142,6 +156,7 @@ export function buildContextMenu(): MenuItem[] {
       { label: "Line", icon: "line", kbd: "L", onSelect: () => setTool("line") },
       { label: "2-Point Rectangle", icon: "rectangle-2point", kbd: "R", onSelect: () => setTool("rectangle-2point") },
       { label: "Center Diameter Circle", icon: "circle", kbd: "C", onSelect: () => setTool("circle") },
+      { label: "Text", icon: "text", onSelect: () => setTool("text") },
       { label: "Sketch Dimension", icon: "dimension", kbd: "D", onSelect: () => setTool("dimension") },
       { label: "Trim", icon: "trim", kbd: "T", onSelect: () => setTool("trim") },
       { label: "Offset", icon: "offset", kbd: "O", onSelect: () => setTool("offset") },

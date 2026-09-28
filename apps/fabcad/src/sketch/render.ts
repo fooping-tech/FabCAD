@@ -20,6 +20,9 @@ import {
   getPoint,
   isCurve,
   measureDimension,
+  sketchTexts,
+  textBox,
+  textLoops,
 } from "@fabcad/sketch";
 import type { ViewportScene } from "../viewport/scene";
 import { SKETCH_COLORS } from "../viewport/theme";
@@ -58,6 +61,10 @@ export interface SketchDrawState {
   dimensionErrors: Record<string, string>;
   /** Entities projected from bodies; drawn in their own colour. */
   projected?: Set<string>;
+  selectedTexts?: Set<string>;
+  hoverText?: string | null;
+  /** Texts whose outline could not be brought up to date (font missing, bad expression). */
+  problemTexts?: Set<string>;
 }
 
 export class Projector {
@@ -169,6 +176,70 @@ function entityColor(id: string, construction: boolean, state: SketchDrawState):
   return state.fullyConstrained ? SKETCH_COLORS.curveFull : SKETCH_COLORS.curve;
 }
 
+/** Texts: filled outlines, so that they read as text; the box shows while picked. */
+export function drawSketchTexts(
+  ctx: CanvasRenderingContext2D,
+  projector: Projector,
+  sketch: Sketch,
+  state: SketchDrawState,
+): void {
+  const texts = sketchTexts(sketch);
+  if (texts.length === 0) return;
+  const tolerance = Math.max(projector.pixel() * 0.15, 1e-4);
+  ctx.lineJoin = "round";
+  for (const text of texts) {
+    const selected = state.selectedTexts?.has(text.id) ?? false;
+    const hovered = state.hoverText === text.id;
+    const problem = state.problemTexts?.has(text.id) ?? false;
+    const color = selected
+      ? SKETCH_COLORS.selected
+      : hovered
+        ? SKETCH_COLORS.hover
+        : problem
+          ? SKETCH_COLORS.conflict
+          : !state.active
+            ? SKETCH_COLORS.inactive
+            : text.construction
+              ? SKETCH_COLORS.construction
+              : SKETCH_COLORS.curve;
+    ctx.beginPath();
+    for (const loop of textLoops(sketch, text)) {
+      let first = true;
+      for (const c of loop) {
+        const pts = flattenCurve(c, tolerance);
+        for (const [i, p] of pts.entries()) {
+          if (i === 0 && !first) continue;
+          const s = projector.toScreen(p);
+          if (first) ctx.moveTo(s.x, s.y);
+          else ctx.lineTo(s.x, s.y);
+          first = false;
+        }
+      }
+      ctx.closePath();
+    }
+    if (!text.construction) {
+      ctx.globalAlpha = selected || hovered ? 0.3 : 0.16;
+      ctx.fillStyle = color;
+      ctx.fill("evenodd");
+      ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = selected || hovered ? 1.6 : 1;
+    ctx.setLineDash(text.construction || problem ? [5, 3] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (state.active && (selected || hovered)) {
+      const box = textBox(sketch, text, projector.pixel() * 4);
+      if (box) {
+        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        strokePolyline(ctx, box.map((p) => projector.toScreen(p)), true);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+}
+
 export function drawSketchGeometry(
   ctx: CanvasRenderingContext2D,
   projector: Projector,
@@ -179,6 +250,7 @@ export function drawSketchGeometry(
   const tolerance = Math.max(px * 0.08, 1e-4);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
+  drawSketchTexts(ctx, projector, sketch, state);
 
   for (const e of Object.values(sketch.entities)) {
     if (!isCurve(e)) continue;

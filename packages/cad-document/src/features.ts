@@ -1,7 +1,7 @@
 import type { GeometricSignature, OriginPlaneName, TopologyRef, Vec3 } from "@fabcad/geometry";
 
 export type { GeometricSignature, TopologyRef };
-import type { EntityId, ProfileRef, Sketch } from "@fabcad/sketch";
+import { type EntityId, type ProfileRef, type Sketch, setTextExpression, textExpressions } from "@fabcad/sketch";
 
 /**
  * Feature definitions. A feature is serialisable data describing one step of the design
@@ -436,13 +436,22 @@ export interface FeatureExpression {
 export function featureExpressions(feature: Feature): FeatureExpression[] {
   switch (feature.type) {
     case "sketch":
-      return Object.values(feature.sketch.dimensions)
-        .filter((d) => d.driving)
-        .map((d) => ({
-          key: `dimension:${d.id}`,
-          expression: d.expression,
-          kind: d.type === "angle" ? ("angle" as const) : ("length" as const),
-        }));
+      return [
+        ...Object.values(feature.sketch.dimensions)
+          .filter((d) => d.driving)
+          .map((d) => ({
+            key: `dimension:${d.id}`,
+            expression: d.expression,
+            kind: d.type === "angle" ? ("angle" as const) : ("length" as const),
+          })),
+        ...Object.values(feature.sketch.texts ?? {}).flatMap((t) =>
+          textExpressions(t).map((e) => ({
+            key: `text:${t.id}:${e.field}`,
+            expression: e.expression,
+            kind: e.kind,
+          })),
+        ),
+      ];
     case "extrude":
       return [{ key: "distance", expression: feature.distance, kind: "length" }];
     case "revolve":
@@ -523,6 +532,16 @@ export function featureExpressions(feature: Feature): FeatureExpression[] {
  * Returns the same object when the key does not name an expression of the feature.
  */
 export function setFeatureExpression(feature: Feature, key: string, expression: string): Feature {
+  if (feature.type === "sketch" && key.startsWith("text:")) {
+    const [, id = "", field = ""] = key.split(":");
+    const text = feature.sketch.texts?.[id];
+    const next = text ? setTextExpression(text, field, expression) : text;
+    if (!text || !next || next === text) return feature;
+    return {
+      ...feature,
+      sketch: { ...feature.sketch, texts: { ...feature.sketch.texts, [id]: next } },
+    };
+  }
   if (feature.type === "sketch") {
     const id = key.startsWith("dimension:") ? key.slice("dimension:".length) : "";
     const d = feature.sketch.dimensions[id];

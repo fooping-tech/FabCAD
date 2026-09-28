@@ -21,6 +21,7 @@ export type Selection =
   | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
   | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
   | { kind: "entity"; sketchId: string; entityId: string }
+  | { kind: "text"; sketchId: string; textId: string }
   | { kind: "constraint"; sketchId: string; id: string }
   | { kind: "dimension"; sketchId: string; id: string }
   | { kind: "profile"; sketchId: string; regionId: string; ref: ProfileRef }
@@ -39,6 +40,8 @@ export const selectionKey = (s: Selection): string => {
       return `vertex:${s.bodyId}:${s.vertexIndex}`;
     case "entity":
       return `entity:${s.sketchId}:${s.entityId}`;
+    case "text":
+      return `text:${s.sketchId}:${s.textId}`;
     case "constraint":
       return `constraint:${s.sketchId}:${s.id}`;
     case "dimension":
@@ -99,6 +102,11 @@ export type Dialog =
       keepTools: boolean;
       picking: "target" | "tools";
     }
+  /**
+   * Sketch text being written. The text itself lives in the document, inside a transaction:
+   * what the dialog shows is the real thing, and the whole edit is one undo step.
+   */
+  | { type: "text"; sketchId: string; textId: string; fresh: boolean; picking: "path" | null }
   | { type: "parameters" }
   /** A parsed DXF file waiting for the unit and layer choice. */
   | { type: "import-dxf"; fileName: string; drawing: DxfDrawing }

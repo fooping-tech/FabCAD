@@ -189,6 +189,12 @@ function SketchRibbon(): ReactElement {
           />
         ))}
         <Tool
+          icon="text"
+          title="Text — click where the text starts, then write it"
+          active={tool === "text"}
+          onClick={() => setTool("text")}
+        />
+        <Tool
           icon="project"
           title="Project (P) — project edges, faces or vertices of a body onto the sketch"
           active={tool === "project"}

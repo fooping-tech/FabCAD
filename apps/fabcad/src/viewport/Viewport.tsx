@@ -265,7 +265,9 @@ export function Viewport(): ReactElement {
           return;
         }
         const same = (r: typeof ref): boolean =>
-          r.entityIds.length === ref.entityIds.length &&
+          r.textId !== undefined || ref.textId !== undefined
+            ? r.textId === ref.textId
+            : r.entityIds.length === ref.entityIds.length &&
           r.entityIds.every((e) => ref.entityIds.includes(e)) &&
           Math.hypot(r.point.x - ref.point.x, r.point.y - ref.point.y) < 1e-6;
         const exists = dialog.profiles.some(same);

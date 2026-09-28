@@ -88,7 +88,8 @@ import {
   getPoint,
   hitTestSketch,
   projectPolyline,
-  resolveProfileRef,
+  resolveProfileRefs,
+  textOutlineAt,
   updateProjection,
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
@@ -549,7 +550,15 @@ export class FeatureEngine {
     const sketch = info.converged ? info.sketch : feature.sketch;
     const plane = resolveSketchPlane(sketch.plane);
     const regions = detectProfiles(sketch);
-    const geometryKey = JSON.stringify([sketch.entities, plane]);
+    // Texts count through the key of their outlines, not through the outlines themselves.
+    const texts = Object.values(sketch.texts ?? {}).map((t) => [
+      t.id,
+      t.origin,
+      t.construction === true,
+      t.outline?.key ?? null,
+      t.outline?.rotation ?? 0,
+    ]);
+    const geometryKey = JSON.stringify([sketch.entities, plane, texts]);
     return {
       sketch,
       hash: hashString(geometryKey),
@@ -615,9 +624,15 @@ export class FeatureEngine {
     if (refs.length === 0) throw new Error("No profile selected.");
     const picked = new Map<string, SketchRegion>();
     for (const ref of refs) {
-      const region = resolveProfileRef(sketch.regions, ref);
-      if (!region) throw new Error("A selected profile no longer exists in the sketch.");
-      picked.set(region.id, region);
+      const regions = resolveProfileRefs(sketch.regions, ref);
+      if (regions.length === 0) {
+        throw new Error(
+          ref.textId !== undefined
+            ? "The selected text no longer exists in the sketch or has no outline."
+            : "A selected profile no longer exists in the sketch.",
+        );
+      }
+      for (const region of regions) picked.set(region.id, region);
     }
     return { sketch, profiles: [...picked.values()].map((r) => r.profile) };
   }
@@ -654,7 +669,11 @@ export class FeatureEngine {
           const e = hit ? sketch.sketch.entities[hit.id] : undefined;
           if (hit && e && e.type !== "point" && !e.construction) {
             votes.set(hit.id, (votes.get(hit.id) ?? 0) + 1);
+            continue;
           }
+          // Faces made from the outline of a text are named after the text.
+          const text = sketch.sketch.texts ? textOutlineAt(sketch.sketch, p, 0.2) : null;
+          if (text) votes.set(text, (votes.get(text) ?? 0) + 1);
         }
         const entity = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
         return entity ? { role: "side", sketch: sketchId, entity } : { role: "side" };

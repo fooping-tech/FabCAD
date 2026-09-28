@@ -28,6 +28,8 @@ import {
   extendCurve,
   getPoint,
   hitTestSketch,
+  hitTestText,
+  resolveProfileRefs,
   measureDimension,
   mirrorEntities,
   moveEntities,
@@ -37,6 +39,8 @@ import {
   rectangularPattern,
   scaleEntities,
   sketchChamfer,
+  sketchTexts,
+  textBox,
   sketchFillet,
   snapPoint,
   trimCurve,
@@ -59,6 +63,8 @@ import {
   solveDrag,
 } from "../app/session";
 import { currentMeasurement } from "../measure/MeasurePanel";
+import { beginText, editText, pickTextPath } from "../text/textCommands";
+import { textState } from "../text/typography";
 import type { ViewportScene } from "../viewport/scene";
 import { SKETCH_COLORS } from "../viewport/theme";
 import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension } from "./constraintTools";
@@ -226,6 +232,14 @@ export class SketchController {
     return hit ? (sketch.entities[hit.id] ?? null) : null;
   }
 
+  private hitText(sketch: Sketch, p: PointerInfo): string | null {
+    if (!sketch.texts) return null;
+    const projector = this.projectorFor(sketch);
+    const raw = projector.toSketch(p.x, p.y);
+    if (!raw) return null;
+    return hitTestText(sketch, raw, projector.pixel(raw) * 4 * this.reach)?.id ?? null;
+  }
+
   private hitLabel(p: PointerInfo): LabelHit | null {
     for (let i = this.labelHits.length - 1; i >= 0; i--) {
       const h = this.labelHits[i]!;
@@ -272,6 +286,7 @@ export class SketchController {
       fillet: this.entityPicks.length === 0 ? "Fillet: pick the first line" : "Fillet: pick the second line",
       chamfer: this.entityPicks.length === 0 ? "Chamfer: pick the first line" : "Chamfer: pick the second line",
       offset: "Offset: click a curve on the side to offset to",
+      text: "Text: click where the text starts",
       project: "Project: click edges, faces or vertices of a body to project them onto the sketch",
       mirror: "Mirror: select the geometry first, then click the mirror line",
       move: this.picks.length === 0 ? "Move: pick the base point" : "Move: pick the destination",
@@ -314,6 +329,8 @@ export class SketchController {
     if (label) return { kind: label.kind, sketchId: feature.id, id: label.id };
     const e = this.hitEntity(feature.sketch, p);
     if (e) return { kind: "entity", sketchId: feature.id, entityId: e.id };
+    const text = this.hitText(feature.sketch, p);
+    if (text) return { kind: "text", sketchId: feature.id, textId: text };
     const at = this.projectorFor(feature.sketch).toSketch(p.x, p.y);
     const region = at ? this.regionAt(feature.sketch, at) : null;
     return region
@@ -330,7 +347,11 @@ export class SketchController {
   hitsSomething(p: PointerInfo): boolean {
     const feature = this.activeFeature();
     if (!feature) return false;
-    return this.hitLabel(p) !== null || this.hitEntity(feature.sketch, p) !== null;
+    return (
+      this.hitLabel(p) !== null ||
+      this.hitEntity(feature.sketch, p) !== null ||
+      this.hitText(feature.sketch, p) !== null
+    );
   }
 
   /** Forget the pointer position (a lifted finger leaves no cursor behind). */
@@ -360,6 +381,10 @@ export class SketchController {
       }
       if (points.length > 0) items.push({ id: e.id, points });
     }
+    for (const text of sketchTexts(sketch)) {
+      const box = textBox(sketch, text);
+      if (box) items.push({ id: text.id, points: [...box, box[0]!].map((q) => projector.toScreen(q)) });
+    }
     return items;
   }
 
@@ -369,11 +394,11 @@ export class SketchController {
       windowBounds(from, to),
       windowMode(from, to),
     );
-    const picked: Selection[] = ids.map((entityId) => ({
-      kind: "entity",
-      sketchId: feature.id,
-      entityId,
-    }));
+    const picked: Selection[] = ids.map((entityId) =>
+      feature.sketch.texts?.[entityId]
+        ? { kind: "text", sketchId: feature.id, textId: entityId }
+        : { kind: "entity", sketchId: feature.id, entityId },
+    );
     if (!additive) {
       appState.set({ selection: picked });
       return;
@@ -460,6 +485,10 @@ export class SketchController {
       const curvesOnly = tool === "trim" || tool === "extend" || tool === "break" || tool === "offset";
       const e = this.hitEntity(sketch, p, curvesOnly ? { points: false } : undefined);
       if (e) hover = { kind: "entity", sketchId: feature.id, entityId: e.id };
+      else if (tool === "select") {
+        const text = this.hitText(sketch, p);
+        if (text) hover = { kind: "text", sketchId: feature.id, textId: text };
+      }
     }
     const prev = appState.get().hover;
     if ((prev ? selectionKey(prev) : "") !== (hover ? selectionKey(hover) : "")) {
@@ -503,6 +532,21 @@ export class SketchController {
     const sketch = feature.sketch;
     const { tool } = appState.get();
     if (appState.get().dimensionEdit) return true;
+
+    const dialog = appState.get().dialog;
+    if (dialog?.type === "text") {
+      // While a text is written, the only thing to pick is the curve it follows.
+      if (dialog.picking === "path") {
+        const e = this.hitEntity(sketch, p, { points: false });
+        if (e) pickTextPath(e.id);
+      }
+      return true;
+    }
+    if (tool === "text") {
+      const pick = this.pickAt(sketch, p);
+      if (pick) beginText(feature.id, pick.snap.pointId ?? pick.position);
+      return true;
+    }
 
     const create = createTool(tool);
     if (create) {
@@ -599,6 +643,10 @@ export class SketchController {
       if (label?.kind === "dimension") {
         this.openDimensionEditor(feature, label.id, false);
         return true;
+      }
+      if (!this.hitEntity(feature.sketch, p)) {
+        const text = this.hitText(feature.sketch, p);
+        if (text) editText(feature.id, text);
       }
     }
     return true;
@@ -701,6 +749,23 @@ export class SketchController {
     const sketch = feature.sketch;
     const e = this.hitEntity(sketch, p);
     const start = this.projectorFor(sketch).toSketch(p.x, p.y);
+    const textId = !e && start ? this.hitText(sketch, p) : null;
+    const text = textId ? sketch.texts?.[textId] : undefined;
+    if (text && start) {
+      // A text is moved by its origin point.
+      const free = text.origin !== sketch.originId && !text.path;
+      this.drag = {
+        kind: "entities",
+        startScreen: { x: p.x, y: p.y },
+        startSketch: start,
+        points: free ? [{ id: text.origin, start: getPoint(sketch, text.origin) }] : [],
+        circle: null,
+        base: sketch,
+        started: false,
+        hit: { kind: "text", sketchId: feature.id, textId: text.id },
+      };
+      return;
+    }
     if (!e || !start) {
       // Empty space: a profile can still be selected.
       const region = start ? this.regionAt(sketch, start) : null;
@@ -1251,6 +1316,10 @@ export class SketchController {
       }
       if (dialogProfiles && dialogProfiles.sketchId === f.id) {
         for (const ref of dialogProfiles.profiles) {
+          if (ref.textId !== undefined) {
+            for (const r of resolveProfileRefs(view.regions, ref)) selectedRegions.add(r.id);
+            continue;
+          }
           const hit = view.regions.find(
             (r) =>
               r.entityIds.length === ref.entityIds.length &&
@@ -1278,7 +1347,9 @@ export class SketchController {
 
       const selectedEntities = new Set<string>();
       const selectedLabels = new Set<string>();
+      const selectedTexts = new Set<string>();
       for (const s of state.selection) {
+        if (s.kind === "text" && s.sketchId === f.id) selectedTexts.add(s.textId);
         if (s.kind === "entity" && s.sketchId === f.id) selectedEntities.add(s.entityId);
         if (s.kind === "dimension" && s.sketchId === f.id) selectedLabels.add(`dimension:${s.id}`);
         if (s.kind === "constraint" && s.sketchId === f.id) selectedLabels.add(`constraint:${s.id}`);
@@ -1302,6 +1373,13 @@ export class SketchController {
             : null,
         conflicting: new Set(view.status === "over-constrained" ? view.conflicting : []),
         projected: projectedEntityIds(sketch),
+        selectedTexts,
+        hoverText: hover?.kind === "text" && hover.sketchId === f.id ? hover.textId : null,
+        problemTexts: new Set(
+          (textState.get().problems[f.id] ?? [])
+            .filter((p) => p.kind !== "font-loading")
+            .map((p) => p.textId),
+        ),
         previewEntities: new Set(),
         showConstraints: state.showConstraints,
         showDimensions: state.showDimensions,

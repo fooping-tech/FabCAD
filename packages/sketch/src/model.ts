@@ -1,4 +1,12 @@
-import type { OriginPlaneName, Plane3, TopologyRef, Vec2, Vec3 } from "@fabcad/geometry";
+import type {
+  Bounds2,
+  Curve2,
+  OriginPlaneName,
+  Plane3,
+  TopologyRef,
+  Vec2,
+  Vec3,
+} from "@fabcad/geometry";
 
 /**
  * Sketch data model. A sketch is plain serialisable data: entities reference points by id,
@@ -65,6 +73,77 @@ export interface SplineEntity {
 export type CurveEntity = LineEntity | CircleEntity | ArcEntity | EllipseEntity | SplineEntity;
 export type SketchEntity = PointEntity | CurveEntity;
 export type SketchEntityType = SketchEntity["type"];
+
+export type TextHorizontalAlign = "left" | "center" | "right";
+export type TextVerticalAlign = "top" | "middle" | "bottom" | "baseline";
+
+/** Text that follows a sketch curve (line, arc, circle, ...). */
+export interface SketchTextPath {
+  entityId: EntityId;
+  /** Distance of the baseline from the path (length expression). */
+  offset: string;
+  /** Shift along the path (length expression). */
+  start: string;
+  flip: boolean;
+  align: TextHorizontalAlign;
+}
+
+/**
+ * Glyph outlines derived from a text. They are a cache: `key` identifies the inputs they were
+ * made from, and whoever has the fonts renews them when the key no longer matches. Keeping
+ * them in the sketch means that everything downstream (profiles, Extrude, the CAD worker,
+ * export) needs neither fonts nor a text layout engine, and that a project still shows and
+ * builds its texts when a font is not available.
+ */
+export interface SketchTextOutline {
+  key: string;
+  /** Closed loops, in the orientation of the font. */
+  loops: Curve2[][];
+  /**
+   * "local": relative to the origin point of the text, not rotated; the text follows its
+   * origin without a new layout. "sketch": sketch coordinates (text on a path).
+   */
+  space: "local" | "sketch";
+  /** Rotation about the origin in radians (space "local"). */
+  rotation: number;
+  /** Bounds of `loops` in their own space; null when the text has no outline. */
+  bounds: Bounds2 | null;
+  /** Characters the font has no glyph for. */
+  missing: string[];
+}
+
+/**
+ * Text in a sketch. What is stored is the text and how it is set, never curves: the text stays
+ * editable, and its outlines are derived. `text` is a plain string today; the numeric fields
+ * are parameter expressions, and `text` may later hold parameter references in the same way.
+ *
+ * A text is not a `SketchEntity`: the solver only knows its origin point, which can be
+ * dimensioned, constrained and dragged like any other point.
+ */
+export interface SketchText {
+  id: string;
+  type: "text";
+  text: string;
+  fontId: string;
+  /** Name of the font for messages when the font itself is not available. */
+  fontName: string;
+  /** Font size: height of the em square (length expression). */
+  height: string;
+  /** Extra space between characters (length expression). */
+  letterSpacing: string;
+  /** Line pitch as a factor of the height (expression without unit). */
+  lineSpacing: string;
+  /** Angle expression, counter-clockwise. */
+  rotation: string;
+  horizontalAlign: TextHorizontalAlign;
+  verticalAlign: TextVerticalAlign;
+  direction: "horizontal" | "vertical";
+  /** Point entity the text is placed at. */
+  origin: EntityId;
+  path?: SketchTextPath;
+  construction?: boolean;
+  outline?: SketchTextOutline;
+}
 
 export type ConstraintType =
   | "coincident"
@@ -174,6 +253,8 @@ export interface Sketch {
   constraints: Record<string, SketchConstraint>;
   dimensions: Record<string, SketchDimension>;
   projections: ProjectedGeometryRef[];
+  /** Texts by id. Absent in sketches without text. */
+  texts?: Record<string, SketchText>;
   /** The fixed point at the sketch origin, if the sketch has one. */
   originId?: EntityId;
   /** Monotonic counter used to allocate entity / constraint / dimension ids. */

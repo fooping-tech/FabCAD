@@ -1,4 +1,11 @@
-import { type Sketch, type SketchPlaneRef, createSketch, editSketch } from "@fabcad/sketch";
+import {
+  type Sketch,
+  type SketchPlaneRef,
+  createSketch,
+  editSketch,
+  setTextExpression,
+  textExpressions,
+} from "@fabcad/sketch";
 import {
   type BodyRecord,
   type CadDocument,
@@ -159,7 +166,16 @@ function renameInFeature(feature: Feature, from: string, to: string): Feature {
           { ...d, expression: r(d.expression) },
         ]),
       );
-      return { ...feature, sketch: { ...feature.sketch, dimensions } };
+      const sketch = { ...feature.sketch, dimensions };
+      if (sketch.texts) {
+        sketch.texts = Object.fromEntries(
+          Object.entries(sketch.texts).map(([k, t]) => [
+            k,
+            textExpressions(t).reduce((u, e) => setTextExpression(u, e.field, r(e.expression)), t),
+          ]),
+        );
+      }
+      return { ...feature, sketch };
     }
     case "extrude":
       return { ...feature, distance: r(feature.distance) };

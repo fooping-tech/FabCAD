@@ -251,6 +251,12 @@ select { padding-right: 4px; }
 .value-preview { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); }
 .empty { color: var(--ink-faint); padding: 10px 4px; line-height: 1.5; }
 .kv { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 6px; }
+.text-dialog textarea { width: 100%; min-height: 46px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.35; padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: 5px; background: #fff; color: var(--ink); }
+.text-dialog textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.text-dialog select { width: 100%; }
+.text-dialog .segmented { display: flex; }
+.text-dialog .segmented button { flex: 1; }
+label.check { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; cursor: pointer; }
 .measure-group { margin: 0 0 8px; }
 .measure-group:last-child { margin-bottom: 0; }
 .measure-group h4 { margin: 0 0 3px; font-size: 11px; font-weight: 650; color: var(--ink-soft); display: flex; gap: 5px; align-items: center; }

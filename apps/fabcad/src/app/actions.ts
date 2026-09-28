@@ -32,8 +32,10 @@ import {
   type SketchPlaneRef,
   editSketch,
   profileRefOf,
+  removeTexts,
 } from "@fabcad/sketch";
 import { projectInto } from "../sketch/projectTool";
+import { cancelText, commitText, deleteTexts } from "../text/textCommands";
 import { viewportApi } from "../viewport/api";
 import { edgeRefOf, faceRefOf } from "./topology";
 import {
@@ -514,6 +516,10 @@ export function editFeature(featureId: string): void {
 export function closeDialog(): void {
   const dialog = appState.get().dialog;
   if (!dialog) return;
+  if (dialog.type === "text") {
+    cancelText();
+    return;
+  }
   if (dialog.type === "extrude") discardAutoSketch(dialog.autoSketch);
   appState.set({
     dialog: null,
@@ -579,6 +585,7 @@ function consumingSketch(cmd: Command, sketchId: string): Command {
 }
 
 export function commitDialog(): boolean {
+  if (appState.get().dialog?.type === "text") return commitText();
   const dialog = appState.get().dialog;
   if (!dialog) return false;
   const problem = dialogProblem(dialog);
@@ -684,7 +691,16 @@ export function deleteSelection(): void {
     const dimensions = selection.flatMap((s) =>
       s.kind === "dimension" && s.sketchId === activeSketchId ? [s.id] : [],
     );
-    if (entities.length + constraints.length + dimensions.length === 0) return;
+    const texts = selection.flatMap((s) =>
+      s.kind === "text" && s.sketchId === activeSketchId ? [s.textId] : [],
+    );
+    if (entities.length + constraints.length + dimensions.length + texts.length === 0) return;
+    if (entities.length + constraints.length + dimensions.length === 0) {
+      deleteTexts(activeSketchId, texts);
+      setSelection([]);
+      appState.set({ hover: null });
+      return;
+    }
     editSketchSolved(activeSketchId, "Delete", (sketch) =>
       editSketch(sketch, (b) => {
         // The sketch origin and the constraint that fixes it are permanent.
@@ -695,6 +711,7 @@ export function deleteSelection(): void {
         }
         for (const id of dimensions) b.removeDimension(id);
         b.remove(entities.filter((id) => id !== origin));
+        if (texts.length > 0) b.replace(removeTexts(b.current, texts));
       }),
     );
     setSelection([]);

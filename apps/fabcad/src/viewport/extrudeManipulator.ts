@@ -1,7 +1,7 @@
 import { type CadDocument, evaluateAs } from "@fabcad/cad-document";
 import { resolveSketchPlane } from "@fabcad/features";
 import { type Plane3, type Vec2, type Vec3, add3, planeToWorld, scale3 } from "@fabcad/geometry";
-import { resolveProfileRef } from "@fabcad/sketch";
+import { resolveProfileRefs } from "@fabcad/sketch";
 import type { Dialog } from "../app/appState";
 import { currentScope, sketchView } from "../app/session";
 import type { ViewportScene } from "./scene";
@@ -39,8 +39,7 @@ export function extrudeManipulator(
   const all = sketchView(f.sketch, doc).regions;
   const picked = new Map<string, (typeof all)[number]>();
   for (const ref of dialog.profiles) {
-    const r = resolveProfileRef(all, ref);
-    if (r) picked.set(r.id, r);
+    for (const r of resolveProfileRefs(all, ref)) picked.set(r.id, r);
   }
   const regions = [...picked.values()];
   if (regions.length === 0) return null;

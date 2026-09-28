@@ -24,6 +24,7 @@ import {
 import type { EntityId, Sketch } from "./model";
 import { isCurve } from "./edit";
 import { entityToCurves } from "./curves";
+import { textRegions } from "./text";
 
 /**
  * Sketch Profile Detection: Sketch Geometry → Intersections → Closed Loops → Selectable Profiles.
@@ -54,12 +55,19 @@ export interface SketchRegion {
   holePolygons: Vec2[][];
   /** A point strictly inside the region (not in a hole). */
   interiorPoint: Vec2;
+  /** Set for the regions of a text: the id of the text. */
+  textId?: string;
 }
 
 /** Persistent reference to a region, stored by features such as Extrude. */
 export interface ProfileRef {
   entityIds: EntityId[];
   point: Vec2;
+  /**
+   * The whole text with this id: every region of it, whatever the text says by then. The
+   * reference survives editing the text, which a reference to single glyphs would not.
+   */
+  textId?: string;
 }
 
 export interface DetectProfilesOptions {
@@ -320,7 +328,7 @@ function sweptArea(c: Curve2): number {
   }
 }
 
-const loopArea = (loop: Loop2): number => loop.curves.reduce((a, c) => a + sweptArea(c), 0);
+export const loopArea = (loop: Loop2): number => loop.curves.reduce((a, c) => a + sweptArea(c), 0);
 
 interface BoundaryLoop {
   loop: Loop2;
@@ -415,7 +423,7 @@ function buildLoop(
 }
 
 /** A point strictly inside `outer` and outside all `holes`, found on a horizontal scan line. */
-function interiorPointOf(outer: Vec2[], holes: Vec2[][]): Vec2 {
+export function interiorPointOf(outer: Vec2[], holes: Vec2[][]): Vec2 {
   const b = boundsOfPoints(outer);
   let best: { p: Vec2; width: number } | null = null;
   for (const f of [0.5, 0.382, 0.618, 0.25, 0.75, 0.127, 0.873]) {
@@ -446,7 +454,25 @@ const regionKey = (outer: EntityId[], holes: EntityId[][]): string => {
   return holeParts.length ? `${part(outer)}|${holeParts.join("|")}` : part(outer);
 };
 
+/**
+ * Closed regions of a sketch: the faces of the arrangement of its curves, followed by the
+ * regions of its texts. Texts are regions of their own and are not cut by other geometry.
+ */
 export function detectProfiles(
+  sketch: Sketch,
+  options: DetectProfilesOptions = {},
+): SketchRegion[] {
+  const curves = detectCurveProfiles(sketch, options);
+  if (!sketch.texts) return curves;
+  const texts: SketchRegion[] = [];
+  for (const text of Object.values(sketch.texts)) {
+    if (text.construction) continue;
+    texts.push(...textRegions(sketch, text, options.flattenTolerance ?? 0.01));
+  }
+  return texts.length > 0 ? [...curves, ...texts] : curves;
+}
+
+function detectCurveProfiles(
   sketch: Sketch,
   options: DetectProfilesOptions = {},
 ): SketchRegion[] {
@@ -555,7 +581,24 @@ export function regionAtPoint(regions: SketchRegion[], p: Vec2): SketchRegion | 
 }
 
 export function profileRefOf(region: SketchRegion): ProfileRef {
-  return { entityIds: region.entityIds.slice(), point: { ...region.interiorPoint } };
+  return {
+    entityIds: region.entityIds.slice(),
+    point: { ...region.interiorPoint },
+    ...(region.textId !== undefined ? { textId: region.textId } : {}),
+  };
+}
+
+/**
+ * All regions a reference stands for: every region of the text for a text reference, the
+ * one region found by `resolveProfileRef` otherwise.
+ */
+export function resolveProfileRefs(regions: SketchRegion[], ref: ProfileRef): SketchRegion[] {
+  if (ref.textId !== undefined) return regions.filter((r) => r.textId === ref.textId);
+  const region = resolveProfileRef(
+    regions.filter((r) => r.textId === undefined),
+    ref,
+  );
+  return region ? [region] : [];
 }
 
 /**

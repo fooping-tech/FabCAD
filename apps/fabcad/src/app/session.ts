@@ -28,6 +28,7 @@ import { useSyncExternalStore } from "react";
 import { EngineClient } from "../worker/engineClient";
 import { appState, toast } from "./appState";
 import { loadAutosave, storeAutosave } from "./persistence";
+import { startTextMaintenance } from "../text/typography";
 import { TinyStore } from "./tinyStore";
 
 /**
@@ -412,6 +413,8 @@ let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 export function startSession(): void {
   if (started) return;
   started = true;
+  // Before the recompute listener: the model is computed from texts with current outlines.
+  startTextMaintenance();
 
   documentStore.subscribe((doc) => {
     // While dragging, the 3D model is left alone; it catches up when the drag is committed.
