@@ -230,9 +230,13 @@ describe("laser paper strategy", () => {
         const count = t[0]!.kind === "tab" ? t[0]!.polygons.length : 0;
         expect(count).toBeGreaterThan(0);
         expect(s[0]!.kind === "slot" ? s[0]!.polygons.length : 0).toBe(count);
-        // Tabs of 12 mm with gaps of at least 20 mm: two on the edges of 50 and 80 mm,
-        // three on the edges of 100 mm.
-        expect(count).toBe(c.length > 90 ? 3 : 2);
+        // Tabs of 12 mm with gaps of at least 20 mm: one on the edges of 50 mm, two on
+        // those of 80 mm, three on those of 100 mm.
+        expect(count).toBe(c.length > 90 ? 3 : c.length > 60 ? 2 : 1);
+        // By default a slit is 1.5 mm longer than its tab is wide.
+        for (const slit of s[0]!.kind === "slot" ? s[0]!.polygons : []) {
+          expect(Math.hypot(slit[1]!.x - slit[0]!.x, slit[1]!.y - slit[0]!.y)).toBeCloseTo(13.5, 6);
+        }
       }
     });
 

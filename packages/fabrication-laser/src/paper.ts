@@ -77,7 +77,7 @@ export interface InsertTabSettings {
   flap: number;
   /** Length of the tab between the edge and its shoulders: what passes the slit (mm). Default 1. */
   neck: number;
-  /** How much longer the slit is than the tab is wide (mm). Default 0.4. */
+  /** How much longer the slit is than the tab is wide (mm). Default 1.5. */
   clearance: number;
   /** How far the shoulders of the tongue stick out on each side (mm); 0 = no lock. Default 1.5. */
   lock: number;
@@ -120,7 +120,7 @@ export interface PaperSettings extends StrategySettings {
 export function defaultPaperSettings(_material?: MaterialProfile): PaperSettings {
   return {
     joint: "glue",
-    insertTabs: { width: 12, depth: 8, spacing: 20, flap: 8, neck: 1, clearance: 0.4, lock: 1.5 },
+    insertTabs: { width: 12, depth: 8, spacing: 20, flap: 8, neck: 1, clearance: 1.5, lock: 1.5 },
     glueTabs: { enabled: true, width: 8, angle: 30, inset: 0 },
     foldCurvedFacets: true,
     kerfCompensation: false,
