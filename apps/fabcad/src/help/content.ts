@@ -710,7 +710,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Every body is classified first, and the result is shown as “Detected: …”.",
       "Flat Part: a body that is a profile with the thickness of the material becomes one part with that profile. Holes are kept; nothing is added.",
       "Rectangular Box: a box becomes six panels with tab-and-slot, finger or butt joints, compensated for material thickness.",
-      "Paper and card are unfolded instead, with fold lines. The cut edges are joined by glue tabs, or without glue by Tab & Slit: one side has tabs, the other a flap with slits in its fold line. Flap and tabs are folded inwards, so nothing of the joint is seen from outside.",
+      "Paper and card are unfolded instead, with fold lines. The cut edges are joined by glue tabs, or without glue by Tab & Slit: one side has tabs, the other a flap with slits in its fold line. Flap and tabs are folded inwards, so nothing of the joint is seen from outside. The tabs are on the faces that close the model, such as the caps of a prism: fold the flaps of the faces around it inwards, then press the face on, and its tabs go through the slits into the model.",
       "The parts are nested on sheets and exported as SVG or DXF. What is exported is exactly what the sheet view shows.",
     ],
     requires: ["A body, and a material whose thickness matches what is to be made of it."],

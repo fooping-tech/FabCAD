@@ -56,6 +56,10 @@ import { boundsOfPaths, closeLoop, pushPoint } from "./shared";
  *   the flap (they lie exactly on the edge of the solid), and the tabs are folded inwards and
  *   pushed through the slits. A tab is wider than its slit at the shoulders and locks behind
  *   it. From outside, only the two faces meeting at the edge are seen.
+ *
+ *   The tabs are on the face that closes the model (the one with more cut edges): pressing it
+ *   on pushes its tabs, which all point into the model, through the slits of the flaps that
+ *   lie under it.
  */
 export type PaperJoint = "glue" | "insert";
 
@@ -161,6 +165,18 @@ interface BoundaryEdge {
   connectionId?: string;
 }
 
+/** The lowest glue tab or flap worth cutting (mm). */
+const MIN_TAB_HEIGHT = 2;
+/**
+ * Shapes tried for a glue tab or a flap, in this order: as set, half as high, and then with
+ * sides that are fitted into the notch of the net the tab stands in.
+ */
+const TAB_VARIANTS: readonly { scale: number; fit: boolean }[] = [
+  { scale: 1, fit: false },
+  { scale: 0.5, fit: false },
+  { scale: 1, fit: true },
+  { scale: 0.5, fit: true },
+];
 /** The narrowest insert tab worth cutting (mm). */
 const MIN_INSERT_WIDTH = 4;
 /** Paper left between a slit, or the shoulder of a tab, and the end of the edge (mm). */
@@ -376,6 +392,7 @@ function fabricatePaper(
   const keyOf = (faceId: number, loop: number, index: number): string =>
     `${faceId}:${loop}:${index}`;
   const netLoops = new Map<number, BoundaryEdge[][]>();
+  const freeAngles = new Map<BoundaryEdge, { a: number; b: number }>();
   const netFolds = new Map<
     number,
     { a: Vec2; b: Vec2; edge: TopoEdge; partEdge: number; angle: number; connectionId: string }[]
@@ -441,6 +458,23 @@ function fabricatePaper(
       for (const be of loop) boundaryByKey.set(keyOf(be.owner.face.id, be.loop, be.index), { net, be });
     }
     netLoops.set(net.id, loops);
+    // Free angle outside the net at both ends of every boundary edge: 180° on a straight
+    // boundary, less in a notch of the net, more at a corner that sticks out.
+    for (const loop of loops) {
+      const n = loop.length;
+      const turnAt = (from: BoundaryEdge, to: BoundaryEdge): number => {
+        const u = norm2(sub2(from.b, from.a));
+        const v = norm2(sub2(to.b, to.a));
+        return Math.atan2(u.x * v.y - u.y * v.x, u.x * v.x + u.y * v.y);
+      };
+      loop.forEach((be, k) => {
+        if (n < 2) return;
+        freeAngles.set(be, {
+          a: Math.PI + turnAt(loop[(k + n - 1) % n]!, be),
+          b: Math.PI + turnAt(be, loop[(k + 1) % n]!),
+        });
+      });
+    }
 
     // Tree edges → folds.
     const folds: NonNullable<ReturnType<typeof netFolds.get>> = [];
@@ -487,6 +521,11 @@ function fabricatePaper(
   const insertDepth = Math.max(1, finiteOr(insert.depth, 8));
   const clearance = Math.max(0, finiteOr(insert.clearance, 0));
 
+  /** Number of edges of a face that are cut, i.e. joined to another face when assembling. */
+  const cutEdges = (face: NetFace): number =>
+    face.folds.filter((fold) => fold === undefined).length +
+    face.loops.slice(1).reduce((sum, loop) => sum + loop.length, 0);
+
   /** Vertex of the solid at the start of a boundary edge. */
   const startVertex = (be: BoundaryEdge): number => be.owner.face.loops[be.loop]![be.index]!;
 
@@ -528,82 +567,104 @@ function fabricatePaper(
     };
     const onTab = frame(tabSide, false);
     const onSlit = frame(slitSide, false);
-    const tip = Math.min(width / 4, insertDepth / 2);
 
-    // The flap of the other side: it is folded inwards and lies behind the face that carries
-    // the tabs. The slits are cut into its fold line.
-    let flap: Vec2[] | null = null;
-    for (const scale of [1, 0.5]) {
-      // Along the whole edge: the slits lie in its fold line.
-      const made = makeTab(slitSide.be, 1, flapHeight * scale, 0);
-      if (!made) continue;
-      const test = shrink(made);
-      const hitsFace = slitSide.net.faces.some((f) => polygonsOverlap(test, f.test));
-      const hitsTab = slitSide.net.tabs.some((other) => polygonsOverlap(test, other));
-      if (hitsFace || hitsTab) continue;
-      flap = made;
-      break;
-    }
-    if (!flap) return null;
-    const flapTest = shrink(flap);
-
-    const tabs: NonNullable<BoundaryEdge["inserts"]> = [];
-    const spans: [number, number][] = [];
-    const tests: Vec2[][] = [];
-    for (let i = 0; i < count; i++) {
-      const s0 = margin + cell * (i + 0.5) - width / 2;
-      const s1 = s0 + width;
+    const buildTab = (s0: number, s1: number, depth: number): Vec2[] => {
+      const tip = Math.min((s1 - s0) / 4, depth / 2);
       // A short neck that passes the slit, shoulders that lock behind it, and the tongue
       // narrowing to its tip.
       const outline: [number, number][] = [
         [s0, 0],
         [s0, neck],
         [s0 - lock, neck],
-        [s0 + tip, neck + insertDepth],
-        [s1 - tip, neck + insertDepth],
+        [s0 + tip, neck + depth],
+        [s1 - tip, neck + depth],
         [s1 + lock, neck],
         [s1, neck],
         [s1, 0],
       ];
       let polygon: Vec2[] = [];
-      for (const [s, h] of outline) pushPoint(polygon, onTab(s, h), 1e-7);
+      for (const [x, h] of outline) pushPoint(polygon, onTab(x, h), 1e-7);
       // In the direction of travel of the boundary, so that it can be spliced into the cut.
       if (dist2(polygon[0]!, tabSide.be.a) > dist2(polygon[polygon.length - 1]!, tabSide.be.a)) {
         polygon = polygon.reverse();
       }
-      // The tab lies outside the net and clear of the other tabs and flaps.
-      const test = shrink(polygon);
-      const hitsFace = tabSide.net.faces.some((f) => polygonsOverlap(test, f.test));
-      const others = [...tabSide.net.tabs, ...tests];
-      if (tabSide.net === slitSide.net) others.push(flapTest);
-      if (hitsFace || others.some((other) => polygonsOverlap(test, other))) continue;
-      tabs.push({ polygon, folds: [[onTab(s0, 0), onTab(s1, 0)]] });
-      spans.push([s0 - clearance / 2, s1 + clearance / 2]);
-      tests.push(test);
-    }
-    if (tabs.length === 0) return null;
+      return polygon;
+    };
 
-    // Along the fold line of the flap: slits where the tabs arrive, folds in between.
-    spans.sort((p, q) => p[0] - q[0]);
-    const slits: [Vec2, Vec2][] = spans.map(([s0, s1]) => [onSlit(s0, 0), onSlit(s1, 0)]);
-    const folds: [Vec2, Vec2][] = [];
-    let from = 0;
-    for (const [s0, s1] of [...spans, [length, length] as [number, number]]) {
-      if (s0 - from > 1e-6) folds.push([onSlit(from, 0), onSlit(s0, 0)]);
-      from = s1;
+    /** Tab spans to try, best first: the regular row, then single tabs that need less room. */
+    const layouts: { spans: [number, number][]; depth: number }[] = [];
+    layouts.push({
+      spans: Array.from({ length: count }, (_, i): [number, number] => {
+        const s0 = margin + cell * (i + 0.5) - width / 2;
+        return [s0, s0 + width];
+      }),
+      depth: insertDepth,
+    });
+    // In a notch of the net there is little room near the corner: a narrower, shorter tab
+    // further along the edge may still fit.
+    for (const scale of [1, 0.6]) {
+      for (const w of [width, 8, 5]) {
+        const single = Math.min(w, width);
+        if (single < MIN_INSERT_WIDTH) continue;
+        for (const at of [0.5, 0.7, 0.3, 0.85, 0.15, 1, 0]) {
+          const s0 = margin + (usable - single) * at;
+          layouts.push({ spans: [[s0, s0 + single]], depth: Math.max(2, insertDepth * scale) });
+        }
+      }
     }
-    tests.push(flapTest);
-    // In the order in which the boundary passes them.
-    tabs.sort(
-      (p, q) => dist2(p.polygon[0]!, tabSide.be.a) - dist2(q.polygon[0]!, tabSide.be.a),
-    );
-    return { tabs, flap: { polygon: flap, slits, folds }, tabTests: tests.slice(0, -1), flapTest };
+
+    // The flap of the other side: it is folded inwards and lies behind the face that carries
+    // the tabs. The slits are cut into its fold line.
+    for (const variant of TAB_VARIANTS) {
+      // Along the whole edge: the slits lie in its fold line.
+      const flap = makeTab(slitSide.be, variant.scale, flapHeight, 0, variant.fit);
+      if (!flap) continue;
+      const flapTest = shrink(flap);
+      if (slitSide.net.faces.some((f) => polygonsOverlap(flapTest, f.test))) continue;
+      if (slitSide.net.tabs.some((other) => polygonsOverlap(flapTest, other))) continue;
+
+      for (const layout of layouts) {
+        const tabs: NonNullable<BoundaryEdge["inserts"]> = [];
+        const spans: [number, number][] = [];
+        const tests: Vec2[][] = [];
+        for (const [s0, s1] of layout.spans) {
+          const polygon = buildTab(s0, s1, layout.depth);
+          // The tab lies outside the net and clear of the other tabs and flaps.
+          const test = shrink(polygon);
+          if (tabSide.net.faces.some((f) => polygonsOverlap(test, f.test))) continue;
+          const others = [...tabSide.net.tabs, ...tests];
+          if (tabSide.net === slitSide.net) others.push(flapTest);
+          if (others.some((other) => polygonsOverlap(test, other))) continue;
+          tabs.push({ polygon, folds: [[onTab(s0, 0), onTab(s1, 0)]] });
+          spans.push([s0 - clearance / 2, s1 + clearance / 2]);
+          tests.push(test);
+        }
+        if (tabs.length === 0) continue;
+
+        // Along the fold line of the flap: slits where the tabs arrive, folds in between.
+        spans.sort((x, y) => x[0] - y[0]);
+        const slits: [Vec2, Vec2][] = spans.map(([s0, s1]) => [onSlit(s0, 0), onSlit(s1, 0)]);
+        const folds: [Vec2, Vec2][] = [];
+        let from = 0;
+        for (const [s0, s1] of [...spans, [length, length] as [number, number]]) {
+          if (s0 - from > 1e-6) folds.push([onSlit(from, 0), onSlit(s0, 0)]);
+          from = s1;
+        }
+        // In the order in which the boundary passes them.
+        tabs.sort(
+          (x, y) => dist2(x.polygon[0]!, tabSide.be.a) - dist2(y.polygon[0]!, tabSide.be.a),
+        );
+        return { tabs, flap: { polygon: flap, slits, folds }, tabTests: tests, flapTest };
+      }
+    }
+    return null;
   };
   const makeTab = (
     be: BoundaryEdge,
     scale: number,
     size = tabSettings.width,
     fromEnds = tabSettings.inset,
+    fit = false,
   ): Vec2[] | null => {
     const u = norm2(sub2(be.b, be.a));
     const out = perp2(u); // material is on the left of travel, so the tab goes to the right
@@ -611,18 +672,36 @@ function fabricatePaper(
     const length = dist2(be.a, be.b);
     const inset = Math.max(0, fromEnds);
     const base = length - 2 * inset;
-    const height = size * scale;
+    let height = size * scale;
     if (base <= 1e-6 || height <= 1e-6) return null;
     const taper = Math.min(89, Math.max(0, tabSettings.angle));
-    const run = Math.min(height * Math.tan(degToRad(taper)), base / 2);
+    let runA = Math.min(height * Math.tan(degToRad(taper)), base / 2);
+    let runB = runA;
+    if (fit) {
+      // In a notch of the net the tab shares the free angle with the edge across the notch:
+      // its side stays within half of it.
+      const free = freeAngles.get(be);
+      const side = (angle: number | undefined): number =>
+        Math.min(
+          Math.PI / 2 - degToRad(taper),
+          Math.max(degToRad(3), (angle ?? Math.PI) / 2 - degToRad(2)),
+        );
+      const cotA = 1 / Math.tan(side(free?.a));
+      const cotB = 1 / Math.tan(side(free?.b));
+      // A triangle at most.
+      height = Math.min(height, base / (cotA + cotB));
+      runA = height * cotA;
+      runB = height * cotB;
+      if (height < MIN_TAB_HEIGHT) return null;
+    }
     const at = (along: number, h: number): Vec2 => ({
       x: be.a.x + u.x * along + outward.x * h,
       y: be.a.y + u.y * along + outward.y * h,
     });
     const poly: Vec2[] = [];
     pushPoint(poly, at(inset, 0));
-    pushPoint(poly, at(inset + run, height));
-    pushPoint(poly, at(length - inset - run, height), 1e-7);
+    pushPoint(poly, at(inset + runA, height));
+    pushPoint(poly, at(length - inset - runB, height), 1e-7);
     pushPoint(poly, at(length - inset, 0));
     return poly.length >= 3 ? poly : null;
   };
@@ -651,12 +730,23 @@ function fabricatePaper(
     let glued: { net: Net; be: BoundaryEdge } | undefined;
     let inserted: { net: Net; be: BoundaryEdge } | undefined;
     if (settings.joint === "insert") {
-      // Deterministic choice: tabs on the face with the lower id, slits on the other; the
-      // other way round when that does not fit.
-      for (const [tabSide, slitSide] of [
-        [x, y],
-        [y, x],
-      ] as const) {
+      // The tabs go on the face that closes the model: the one with more cut edges (a cap
+      // that hangs on one fold, against a side face). Its tabs all point the same way, into
+      // the model, so that pressing the face on pushes them through the slits; the flaps of
+      // the faces around it lie under it. The other way round, the tabs would have to be
+      // pushed in sideways from all around, and pressing the face on would send them through
+      // the slits to the outside. Equal faces: tabs on the lower face id. The other way
+      // round only when this one does not fit.
+      const closes = cutEdges(x.be.owner) >= cutEdges(y.be.owner);
+      for (const [tabSide, slitSide] of (closes
+        ? [
+            [x, y],
+            [y, x],
+          ]
+        : [
+            [y, x],
+            [x, y],
+          ]) as [typeof x, typeof x][]) {
         const made = makeInserts(tabSide, slitSide, edge);
         if (!made) continue;
         tabSide.be.inserts = made.tabs;
@@ -682,10 +772,11 @@ function fabricatePaper(
     }
     if (!inserted && tabSettings.enabled) {
       // Deterministic choice: the face with the lower id first, the other side when the tab
-      // would cover the net or another tab; then both sides again with a tab of half height.
-      for (const scale of [1, 0.5]) {
+      // would cover the net or another tab; then both sides again with a tab of half height;
+      // then with tabs whose sides are fitted into the notch they stand in.
+      for (const variant of TAB_VARIANTS) {
         for (const end of ends) {
-          const tab = makeTab(end.be, scale);
+          const tab = makeTab(end.be, variant.scale, tabSettings.width, tabSettings.inset, variant.fit);
           if (!tab) continue;
           const test = shrink(tab);
           const hitsFace = end.net.faces.some((f) => polygonsOverlap(test, f.test));

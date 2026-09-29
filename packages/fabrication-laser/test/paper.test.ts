@@ -369,6 +369,88 @@ describe("laser paper strategy", () => {
       }
     });
 
+    it("joins the edges next to where a cap hangs on the strip, in the notch of the net", () => {
+      // Octagonal prism: the caps hang on one side face each. The edges next to that fold
+      // face each other across a gap of 45°, where a tab and a flap of full size collide.
+      for (const n of [5, 6, 8]) {
+        const b = fx.body(prismTopology(fx.regularPolygon(n, 26), 60), `prism-${n}`);
+        for (const joint of ["insert", "glue"] as const) {
+          const r = build(b, { joint });
+          expect(r.warnings).toEqual([]);
+          const net = r.parts[0]!;
+          const cut = b.topology.edges.length - net.folds.length;
+          const wanted = joint === "insert" ? "tab-slot" : "glue-tab";
+          expect(r.connections.filter((c) => c.joint === wanted)).toHaveLength(cut);
+          if (joint === "insert") {
+            expect(flaps(net)).toHaveLength(cut);
+            expect(slits(net)).toHaveLength(insertTabs(net).length);
+            expect(insertTabs(net).length).toBeGreaterThanOrEqual(cut);
+          } else {
+            expect(tabs(net)).toHaveLength(cut);
+          }
+          const outline = net.paths.find((x) => x.role === "outline")!;
+          expect(selfIntersects(outline.points)).toBe(false);
+          const all = [...insertTabs(net), ...flaps(net), ...tabs(net)];
+          expect(signedArea(outline.points)).toBeCloseTo(signedArea(net.outline) + area(all), 4);
+          // Nothing that is added lies on a face, or on anything else that is added.
+          for (let i = 0; i < all.length; i++) {
+            for (const q of offsetPolygon(all[i]!, 0.01).polygon) {
+              expect(pointInPolygon(q, net.outline)).toBe(false);
+              for (let j = 0; j < all.length; j++) {
+                if (j !== i) expect(pointInPolygon(q, all[j]!)).toBe(false);
+              }
+            }
+          }
+        }
+      }
+    });
+
+    it("puts the tabs on the face that closes the model, whatever the face ids", () => {
+      // The caps of a prism hang on one fold and are pressed on last: they carry the tabs,
+      // which then point into the model. The side faces carry the flaps with the slits.
+      const prism = prismTopology(fx.regularPolygon(8, 26), 60);
+      const count = prism.faces.length;
+      // The same solid with the faces numbered the other way round (caps last).
+      const flipped = {
+        vertices: prism.vertices,
+        faces: prism.faces
+          .map((f) => ({ ...f, id: count - 1 - f.id, sourceFace: count - 1 - f.sourceFace }))
+          .sort((p, q) => p.id - q.id),
+        edges: prism.edges.map((e) => ({ ...e, faces: e.faces.map((f) => count - 1 - f) })),
+      };
+      for (const [topology, caps] of [
+        [prism, [0, 1]],
+        [flipped, [count - 1, count - 2]],
+      ] as const) {
+        const b = fx.body(topology, "prism");
+        const r = build(b, INSERT);
+        const net = r.parts[0]!;
+        const joined = r.connections.filter((c) => c.joint === "tab-slot");
+        expect(joined).toHaveLength(15);
+        for (const cap of caps) {
+          const mine = joined.filter((c) =>
+            topology.edges.find((e) => e.id === c.sourceEdge)!.faces.includes(cap),
+          );
+          expect(mine).toHaveLength(7);
+          // The edges that carry the tabs go round the octagon: each turns by 45° from the
+          // one before. (The edges of the side faces lie in one line.)
+          const edges = mine
+            .map((c) => net.edges.find((e) => e.id === c.a.edgeId)!)
+            .sort((p, q) => p.index - q.index);
+          for (let i = 0; i + 1 < edges.length; i++) {
+            const [p, q] = [edges[i]!, edges[i + 1]!];
+            expect(Math.hypot(p.b.x - q.a.x, p.b.y - q.a.y)).toBeLessThan(1e-6);
+            const turn = Math.atan2(
+              (p.b.x - p.a.x) * (q.b.y - q.a.y) - (p.b.y - p.a.y) * (q.b.x - q.a.x),
+              (p.b.x - p.a.x) * (q.b.x - q.a.x) + (p.b.y - p.a.y) * (q.b.y - q.a.y),
+            );
+            expect((turn * 180) / Math.PI).toBeCloseTo(45, 6);
+          }
+          for (const c of mine) expect(c.a.role).toBe("tab");
+        }
+      }
+    });
+
     it("falls back to a glue tab where an edge is too short, and says so", () => {
       const b = fx.cylinderBody(24);
       const r = build(b, INSERT);

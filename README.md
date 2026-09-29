@@ -44,7 +44,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | --- | --- |
 | Material | MDF、Acrylic、Cardboard、Paper。厚み・kerf・fit offset を編集でき、独自の材料も追加できます |
 | Board（MDF / Acrylic / Cardboard） | まず Body を判定します。**Flat Part**（板厚と同じ厚みの 2D 形状。穴も可）は輪郭のまま 1 部品、**Rectangular Box**（直方体）は 6 枚のパネル → Joint → Thickness Compensation → Kerf Compensation。Joint は Tab & Slot / Finger / Flat。それ以外の立体は Unsupported として理由を表示し、カットデータを作りません |
-| Paper | Unfold → Connected Net → Fold Line → 切り離した辺の継ぎ方。**Glue**（のりしろ。幅・角度・インセット）と **Tab & Slit**（タブを相手側の切り込みに差し込む。糊は不要）を選べます。Tab & Slit では、相手側に内側へ折り込むフラップが付き、その折り線（立体の稜線の位置）に切り込みが入ります。タブも内側に折って差し込むので、組み立てると継ぎ手は外から見えません。タブの幅・深さ・間隔、フラップの高さ、首の長さ、ロック（タブの肩が切り込みより広い量）、クリアランスを指定できます。長い辺には複数のタブが付き、短すぎる辺はのりしろになります |
+| Paper | Unfold → Connected Net → Fold Line → 切り離した辺の継ぎ方。**Glue**（のりしろ。幅・角度・インセット）と **Tab & Slit**（タブを相手側の切り込みに差し込む。糊は不要）を選べます。Tab & Slit では、相手側に内側へ折り込むフラップが付き、その折り線（立体の稜線の位置）に切り込みが入ります。タブも内側に折って差し込むので、組み立てると継ぎ手は外から見えません。タブは立体を閉じる面（角柱の蓋など、切り離された辺の多い面）に付き、フラップと切り込みはそのまわりの面に付きます。まわりのフラップを内側に折ってから蓋を押し込むと、タブが切り込みを通って内側に入ります。タブの幅・深さ・間隔、フラップの高さ、首の長さ、ロック（タブの肩が切り込みより広い量）、クリアランスを指定できます。長い辺には複数のタブが付き、短すぎる辺はのりしろになります。展開図の切れ込みの中（蓋が側面につながる辺の隣など）では、のりしろ・フラップの側辺を切れ込みの角度に合わせ、タブは小さくして角から離れた位置に置きます |
 | Analyzer | concave corner、acute angle、short edge、narrow tab、曲面などを警告 |
 | Parts | 部品名、寸法、厚み、材料、joint、mating edge（`EdgeConnection` を明示的に保持） |
 | Sheet | row / shelf packing、複数シート、90° 回転 |
