@@ -42,6 +42,9 @@ export interface BoardOverrides {
 
 /** User overrides on top of `defaultPaperSettings(material)`. A missing key = default. */
 export interface PaperOverrides {
+  /** How cut edges are joined: glue tabs, or tabs pushed through slits. */
+  joint?: PaperSettings["joint"];
+  insertTabs?: Partial<PaperSettings["insertTabs"]>;
   glueTabs?: {
     enabled?: boolean;
     width?: number;
@@ -126,6 +129,7 @@ function compact<T extends object>(source: T): T {
 export const MATERIAL_CATEGORIES: readonly MaterialCategory[] = ["board", "paper"];
 export const CAP_JOINTS: readonly BoardSettings["capJoint"][] = ["tab-slot", "finger", "flat"];
 export const SIDE_JOINTS: readonly BoardSettings["sideJoint"][] = ["flat", "finger"];
+export const PAPER_JOINTS: readonly PaperSettings["joint"][] = ["glue", "insert"];
 export const NESTING_ALGORITHMS: readonly NestingAlgorithm[] = ["row", "shelf"];
 /** Largest glue tab taper in degrees (90° would be a tab without height). */
 export const MAX_GLUE_TAB_ANGLE = 85;
@@ -177,6 +181,7 @@ export function normalizeBoardOverrides(value: unknown): BoardOverrides {
 export function normalizePaperOverrides(value: unknown): PaperOverrides {
   if (!isDict(value)) return {};
   const out: PaperOverrides = compact<PaperOverrides>({
+    joint: oneOf(value.joint, PAPER_JOINTS),
     foldCurvedFacets: bool(value.foldCurvedFacets),
     kerfCompensation: bool(value.kerfCompensation),
   });
@@ -189,6 +194,17 @@ export function normalizePaperOverrides(value: unknown): PaperOverrides {
       inset: nonNegative(value.glueTabs.inset),
     });
     if (Object.keys(tabs).length > 0) out.glueTabs = tabs;
+  }
+  if (isDict(value.insertTabs)) {
+    const insert = compact<NonNullable<PaperOverrides["insertTabs"]>>({
+      width: positive(value.insertTabs.width),
+      depth: positive(value.insertTabs.depth),
+      spacing: positive(value.insertTabs.spacing),
+      slitOffset: positive(value.insertTabs.slitOffset),
+      clearance: nonNegative(value.insertTabs.clearance),
+      lock: nonNegative(value.insertTabs.lock),
+    });
+    if (Object.keys(insert).length > 0) out.insertTabs = insert;
   }
   return out;
 }
@@ -349,8 +365,13 @@ export function resolvePaperSettings(
   overrides: PaperOverrides,
 ): PaperSettings {
   const defaults = defaultPaperSettings(material);
-  const { glueTabs, ...rest } = normalizePaperOverrides(overrides);
-  return { ...defaults, ...rest, glueTabs: { ...defaults.glueTabs, ...(glueTabs ?? {}) } };
+  const { glueTabs, insertTabs, ...rest } = normalizePaperOverrides(overrides);
+  return {
+    ...defaults,
+    ...rest,
+    glueTabs: { ...defaults.glueTabs, ...(glueTabs ?? {}) },
+    insertTabs: { ...defaults.insertTabs, ...(insertTabs ?? {}) },
+  };
 }
 
 // ---------------------------------------------------------------------------------- bodies

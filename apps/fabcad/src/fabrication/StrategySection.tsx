@@ -23,7 +23,7 @@ function setBoard<K extends keyof BoardOverrides>(key: K, value: BoardOverrides[
   }, LABEL);
 }
 
-function setPaper<K extends "foldCurvedFacets" | "kerfCompensation">(
+function setPaper<K extends "joint" | "foldCurvedFacets" | "kerfCompensation">(
   key: K,
   value: PaperOverrides[K],
 ): void {
@@ -43,6 +43,17 @@ function setGlueTab<K extends keyof GlueTabs>(key: K, value: GlueTabs[K]): void 
     if (value === undefined) delete glueTabs[key];
     else glueTabs[key] = value;
     return { paper: { ...s.paper, glueTabs } };
+  }, LABEL);
+}
+
+type InsertTabs = NonNullable<PaperOverrides["insertTabs"]>;
+
+function setInsertTab<K extends keyof InsertTabs>(key: K, value: InsertTabs[K]): void {
+  updateFabricationSettings((s) => {
+    const insertTabs: InsertTabs = { ...(s.paper.insertTabs ?? {}) };
+    if (value === undefined) delete insertTabs[key];
+    else insertTabs[key] = value;
+    return { paper: { ...s.paper, insertTabs } };
   }, LABEL);
 }
 
@@ -140,9 +151,84 @@ function PaperForm({ material, overrides }: PaperFormProps): ReactNode {
   const resolved = resolvePaperSettings(material, overrides);
   const tabs = overrides.glueTabs ?? {};
   const enabled = resolved.glueTabs.enabled;
+  const inserting = resolved.joint === "insert";
+  const insert = overrides.insertTabs ?? {};
   return (
     <div className="form">
-      <div className="form-section">Glue tabs</div>
+      <div className="form-section">Joints</div>
+      <SegmentedField
+        label="Joint"
+        value={resolved.joint}
+        options={[
+          { value: "glue", label: "Glue", title: "Glue tabs: one side is glued behind the other" },
+          {
+            value: "insert",
+            label: "Tab & Slit",
+            title: "Tabs are pushed through slits of the other side. No glue.",
+          },
+        ]}
+        onChange={(v) => setPaper("joint", v)}
+      />
+      {inserting ? (
+        <>
+          <div className="form-section">Insert tabs</div>
+          <NumberField
+            label="Tab width"
+            unit="mm"
+            value={insert.width}
+            defaultValue={defaults.insertTabs.width}
+            rule={POSITIVE}
+            hint="Along the edge, where the tab passes the slit"
+            onCommit={(v) => setInsertTab("width", v)}
+          />
+          <NumberField
+            label="Tab depth"
+            unit="mm"
+            value={insert.depth}
+            defaultValue={defaults.insertTabs.depth}
+            rule={POSITIVE}
+            hint="Length of the tongue behind the slit"
+            onCommit={(v) => setInsertTab("depth", v)}
+          />
+          <NumberField
+            label="Tab spacing"
+            unit="mm"
+            value={insert.spacing}
+            defaultValue={defaults.insertTabs.spacing}
+            rule={POSITIVE}
+            hint="Smallest gap between tabs; long edges get several"
+            onCommit={(v) => setInsertTab("spacing", v)}
+          />
+          <NumberField
+            label="Slit offset"
+            unit="mm"
+            value={insert.slitOffset}
+            defaultValue={defaults.insertTabs.slitOffset}
+            rule={POSITIVE}
+            hint="Distance of the slit from its edge, at least 0.5"
+            onCommit={(v) => setInsertTab("slitOffset", v)}
+          />
+          <NumberField
+            label="Lock"
+            unit="mm"
+            value={insert.lock}
+            defaultValue={defaults.insertTabs.lock}
+            rule={NON_NEGATIVE}
+            hint="How far the tab is wider than the slit on each side, 0 = none"
+            onCommit={(v) => setInsertTab("lock", v)}
+          />
+          <NumberField
+            label="Clearance"
+            unit="mm"
+            value={insert.clearance}
+            defaultValue={defaults.insertTabs.clearance}
+            rule={NON_NEGATIVE}
+            hint="How much longer the slit is than the tab is wide"
+            onCommit={(v) => setInsertTab("clearance", v)}
+          />
+        </>
+      ) : null}
+      <div className="form-section">{inserting ? "Glue tabs (edges too short for a tab)" : "Glue tabs"}</div>
       <CheckField
         label="Glue tabs on cut edges"
         checked={enabled}

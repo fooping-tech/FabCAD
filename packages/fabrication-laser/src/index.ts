@@ -26,7 +26,13 @@ export {
 } from "./boardClassifier";
 export { compileFlatPart } from "./flatPart";
 export { compileRectangularBox } from "./rectangularBox";
-export { type PaperSettings, defaultPaperSettings, laserPaperStrategy } from "./paper";
+export {
+  type InsertTabSettings,
+  type PaperJoint,
+  type PaperSettings,
+  defaultPaperSettings,
+  laserPaperStrategy,
+} from "./paper";
 
 /** Add the laser strategies to a registry (the laser workspace calls this once). */
 export function registerLaserStrategies(registry: StrategyRegistry): void {

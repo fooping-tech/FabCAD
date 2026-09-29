@@ -15,8 +15,10 @@ import {
   norm2,
   offsetPolygon,
   perp2,
+  pointInPolygon,
   polygonsOverlap,
   radToDeg,
+  segmentsIntersect,
   signedArea,
   sub2,
   topoEdgeKey,
@@ -42,12 +44,44 @@ import { boundsOfPaths, closeLoop, pushPoint } from "./shared";
 /**
  * Laser paper strategy:
  *
- *   Solid → Unfold → Connected Net → Fold Lines → Glue Tabs
+ *   Solid → Unfold → Connected Net → Fold Lines → Joints of the cut edges
  *
  * Generic for any polyhedral topology. Paper has (nearly) no thickness, so there is no
  * thickness compensation.
+ *
+ * The cut edges of the net are joined in one of two ways:
+ *
+ * - "glue": one side carries a glue tab that is glued behind the other side;
+ * - "insert": one side carries tabs that are pushed through slits cut into the other side, so
+ *   the model holds together without glue. Seen across the edge, a tab is a neck that lies on
+ *   the outside of the other face, from the edge to the slit, and a tongue that goes through
+ *   the slit. The tongue is wider than the slit at its shoulders and locks behind it.
  */
+export type PaperJoint = "glue" | "insert";
+
+export interface InsertTabSettings {
+  /** Width of a tab where it passes the slit, along the edge (mm). Default 12. */
+  width: number;
+  /** Length of the tongue behind the slit (mm). Default 8. */
+  depth: number;
+  /** Smallest gap between two tabs of one edge (mm); long edges get several tabs. Default 20. */
+  spacing: number;
+  /** Distance of the slit from the edge it belongs to (mm). Default 1.5. */
+  slitOffset: number;
+  /** How much longer the slit is than the tab is wide (mm). Default 0.4. */
+  clearance: number;
+  /** How far the shoulders of the tongue stick out on each side (mm); 0 = no lock. Default 1.5. */
+  lock: number;
+}
+
 export interface PaperSettings extends StrategySettings {
+  /** How the cut edges are joined. Default "glue". */
+  joint: PaperJoint;
+  /**
+   * Tabs and slits of the "insert" joint. Edges too short for a tab get a glue tab instead
+   * (when glue tabs are enabled).
+   */
+  insertTabs: InsertTabSettings;
   glueTabs: {
     /** Generate glue tabs on cut edges. Default true. */
     enabled: boolean;
@@ -76,6 +110,8 @@ export interface PaperSettings extends StrategySettings {
 
 export function defaultPaperSettings(_material?: MaterialProfile): PaperSettings {
   return {
+    joint: "glue",
+    insertTabs: { width: 12, depth: 8, spacing: 20, slitOffset: 1.5, clearance: 0.4, lock: 1.5 },
     glueTabs: { enabled: true, width: 8, angle: 30, inset: 0 },
     foldCurvedFacets: true,
     kerfCompensation: false,
@@ -113,8 +149,15 @@ interface BoundaryEdge {
   edge?: TopoEdge;
   partEdge: number;
   tab?: Vec2[];
+  /** Tabs that go through slits of the other side, with the fold lines across each. */
+  inserts?: { polygon: Vec2[]; folds: [Vec2, Vec2][] }[];
   connectionId?: string;
 }
+
+/** The narrowest insert tab worth cutting (mm). */
+const MIN_INSERT_WIDTH = 4;
+/** Paper left between a slit, or the shoulder of a tab, and the end of the edge (mm). */
+const INSERT_MARGIN = 1;
 
 interface Net {
   id: number;
@@ -122,6 +165,8 @@ interface Net {
   faces: NetFace[];
   rootPlane: Plane3;
   tabs: Vec2[][];
+  /** Slits cut into the faces of the net. */
+  slits: { a: Vec2; b: Vec2; connectionId: string }[];
 }
 
 function shrink(poly: readonly Vec2[]): Vec2[] {
@@ -140,6 +185,7 @@ function fabricatePaper(
     ...defaults,
     ...input,
     glueTabs: { ...defaults.glueTabs, ...(input.glueTabs ?? {}) },
+    insertTabs: { ...defaults.insertTabs, ...(input.insertTabs ?? {}) },
   };
   const { topology } = body;
   const warnings: FabricationWarning[] = analyzeBody(body).warnings.filter(
@@ -202,6 +248,7 @@ function fabricatePaper(
       faces: [],
       rootPlane: rootOwn.plane,
       tabs: [],
+      slits: [],
     };
     nets.push(net);
     const frontier: Candidate[] = [];
@@ -425,8 +472,114 @@ function fabricatePaper(
   }
 
   // 4. Cut edges: every topology edge that appears twice on net boundaries gets a connection
-  //    and one glue tab.
+  //    and its joint: a glue tab, or tabs on one side and slits on the other.
   const tabSettings = settings.glueTabs;
+  const insert = settings.insertTabs;
+  const finiteOr = (value: number, fallback: number): number =>
+    Number.isFinite(value) ? value : fallback;
+  const slitOffset = Math.max(0.5, finiteOr(insert.slitOffset, 1.5));
+  const lock = Math.max(0, finiteOr(insert.lock, 0));
+  const insertDepth = Math.max(1, finiteOr(insert.depth, 8));
+  const clearance = Math.max(0, finiteOr(insert.clearance, 0));
+
+  /** Vertex of the solid at the start of a boundary edge. */
+  const startVertex = (be: BoundaryEdge): number => be.owner.face.loops[be.loop]![be.index]!;
+
+  /**
+   * Insert tabs on `tabSide` and the slits for them on `slitSide`, or null when the edge is
+   * too short or there is no room. Positions are measured along the edge of the solid, so a
+   * tab and its slit are at the same place on both sides.
+   */
+  const makeInserts = (
+    tabSide: { net: Net; be: BoundaryEdge },
+    slitSide: { net: Net; be: BoundaryEdge },
+    edge: TopoEdge,
+  ): { tabs: NonNullable<BoundaryEdge["inserts"]>; slits: [Vec2, Vec2][]; tests: Vec2[][] } | null => {
+    const length = dist2(tabSide.be.a, tabSide.be.b);
+    const margin = lock + clearance / 2 + INSERT_MARGIN;
+    const usable = length - 2 * margin;
+    if (usable < MIN_INSERT_WIDTH) return null;
+    const width = Math.min(Math.max(MIN_INSERT_WIDTH, finiteOr(insert.width, 12)), usable);
+    const gap = Math.max(2 * lock + 1, finiteOr(insert.spacing, 20));
+    const count = Math.max(1, Math.floor((usable + gap + 1e-9) / (width + gap)));
+    const cell = usable / count;
+
+    /** Point of a side at `s` along the edge of the solid and `h` from the edge. */
+    const frame = (side: { be: BoundaryEdge }, inward: boolean) => {
+      const { a, b } = side.be;
+      const u = norm2(sub2(b, a));
+      const left = perp2(u); // material is on the left of travel
+      const normal = inward ? left : { x: -left.x, y: -left.y };
+      const forward = startVertex(side.be) === edge.a;
+      return (s: number, h: number): Vec2 => {
+        const along = forward ? s : length - s;
+        return { x: a.x + u.x * along + normal.x * h, y: a.y + u.y * along + normal.y * h };
+      };
+    };
+    const onTab = frame(tabSide, false);
+    const onSlit = frame(slitSide, true);
+    const tip = Math.min(width / 4, insertDepth / 2);
+
+    const tabs: NonNullable<BoundaryEdge["inserts"]> = [];
+    const slits: [Vec2, Vec2][] = [];
+    const tests: Vec2[][] = [];
+    for (let i = 0; i < count; i++) {
+      const s0 = margin + cell * (i + 0.5) - width / 2;
+      const s1 = s0 + width;
+      // Neck up to the slit, shoulders that lock behind it, tongue narrowing to its tip.
+      const outline: [number, number][] = [
+        [s0, 0],
+        [s0, slitOffset],
+        [s0 - lock, slitOffset],
+        [s0 + tip, slitOffset + insertDepth],
+        [s1 - tip, slitOffset + insertDepth],
+        [s1 + lock, slitOffset],
+        [s1, slitOffset],
+        [s1, 0],
+      ];
+      let polygon: Vec2[] = [];
+      for (const [s, h] of outline) pushPoint(polygon, onTab(s, h), 1e-7);
+      // In the direction of travel of the boundary, so that it can be spliced into the cut.
+      if (dist2(polygon[0]!, tabSide.be.a) > dist2(polygon[polygon.length - 1]!, tabSide.be.a)) {
+        polygon = polygon.reverse();
+      }
+      const slit: [Vec2, Vec2] = [
+        onSlit(s0 - clearance / 2, slitOffset),
+        onSlit(s1 + clearance / 2, slitOffset),
+      ];
+      // The slit lies inside the face it is cut into, clear of its boundary and of other slits.
+      const face = slitSide.be.owner;
+      const inFace = (p: Vec2): boolean =>
+        pointInPolygon(p, face.test) &&
+        !face.loops.slice(1).some((hole) => pointInPolygon(p, hole));
+      const crossesBoundary = face.loops.some((loop) =>
+        loop.some((p, k) => segmentsIntersect(slit[0], slit[1], p, loop[(k + 1) % loop.length]!, 1e-7)),
+      );
+      const crossesSlit = [...slitSide.net.slits.map((x) => [x.a, x.b] as const), ...slits].some(
+        ([p, q]) => segmentsIntersect(slit[0], slit[1], p, q, 1e-7),
+      );
+      if (!inFace(slit[0]) || !inFace(slit[1]) || crossesBoundary || crossesSlit) continue;
+      // The tab lies outside the net and clear of the other tabs.
+      const test = shrink(polygon);
+      const hitsFace = tabSide.net.faces.some((f) => polygonsOverlap(test, f.test));
+      const hitsTab = [...tabSide.net.tabs, ...tests].some((other) => polygonsOverlap(test, other));
+      if (hitsFace || hitsTab) continue;
+      tabs.push({
+        polygon,
+        folds: [
+          [onTab(s0, 0), onTab(s1, 0)],
+          [onTab(s0, slitOffset), onTab(s1, slitOffset)],
+        ],
+      });
+      slits.push(slit);
+      tests.push(test);
+    }
+    // In the order in which the boundary passes them.
+    tabs.sort(
+      (p, q) => dist2(p.polygon[0]!, tabSide.be.a) - dist2(q.polygon[0]!, tabSide.be.a),
+    );
+    return tabs.length > 0 ? { tabs, slits, tests } : null;
+  };
   const makeTab = (be: BoundaryEdge, scale: number): Vec2[] | null => {
     const u = norm2(sub2(be.b, be.a));
     const out = perp2(u); // material is on the left of travel, so the tab goes to the right
@@ -472,7 +625,37 @@ function fabricatePaper(
     x.be.connectionId = connectionId;
     y.be.connectionId = connectionId;
     let glued: { net: Net; be: BoundaryEdge } | undefined;
-    if (tabSettings.enabled) {
+    let inserted: { net: Net; be: BoundaryEdge } | undefined;
+    if (settings.joint === "insert") {
+      // Deterministic choice: tabs on the face with the lower id, slits on the other; the
+      // other way round when that does not fit.
+      for (const [tabSide, slitSide] of [
+        [x, y],
+        [y, x],
+      ] as const) {
+        const made = makeInserts(tabSide, slitSide, edge);
+        if (!made) continue;
+        tabSide.be.inserts = made.tabs;
+        tabSide.net.tabs.push(...made.tests);
+        for (const [a, b] of made.slits) slitSide.net.slits.push({ a, b, connectionId });
+        inserted = tabSide;
+        break;
+      }
+      if (!inserted) {
+        warnings.push({
+          code: "joint-fallback",
+          severity: "info",
+          message:
+            `This edge (${dist2(x.be.a, x.be.b).toFixed(1)} mm) has no room for a tab and a slit. ` +
+            (tabSettings.enabled ? "A glue tab is used instead." : "It is left without a joint."),
+          connectionId,
+          partId: x.net.partId,
+          edgeId: `${x.net.partId}.edge-${x.be.partEdge}`,
+          position: midpoint(edge),
+        });
+      }
+    }
+    if (!inserted && tabSettings.enabled) {
       // Deterministic choice: the face with the lower id first, the other side when the tab
       // would cover the net or another tab; then both sides again with a tab of half height.
       for (const scale of [1, 0.5]) {
@@ -507,16 +690,16 @@ function fabricatePaper(
     const endOf = (end: { net: Net; be: BoundaryEdge }): EdgeConnection["a"] => ({
       partId: end.net.partId,
       edgeId: `${end.net.partId}.edge-${end.be.partEdge}`,
-      role: end === glued ? "glue-tab" : "glue",
+      role: inserted ? (end === inserted ? "tab" : "slot") : end === glued ? "glue-tab" : "glue",
     });
     // The side carrying the tab is listed first.
-    const first = glued === y ? y : x;
+    const first = (inserted ?? glued) === y ? y : x;
     const second = first === x ? y : x;
     connections.push({
       id: connectionId,
       a: endOf(first),
       b: endOf(second),
-      joint: "glue-tab",
+      joint: inserted ? "tab-slot" : "glue-tab",
       angle: radToDeg(theta),
       length: dist2(x.be.a, x.be.b),
       sourceEdge: edge.id,
@@ -568,6 +751,27 @@ function fabricatePaper(
             connectionId: be.connectionId,
           });
         }
+        if (be.inserts && be.connectionId) {
+          // The tabs are part of the outline, like glue tabs.
+          for (const tab of be.inserts) {
+            for (const p of tab.polygon) pushPoint(cut, p);
+            for (const fold of tab.folds) {
+              tabFolds.push({
+                type: "fold",
+                role: "tab",
+                points: [fold[0], fold[1]],
+                closed: false,
+                connectionId: be.connectionId,
+              });
+            }
+          }
+          joints.push({
+            kind: "tab",
+            connectionId: be.connectionId,
+            edgeId,
+            polygons: be.inserts.map((t) => t.polygon),
+          });
+        }
       }
       plain.push(closeLoop(raw));
       paths.push({
@@ -597,6 +801,23 @@ function fabricatePaper(
       });
     }
     paths.push(...tabFolds);
+    // Slits: single cuts inside the faces. The laser gives them the width of its kerf.
+    const slitsOf = new Map<string, Vec2[][]>();
+    for (const slit of net.slits) {
+      paths.push({
+        type: "cut",
+        role: "slot",
+        points: [slit.a, slit.b],
+        closed: false,
+        connectionId: slit.connectionId,
+      });
+      const list = slitsOf.get(slit.connectionId);
+      if (list) list.push([slit.a, slit.b]);
+      else slitsOf.set(slit.connectionId, [[slit.a, slit.b]]);
+    }
+    for (const [connectionId, polygons] of slitsOf) {
+      joints.push({ kind: "slot", connectionId, polygons });
+    }
     edges.sort((a, b) => a.index - b.index);
     const finalPaths = kerf > 0 ? compensateKerf(paths, kerf) : paths;
     const outline = plain[0] ?? [];

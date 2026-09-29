@@ -655,13 +655,18 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "最初に Body を判定し、結果を「Detected: …」として表示します。",
       "Flat Part: 材料と同じ厚みの 2D 形状の Body は、その輪郭のまま 1 つの部品になります。穴はそのまま残り、何も足しません。",
       "Rectangular Box: 直方体は 6 枚のパネルになります。継ぎ手は Tab & Slot、Finger、Flat から選べ、板厚を補正します。",
-      "Paper（紙）は、折り線とのりしろを付けて展開します。",
+      "Paper（紙）は、折り線を付けて展開します。切り離した辺は、のりしろ（Glue）か、相手側の切り込みに差し込むタブ（Tab & Slit）でつなぎます。Tab & Slit は糊を使いません。",
       "部品をシートに並べ、SVG または DXF で書き出します。書き出す内容は、Sheet の表示と同じです。",
     ],
     requires: ["Body と、作るものに合った厚みの材料。"],
     parameters: [
       { name: "Material", text: "厚み、Kerf（切り幅）、Fit offset（継ぎ手のすき間）。" },
-      { name: "Joints", text: "箱の Cap（蓋・底）と Side（側面）の継ぎ手。" },
+      {
+        name: "Joints",
+        text:
+          "Board: 箱の Cap（蓋・底）と Side（側面）の継ぎ手。Paper: Glue または Tab & Slit。" +
+          "タブの幅・深さ・間隔、辺から切り込みまでの距離、タブが切り込みの奥で引っ掛かる量を指定できます。",
+      },
       { name: "Sheet", text: "大きさ、余白、部品どうしの間隔。" },
     ],
     limitations: [
@@ -669,8 +674,12 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "板が Flat Part になるのは、厚みが材料の厚みと同じとき（差が 0.1 mm 以内）だけです。",
       "箱は、どの方向も板厚の 2 倍より大きい必要があります。",
       "蓋、仕切り、切り欠きのあるケースは生成しません。",
+      "Tab & Slit: タブを付けるには短すぎる辺は、のりしろになります。タブと切り込みは、のりしろより展開図が大きくなるので、大きいシートが必要になることがあります。",
     ],
-    examples: ["六角形を 5.5 で Extrude し、MDF 5.5 mm を選ぶと、1 枚のシートに六角形の部品が 1 つ並びます。"],
+    examples: [
+      "六角形を 5.5 で Extrude し、MDF 5.5 mm を選ぶと、1 枚のシートに六角形の部品が 1 つ並びます。",
+      "箱、Paper 0.2 mm、Joint を Tab & Slit にします。展開図を折り、タブの肩が引っ掛かるまで、それぞれの切り込みに差し込みます。",
+    ],
   },
   "fabrication.print": {
     title: "3D Print",

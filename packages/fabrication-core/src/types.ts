@@ -37,6 +37,8 @@ export type FlatPathRole =
   | "slot"
   | "fold"
   | "glue-tab"
+  /** Fold lines of a tab that is pushed through a slit. */
+  | "tab"
   | "label";
 
 export interface FlatPath {
