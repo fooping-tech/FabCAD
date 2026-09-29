@@ -78,6 +78,13 @@ export type JointFeature =
       connectionId: string;
       edgeId: string;
       polygons: Vec2[][];
+    }
+  | {
+      /** A flap added along an edge that carries no glue: it holds the slits of a paper joint. */
+      kind: "flap";
+      connectionId: string;
+      edgeId: string;
+      polygons: Vec2[][];
     };
 
 export interface PartEdge {

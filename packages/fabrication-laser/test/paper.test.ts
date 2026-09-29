@@ -203,6 +203,8 @@ describe("laser paper strategy", () => {
     const INSERT: Partial<PaperSettings> = { joint: "insert" };
     const insertTabs = (p: FlatPart): Vec2[][] =>
       p.joints.flatMap((j) => (j.kind === "tab" ? j.polygons : []));
+    const flaps = (p: FlatPart): Vec2[][] =>
+      p.joints.flatMap((j) => (j.kind === "flap" ? j.polygons : []));
     const slits = (p: FlatPart) => p.paths.filter((x) => x.role === "slot");
     const area = (polys: Vec2[][]): number => polys.reduce((s, t) => s + Math.abs(signedArea(t)), 0);
 
@@ -234,14 +236,15 @@ describe("laser paper strategy", () => {
       }
     });
 
-    it("cuts the tabs as part of the outline and the slits as single cuts", () => {
+    it("cuts tabs and flaps as part of the outline, and the slits as single cuts", () => {
       const b = fx.boxBody();
       const net = build(b, INSERT).parts[0]!;
       const outline = net.paths.filter((x) => x.role === "outline");
       expect(outline).toHaveLength(1);
       expect(selfIntersects(outline[0]!.points)).toBe(false);
+      expect(flaps(net)).toHaveLength(7);
       expect(signedArea(outline[0]!.points)).toBeCloseTo(
-        signedArea(net.outline) + area(insertTabs(net)),
+        signedArea(net.outline) + area(insertTabs(net)) + area(flaps(net)),
         4,
       );
       // The part itself is the unfolded solid, whatever the joint.
@@ -252,45 +255,52 @@ describe("laser paper strategy", () => {
         expect(s.points).toHaveLength(2);
       }
       expect(slits(net)).toHaveLength(insertTabs(net).length);
-      // Two fold lines per tab: at the edge and at the slit.
-      const folds = net.paths.filter((x) => x.type === "fold" && x.role === "tab");
-      expect(folds).toHaveLength(2 * insertTabs(net).length);
     });
 
-    it("puts every slit inside the net, at its offset from the edge, where its tab arrives", () => {
+    it("hides the joint inside: slits on the edge itself, in the fold of a flap", () => {
       const b = fx.boxBody();
       const settings = {
         joint: "insert" as const,
-        insertTabs: { width: 10, depth: 6, spacing: 15, slitOffset: 2, clearance: 0.6, lock: 1 },
+        insertTabs: { width: 10, depth: 6, spacing: 15, flap: 9, neck: 1.2, clearance: 0.6, lock: 1 },
       };
       const r = build(b, settings);
       const net = r.parts[0]!;
       for (const c of r.connections.filter((x) => x.joint === "tab-slot")) {
         const tabEdge = net.edges.find((e) => e.id === c.a.edgeId)!;
         const slitEdge = net.edges.find((e) => e.id === c.b.edgeId)!;
-        const along = (e: typeof tabEdge, p: Vec2): number =>
+        type Edge = typeof tabEdge;
+        const along = (e: Edge, p: Vec2): number =>
           ((p.x - e.a.x) * (e.b.x - e.a.x) + (p.y - e.a.y) * (e.b.y - e.a.y)) / e.length;
-        const off = (e: typeof tabEdge, p: Vec2): number =>
-          ((p.x - e.a.x) * -(e.b.y - e.a.y) + (p.y - e.a.y) * (e.b.x - e.a.x)) / e.length;
-        const tabJoint = net.joints.find((j) => j.kind === "tab" && j.connectionId === c.id)!;
-        const slotJoint = net.joints.find((j) => j.kind === "slot" && j.connectionId === c.id)!;
-        const tabPolys = tabJoint.kind === "tab" ? tabJoint.polygons : [];
-        const slitSegs = slotJoint.kind === "slot" ? slotJoint.polygons : [];
-        // Where the tabs pass the slit, measured from the start of the edge of the solid. The
-        // two sides run along the edge in opposite directions.
+        /** Distance from the edge; positive = away from the face, where tabs and flaps are. */
+        const out = (e: Edge, p: Vec2): number =>
+          -((p.x - e.a.x) * -(e.b.y - e.a.y) + (p.y - e.a.y) * (e.b.x - e.a.x)) / e.length;
+        const polygonsOf = (kind: "tab" | "slot" | "flap"): Vec2[][] =>
+          net.joints.flatMap((j) => (j.kind === kind && j.connectionId === c.id ? j.polygons : []));
+        const tabPolys = polygonsOf("tab");
+        const slitSegs = polygonsOf("slot");
+        const flap = polygonsOf("flap");
+
+        // The flap sits on the side with the slits, along the whole edge.
+        expect(flap).toHaveLength(1);
+        const heights = flap[0]!.map((p) => out(slitEdge, p));
+        expect(Math.min(...heights)).toBeCloseTo(0, 6);
+        expect(Math.max(...heights)).toBeCloseTo(9, 6);
+        const base = flap[0]!.filter((p) => Math.abs(out(slitEdge, p)) < 1e-6).map((p) => along(slitEdge, p));
+        expect(Math.min(...base)).toBeCloseTo(0, 6);
+        expect(Math.max(...base)).toBeCloseTo(slitEdge.length, 6);
+
+        // Tabs and slits are at the same places along the edge of the solid. The two sides
+        // run along it in opposite directions.
         const tabSpans = tabPolys
           .map((t) => {
-            const foot = t.filter((p) => Math.abs(off(tabEdge, p)) < 1e-6).map((p) => along(tabEdge, p));
+            const foot = t.filter((p) => Math.abs(out(tabEdge, p)) < 1e-6).map((p) => along(tabEdge, p));
             return [Math.min(...foot), Math.max(...foot)] as const;
           })
           .sort((p, q) => p[0] - q[0]);
         const slitSpans = slitSegs
           .map((s) => {
-            for (const p of s) {
-              // Left of travel is the material: the slit is inside the face.
-              expect(off(slitEdge, p)).toBeCloseTo(2, 6);
-              expect(pointInPolygon(p, net.outline)).toBe(true);
-            }
+            // Exactly on the edge: nothing of the joint is cut into the visible face.
+            for (const p of s) expect(out(slitEdge, p)).toBeCloseTo(0, 6);
             const at = s.map((p) => slitEdge.length - along(slitEdge, p));
             return [Math.min(...at), Math.max(...at)] as const;
           })
@@ -301,19 +311,37 @@ describe("laser paper strategy", () => {
           expect(slitSpans[i]![0]).toBeCloseTo(t0 - 0.3, 6);
           expect(slitSpans[i]![1]).toBeCloseTo(t1 + 0.3, 6);
         });
+
+        // The flap stays attached: its fold line is folded wherever it is not slit, and the
+        // folds and the slits together make up the edge.
+        const folds = net.paths.filter(
+          (x) => x.type === "fold" && x.role === "tab" && x.connectionId === c.id,
+        );
+        const flapFolds = folds.filter((x) => x.points.every((p) => Math.abs(out(slitEdge, p)) < 1e-6 && along(slitEdge, p) > -1e-6 && along(slitEdge, p) < slitEdge.length + 1e-6));
+        const len = (pts: readonly Vec2[]): number =>
+          Math.hypot(pts[1]!.x - pts[0]!.x, pts[1]!.y - pts[0]!.y);
+        expect(flapFolds).toHaveLength(slitSegs.length + 1);
+        const folded = flapFolds.reduce((sum, x) => sum + len(x.points), 0);
+        const cutLength = slitSegs.reduce((sum, x) => sum + len(x), 0);
+        expect(folded + cutLength).toBeCloseTo(slitEdge.length, 6);
+        expect(Math.min(...flapFolds.map((x) => len(x.points)))).toBeGreaterThan(2);
+        // One fold per tab, at the edge.
+        expect(folds.length - flapFolds.length).toBe(tabPolys.length);
+
         for (const t of tabPolys) {
-          // Neck 2 mm, tongue 6 mm; the shoulders are 1 mm wider than the tab on each side,
-          // which is more than the slit gives.
-          const heights = t.map((p) => -off(tabEdge, p));
-          expect(Math.max(...heights)).toBeCloseTo(8, 6);
-          const shoulders = t.filter((p) => Math.abs(-off(tabEdge, p) - 2) < 1e-6).map((p) => along(tabEdge, p));
+          // Neck 1.2 mm, tongue 6 mm; at the shoulders the tab is 12 mm wide, the slit 10.6.
+          const h = t.map((p) => out(tabEdge, p));
+          expect(Math.min(...h)).toBeCloseTo(0, 6);
+          expect(Math.max(...h)).toBeCloseTo(7.2, 6);
+          const shoulders = t
+            .filter((p) => Math.abs(out(tabEdge, p) - 1.2) < 1e-6)
+            .map((p) => along(tabEdge, p));
           expect(Math.max(...shoulders) - Math.min(...shoulders)).toBeCloseTo(12, 6);
-          expect(12).toBeGreaterThan(10 + 0.6);
         }
       }
     });
 
-    it("keeps tabs clear of the net and of each other on any solid", () => {
+    it("keeps tabs and flaps clear of the net and of each other on any solid", () => {
       for (const b of [fx.hexBody(), fx.starBody(), fx.triangleBody(), fx.pyramidBody(), fx.frustumBody()]) {
         const r = build(b, INSERT);
         expect(r.parts.flatMap((p) => p.sourceFaces)).toHaveLength(b.topology.faces.length);
@@ -321,20 +349,14 @@ describe("laser paper strategy", () => {
           expect(signedArea(p.outline)).toBeCloseTo(surfaceArea(b, p.sourceFaces), 4);
           const outline = p.paths.find((x) => x.role === "outline")!;
           expect(selfIntersects(outline.points)).toBe(false);
-          const all = [...insertTabs(p), ...tabs(p)];
+          const all = [...insertTabs(p), ...flaps(p), ...tabs(p)];
           expect(signedArea(outline.points)).toBeCloseTo(signedArea(p.outline) + area(all), 4);
           for (const t of all) {
             for (const q of offsetPolygon(t, 0.01).polygon) {
               expect(pointInPolygon(q, p.outline)).toBe(false);
             }
           }
-          const cuts = slits(p);
-          for (let i = 0; i < cuts.length; i++) {
-            for (let j = i + 1; j < cuts.length; j++) {
-              const [a, c] = [cuts[i]!.points, cuts[j]!.points];
-              expect(segmentsIntersect(a[0]!, a[1]!, c[0]!, c[1]!, 1e-7)).toBe(false);
-            }
-          }
+          expect(slits(p)).toHaveLength(insertTabs(p).length);
         }
         // Every cut edge is joined one way or the other, or reported.
         const cut = b.topology.edges.length - r.parts.reduce((s, p) => s + p.folds.length, 0);
@@ -343,6 +365,7 @@ describe("laser paper strategy", () => {
         const skipped = r.warnings.filter((w) => w.code === "overlap").length;
         expect(joined + glued + skipped).toBe(cut);
         expect(joined).toBeGreaterThan(0);
+        expect(r.parts.flatMap(flaps)).toHaveLength(joined);
       }
     });
 
@@ -370,6 +393,7 @@ describe("laser paper strategy", () => {
       const explicit = build(fx.boxBody(), { joint: "glue" });
       expect(explicit).toEqual(glue);
       expect(glue.parts[0]!.paths.some((p) => p.role === "slot" || p.role === "tab")).toBe(false);
+      expect(glue.parts[0]!.joints.some((j) => j.kind !== "glue-tab")).toBe(false);
     });
 
     it("leaves slits alone when the kerf is compensated", () => {

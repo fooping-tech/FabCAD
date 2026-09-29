@@ -164,7 +164,7 @@ function PaperForm({ material, overrides }: PaperFormProps): ReactNode {
           {
             value: "insert",
             label: "Tab & Slit",
-            title: "Tabs are pushed through slits of the other side. No glue.",
+            title: "Tabs are pushed through slits in the fold of a flap. No glue; tabs and flaps end up inside.",
           },
         ]}
         onChange={(v) => setPaper("joint", v)}
@@ -200,13 +200,22 @@ function PaperForm({ material, overrides }: PaperFormProps): ReactNode {
             onCommit={(v) => setInsertTab("spacing", v)}
           />
           <NumberField
-            label="Slit offset"
+            label="Flap"
             unit="mm"
-            value={insert.slitOffset}
-            defaultValue={defaults.insertTabs.slitOffset}
+            value={insert.flap}
+            defaultValue={defaults.insertTabs.flap}
             rule={POSITIVE}
-            hint="Distance of the slit from its edge, at least 0.5"
-            onCommit={(v) => setInsertTab("slitOffset", v)}
+            hint="Height of the flap with the slits; it lies inside, behind the other face"
+            onCommit={(v) => setInsertTab("flap", v)}
+          />
+          <NumberField
+            label="Neck"
+            unit="mm"
+            value={insert.neck}
+            defaultValue={defaults.insertTabs.neck}
+            rule={POSITIVE}
+            hint="Length of the tab before its shoulders: what passes the slit"
+            onCommit={(v) => setInsertTab("neck", v)}
           />
           <NumberField
             label="Lock"

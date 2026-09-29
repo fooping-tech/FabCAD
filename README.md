@@ -44,7 +44,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | --- | --- |
 | Material | MDF、Acrylic、Cardboard、Paper。厚み・kerf・fit offset を編集でき、独自の材料も追加できます |
 | Board（MDF / Acrylic / Cardboard） | まず Body を判定します。**Flat Part**（板厚と同じ厚みの 2D 形状。穴も可）は輪郭のまま 1 部品、**Rectangular Box**（直方体）は 6 枚のパネル → Joint → Thickness Compensation → Kerf Compensation。Joint は Tab & Slot / Finger / Flat。それ以外の立体は Unsupported として理由を表示し、カットデータを作りません |
-| Paper | Unfold → Connected Net → Fold Line → 切り離した辺の継ぎ方。**Glue**（のりしろ。幅・角度・インセット）と **Tab & Slit**（タブを相手側の切り込みに差し込む。糊は不要）を選べます。Tab & Slit では、タブの幅・深さ・間隔、辺から切り込みまでの距離、ロック（タブの肩が切り込みより広い量）、クリアランスを指定できます。長い辺には複数のタブが付き、短すぎる辺はのりしろになります |
+| Paper | Unfold → Connected Net → Fold Line → 切り離した辺の継ぎ方。**Glue**（のりしろ。幅・角度・インセット）と **Tab & Slit**（タブを相手側の切り込みに差し込む。糊は不要）を選べます。Tab & Slit では、相手側に内側へ折り込むフラップが付き、その折り線（立体の稜線の位置）に切り込みが入ります。タブも内側に折って差し込むので、組み立てると継ぎ手は外から見えません。タブの幅・深さ・間隔、フラップの高さ、首の長さ、ロック（タブの肩が切り込みより広い量）、クリアランスを指定できます。長い辺には複数のタブが付き、短すぎる辺はのりしろになります |
 | Analyzer | concave corner、acute angle、short edge、narrow tab、曲面などを警告 |
 | Parts | 部品名、寸法、厚み、材料、joint、mating edge（`EdgeConnection` を明示的に保持） |
 | Sheet | row / shelf packing、複数シート、90° 回転 |
@@ -351,7 +351,7 @@ Vitest で 600 件以上のテストを実行します。OpenCASCADE を使う�
 | Offset Plane | 正負の距離、面・平面からの連鎖、パラメータへの追従、平面の上のスケッチと立体の追従、Mirror / Split での利用、Undo / Redo、保存と読み込み |
 | UI の部品 | メニューの位置（画面の下端・右端、狭い画面、キーボードで狭くなった範囲）、ダブルタップと長押しの判定、ヘルプがすべてのツールにあること |
 | DXF | 各要素の読み込み、単位の換算、レイヤー、ブロック、書き出した DXF の読み戻し |
-| Fabrication（紙の継ぎ方） | Tab & Slit のタブと切り込みの数と位置が両側で一致すること、切り込みが面の内側にあること、タブが展開図やほかのタブと重ならないこと、短い辺でのりしろに切り替わること |
+| Fabrication（紙の継ぎ方） | Tab & Slit のタブと切り込みの数と位置が両側で一致すること、切り込みが稜線の位置（フラップの折り線）にあること、フラップが切り込み以外でつながっていること、タブとフラップが展開図やほかのタブと重ならないこと、短い辺でのりしろに切り替わること |
 | Fabrication | Board の判定（Flat Part / Rectangular Box / Unsupported）、rectangle box MDF、paper box、paper polygon、kerf compensation、tab / slot matching、SVG dimensions |
 | シナリオ | `apps/fabcad/test/scenarios.test.ts` が Sketch → Solver → Extrude → B-Rep → Fabrication → SVG を通しで検証 |
 
@@ -391,7 +391,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | Ellipse と Spline | 拘束と寸法、Trim / Extend / Offset の対象外です（切る側としては使えます） |
 | 角度寸法 | 1 本目の線から 2 本目の線へ反時計回りに測ります |
 | Nesting | 外接矩形による row / shelf packing のみ |
-| 紙の Tab & Slit | タブは、辺から切り込みまで相手の面の外側に重なり、切り込みから内側に入ります。切り込みは幅のない 1 本の切り線で、実際の幅はレーザーの切り幅です。厚い紙では Clearance を増やしてください。実際の紙での組み立ては未検証です |
+| 紙の Tab & Slit | 切り込みは幅のない 1 本の切り線で、実際の幅はレーザーの切り幅です。厚い紙では Clearance を増やしてください。実際の紙での組み立ては未検証です |
 | 3D プリント | スライス（G-code の生成）はしません。見積もりは概算で、サポート材は含みません。実機での造形は未検証です |
 | Board の対象 | Flat Part と Rectangular Box だけです。角柱、角錐、屋根、斜めの接合、曲面のある立体は Unsupported です。Case / Enclosure の専用ジェネレーターは未実装です |
 | 範囲選択 | スケッチの中だけです。3D の面・稜線・Body の範囲選択はありません（3D の左ドラッグはオービットです）。タッチ操作では使えません |

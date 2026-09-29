@@ -710,7 +710,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Every body is classified first, and the result is shown as “Detected: …”.",
       "Flat Part: a body that is a profile with the thickness of the material becomes one part with that profile. Holes are kept; nothing is added.",
       "Rectangular Box: a box becomes six panels with tab-and-slot, finger or butt joints, compensated for material thickness.",
-      "Paper and card are unfolded instead, with fold lines. The cut edges are joined by glue tabs, or by tabs that are pushed through slits of the other side (Tab & Slit), which needs no glue.",
+      "Paper and card are unfolded instead, with fold lines. The cut edges are joined by glue tabs, or without glue by Tab & Slit: one side has tabs, the other a flap with slits in its fold line. Flap and tabs are folded inwards, so nothing of the joint is seen from outside.",
       "The parts are nested on sheets and exported as SVG or DXF. What is exported is exactly what the sheet view shows.",
     ],
     requires: ["A body, and a material whose thickness matches what is to be made of it."],
@@ -720,7 +720,7 @@ export const HELP: Record<string, HelpEntry> = {
         name: "Joints",
         text:
           "Board: joint of the cap panels and of the side panels of a box. Paper: Glue or Tab & Slit, " +
-          "with the width, depth and spacing of the tabs, the distance of the slit from its edge, " +
+          "with the width, depth and spacing of the tabs, the height of the flap, " +
           "and how far the tab locks behind the slit.",
       },
       { name: "Sheet", text: "Size, margin and gap between parts." },
@@ -730,11 +730,11 @@ export const HELP: Record<string, HelpEntry> = {
       "A sheet is only a flat part when its thickness is the thickness of the material (within 0.1 mm).",
       "A box must be larger than twice the material thickness in every direction.",
       "Cases with lids, dividers or cut-outs are not generated.",
-      "Tab & Slit: edges too short for a tab get a glue tab instead. A tab with its slit makes the net larger than glue tabs do, so it may need a larger sheet.",
+      "Tab & Slit: edges too short for a tab get a glue tab instead. Tabs on one side and a flap on the other make the net larger than glue tabs do, so it may need a larger sheet.",
     ],
     examples: [
       "Hexagon, Extrude 5.5, MDF 5.5 mm: one hexagonal part on one sheet.",
-      "Box, Paper 0.2 mm, Joint Tab & Slit: fold the net, push every tab through its slit until its shoulders catch.",
+      "Box, Paper 0.2 mm, Joint Tab & Slit: fold the net and the flaps inwards, then push every tab through its slit until its shoulders catch.",
     ],
   },
   "fabrication.print": {

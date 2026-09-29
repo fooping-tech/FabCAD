@@ -200,7 +200,8 @@ export function normalizePaperOverrides(value: unknown): PaperOverrides {
       width: positive(value.insertTabs.width),
       depth: positive(value.insertTabs.depth),
       spacing: positive(value.insertTabs.spacing),
-      slitOffset: positive(value.insertTabs.slitOffset),
+      flap: positive(value.insertTabs.flap),
+      neck: positive(value.insertTabs.neck),
       clearance: nonNegative(value.insertTabs.clearance),
       lock: nonNegative(value.insertTabs.lock),
     });
