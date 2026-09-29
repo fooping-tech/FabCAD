@@ -5,12 +5,13 @@ import {
   DocumentStore,
   type SketchFeature,
   addExtrude,
+  addFillet,
   addSketch,
   createDocument,
   updateSketch,
 } from "@fabcad/cad-document";
 import type { CadBody } from "@fabcad/fabrication-core";
-import { FeatureEngine, solveSketchWithParameters } from "@fabcad/features";
+import { FeatureEngine, makeEdgeRef, solveSketchWithParameters } from "@fabcad/features";
 import {
   type Sketch,
   createCircle,
@@ -25,6 +26,7 @@ import { createDefaultSolver } from "@fabcad/sketch-solver";
 import { renderSheetSvg } from "@fabcad/svg";
 import { renderSheetDxf } from "@fabcad/dxf";
 import { nodeKernel } from "../../../packages/brep/test/nodeKernel";
+import { goreTessellation } from "@fabcad/fabrication-laser";
 import { compileFabrication } from "../src/fabrication/pipeline";
 import { defaultFabricationSettings } from "../src/fabrication/settingsModel";
 
@@ -246,5 +248,96 @@ describe("milestone scenarios", () => {
     for (const r of radius(part.holes[0]!)) expect(r).toBeCloseTo(10, 1);
     expect(part.paths.filter((p) => p.role === "outline")).toHaveLength(1);
     expect(part.paths.filter((p) => p.role === "hole")).toHaveLength(1);
+  });
+
+  it("a cylinder with a rounded edge is not unfolded: the rounding is curved in two directions", async () => {
+    const store = new DocumentStore(createDocument());
+    const sk: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, sk));
+    store.execute(
+      updateSketch(sk.id!, "Draw", (sketch) =>
+        editSketch(sketch, (b) => {
+          createCircle(b, { x: 0, y: 0 }, 30);
+        }),
+      ),
+    );
+    const sketch = (store.document.features[sk.id!] as SketchFeature).sketch;
+    const region = regionAtPoint(detectProfiles(sketch), { x: 0, y: 0 })!;
+    const e: CreatedRef = {};
+    store.execute(addExtrude({ sketchId: sk.id!, profiles: [profileRefOf(region)], distance: "40" }, e));
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+
+    // The plain cylinder is rolled from a sheet.
+    const plain: CadBody = { id: e.bodyId!, name: "Body001", topology: engine.bodyTopology(e.bodyId!)! };
+    const paperSettings = { ...defaultFabricationSettings(), materialId: "paper-0.2" };
+    const rolled = compileFabrication([plain], paperSettings);
+    expect(rolled.detections[0]).toMatchObject({ kind: "net", supported: true });
+    expect(rolled.parts.length).toBeGreaterThan(0);
+
+    // Round the upper edge.
+    const geometry = engine.bodyGeometry(e.bodyId!)!;
+    const names = engine.bodyNames(e.bodyId!)!;
+    const top = geometry.edges.findIndex((x) => x.curve === "circle" && x.midpoint.z > 39);
+    expect(top).toBeGreaterThanOrEqual(0);
+    const f: CreatedRef = {};
+    store.execute(
+      addFillet({ bodyId: e.bodyId!, edges: [makeEdgeRef({ geometry, names }, top)!], radius: "10" }, f),
+    );
+    const result = await engine.recompute(store.document);
+    expect(result.features[f.id!]!.state).toBe("ok");
+    const rounded: CadBody = { id: e.bodyId!, name: "Body001", topology: engine.bodyTopology(e.bodyId!)! };
+
+    for (const joint of ["glue", "insert"] as const) {
+      const out = compileFabrication([rounded], { ...paperSettings, paper: { joint } });
+      expect(out.parts).toHaveLength(0);
+      expect(out.geometry.paths).toHaveLength(0);
+      expect(out.detections[0]).toMatchObject({ kind: "unsupported", supported: false, parts: 0 });
+      // The kernel makes the rounding from two halves.
+      expect(out.detections[0]!.reason).toMatch(/2 faces curved in two directions/);
+      expect(out.warnings.filter((w) => w.code === "unsupported-paper-shape")).toHaveLength(1);
+    }
+    // Gores: the body is facetted as coarsely as there are gores, and the rounding is cut
+    // into strips. Asking for other facets gives another topology of the same body.
+    const bounds = engine.bodyGeometry(e.bodyId!)!.bounds;
+    const size = Math.hypot(
+      bounds.max.x - bounds.min.x,
+      bounds.max.y - bounds.min.y,
+      bounds.max.z - bounds.min.z,
+    );
+    for (const gores of [12, 16]) {
+      const coarse: CadBody = {
+        id: e.bodyId!,
+        name: "Body001",
+        topology: engine.bodyTopology(e.bodyId!, goreTessellation(gores, size))!,
+      };
+      // The flat top is a polygon with as many corners as there are gores.
+      const top = coarse.topology.faces.filter((x) => x.surface === "plane");
+      expect(top.map((x) => x.loops[0]!.length)).toEqual([gores, gores]);
+      for (const joint of ["glue", "insert"] as const) {
+        const out = compileFabrication([coarse], {
+          ...paperSettings,
+          sheet: { width: 600, height: 400, margin: 5, gap: 3 },
+          paper: { doublyCurved: "gores", gores, joint },
+        });
+        expect(out.detections[0]).toMatchObject({ kind: "gores", supported: true });
+        expect(out.detections[0]!.label).toBe(`Gores (${gores}, approximation)`);
+        expect(out.warnings.filter((w) => w.severity === "error")).toEqual([]);
+        // Wall with the bottom and every second gore; the top with the other gores.
+        expect(out.parts).toHaveLength(2);
+        expect(out.parts.flatMap((p) => p.sourceFaces)).toHaveLength(coarse.topology.faces.length);
+        expect(out.layout.unplaced).toEqual([]);
+        const svg = renderSheetSvg(out.geometry, { sheet: 0 });
+        expect(svg).toContain('<g id="cut"');
+      }
+      // Without gores the same topology is refused.
+      const refused = compileFabrication([coarse], paperSettings);
+      expect(refused.parts).toHaveLength(0);
+    }
+    expect(engine.bodyTopology(e.bodyId!)!.faces.length).toBe(rounded.topology.faces.length);
+
+    // Board refuses it as well, for its own reason.
+    const board = compileFabrication([rounded], defaultFabricationSettings());
+    expect(board.detections[0]).toMatchObject({ kind: "unsupported", supported: false });
   });
 });

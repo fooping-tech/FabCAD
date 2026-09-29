@@ -21,7 +21,7 @@ npm run build
 
 ## 守ること
 
-1. **形状ごとの特別扱いを書かない。** `generateBox()` のような関数や「六角形なら」という分岐を作らない。Sketch はユーザーが描いたものが正本で、Fabrication は `SolidTopology`（面・稜線・二面角）だけから判定し、部品を作る。Board は最初に `classifyBoardBody()`（`packages/fabrication-laser/src/boardClassifier.ts`）で Flat Part / Rectangular Box / Unsupported に分け、判定の前に部品を作らない。加工できると保証できない立体は Unsupported で止め、それらしい SVG を出さない（斜めの接合を Flat Joint に落として出力する、などをしない）。Case / Enclosure は立体から推測せず、専用のパラメトリックなジェネレーターとして作る。
+1. **形状ごとの特別扱いを書かない。** `generateBox()` のような関数や「六角形なら」という分岐を作らない。Sketch はユーザーが描いたものが正本で、Fabrication は `SolidTopology`（面・稜線・二面角）だけから判定し、部品を作る。Board は最初に `classifyBoardBody()`（`packages/fabrication-laser/src/boardClassifier.ts`）で Flat Part / Rectangular Box / Unsupported に分け、判定の前に部品を作らない。Paper は 2 方向に曲がった面（平らに広げられない面）を `doublyCurvedFaces()`（`paperClassifier.ts`）で見つけ、あれば展開しない。利用者が Gores を選んだときだけ、`planGores()` で舟形に分けて近似する（近似であることを判定結果と警告に出す）。舟形の数は `SolidTopology` の分割で決まるので、アプリが `goreTessellation()` の値で粗い分割を要求する（`useFabrication.ts` の `facetsFor()`）。加工できると保証できない立体は Unsupported で止め、それらしい SVG を出さない（斜めの接合を Flat Joint に落として出力する、などをしない）。Case / Enclosure は立体から推測せず、専用のパラメトリックなジェネレーターとして作る。
 2. **層を飛び越えない。** UI → Commands / Document → Feature Engine → `GeometryKernel` → Replicad。Replicad / OpenCASCADE を import してよいのは `packages/brep/src/replicadAdapter.ts` だけ。
 3. **CAD Core は製造を知らない。** `packages/geometry`、`sketch`、`sketch-solver`、`cad-document`、`assembly`、`brep`、`features` から `fabrication-*` を import しない。製造側が CAD から受け取るのは `CadBody`（`SolidTopology`）だけ。Fabrication の設定はドキュメントの `extensions["fabrication.laser"]` に不透明なデータとして保存する。
 4. **ドキュメントの変更は Command を通す。** `apps/fabcad/src/app/session.ts` の `run()` と `editSketchSolved()` を使う。ドキュメントは不変の値として扱い、書き換えない。

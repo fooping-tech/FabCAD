@@ -9,7 +9,13 @@ import {
   signedArea,
 } from "@fabcad/geometry";
 import { type CadBody, type FabricationResult, type FlatPart, fabricate } from "@fabcad/fabrication-core";
-import { type PaperSettings, laserPaperStrategy } from "../src";
+import {
+  type PaperSettings,
+  doublyCurvedFaces,
+  goreTessellation,
+  laserPaperStrategy,
+  planGores,
+} from "../src";
 import * as fx from "./fixtures";
 
 const build = (b: CadBody, settings: Partial<PaperSettings> = {}): FabricationResult =>
@@ -492,6 +498,321 @@ describe("laser paper strategy", () => {
       expect(slits(comp.parts[0]!).map((s) => s.points)).toEqual(
         slits(plain.parts[0]!).map((s) => s.points),
       );
+    });
+  });
+
+  describe("faces that paper cannot follow", () => {
+    /** A surface of revolution about Z through the given (radius, height) rows, facetted. */
+    const revolved = (
+      rows: [number, number][],
+      segments: number,
+      id: string,
+      /** B-Rep face of the facets above every row; one face for all when left out. */
+      sources: number[] = [],
+    ): CadBody => {
+      const vertices = rows.flatMap(([radius, z]) =>
+        radius === 0
+          ? [{ x: 0, y: 0, z }]
+          : Array.from({ length: segments }, (_, i) => ({
+              x: radius * Math.cos((2 * Math.PI * i) / segments),
+              y: radius * Math.sin((2 * Math.PI * i) / segments),
+              z,
+            })),
+      );
+      const start: number[] = [];
+      let at = 0;
+      for (const [radius] of rows) {
+        start.push(at);
+        at += radius === 0 ? 1 : segments;
+      }
+      const v = (row: number, i: number): number =>
+        rows[row]![0] === 0 ? start[row]! : start[row]! + (i % segments);
+      const loops: number[][] = [];
+      const sourceOfLoop: number[] = [];
+      const closedBelow = rows[0]![0] === 0;
+      // Bottom disc, seen from below.
+      if (!closedBelow) loops.push(Array.from({ length: segments }, (_, i) => v(0, segments - 1 - i)));
+      for (let row = 0; row + 1 < rows.length; row++) {
+        for (let i = 0; i < segments; i++) {
+          const quad = [v(row, i), v(row, i + 1), v(row + 1, i + 1), v(row + 1, i)];
+          loops.push(quad.filter((x, k) => quad.indexOf(x) === k));
+          sourceOfLoop[loops.length - 1] = sources[row] ?? 1;
+        }
+      }
+      const last = rows.length - 1;
+      if (rows[last]![0] !== 0) loops.push(Array.from({ length: segments }, (_, i) => v(last, i)));
+      const topology = fx.topologyFromLoops(vertices, loops);
+      for (const face of topology.faces) {
+        const flat =
+          (!closedBelow && face.id === 0) ||
+          (rows[last]![0] !== 0 && face.id === loops.length - 1);
+        if (flat) continue;
+        face.surface = "curved";
+        face.sourceFace = sourceOfLoop[face.id] ?? 1;
+      }
+      return fx.body(topology, id);
+    };
+
+    it("unfolds cylinders and cones: they are rolled from a flat sheet", () => {
+      const cylinder = fx.cylinderBody(24);
+      expect(doublyCurvedFaces(cylinder.topology)).toEqual([]);
+      // A cone: every facet meets the others at the tip, and nowhere else inside the face.
+      const cone = revolved(
+        [
+          [30, 0],
+          [0, 50],
+        ],
+        24,
+        "cone",
+      );
+      expect(doublyCurvedFaces(cone.topology)).toEqual([]);
+      // A cone without its tip, in several rows of facets.
+      const frustum = revolved(
+        [
+          [30, 0],
+          [25, 10],
+          [20, 20],
+          [15, 30],
+        ],
+        24,
+        "frustum",
+      );
+      expect(doublyCurvedFaces(frustum.topology)).toEqual([]);
+      for (const b of [cylinder, cone, frustum]) {
+        const r = build(b);
+        expect(r.classification).toEqual({ kind: "net", label: "Unfolded Net", supported: true });
+        expect(r.parts.flatMap((p) => p.sourceFaces)).toHaveLength(b.topology.faces.length);
+        expect(r.warnings.some((w) => w.severity === "error")).toBe(false);
+      }
+    });
+
+    it("stops at a dome, and at a cylinder with a rounded edge", () => {
+      const quarter = (k: number, n: number, radius: number, z0: number): [number, number] => [
+        // Exactly on the axis at the end of the quarter.
+        k === n ? 0 : radius * Math.cos((Math.PI / 2) * (k / n)),
+        z0 + radius * Math.sin((Math.PI / 2) * (k / n)),
+      ];
+      const dome = revolved(
+        Array.from({ length: 7 }, (_, k) => quarter(k, 6, 30, 0)),
+        24,
+        "dome",
+      );
+      // Wall of 20 mm, then the edge rounded with a radius of 10 mm, then the flat top.
+      const rounded = revolved(
+        [
+          [30, 0],
+          ...Array.from({ length: 5 }, (_, k): [number, number] => [
+            20 + 10 * Math.cos((Math.PI / 2) * (k / 4)),
+            20 + 10 * Math.sin((Math.PI / 2) * (k / 4)),
+          ]),
+        ],
+        32,
+        "rounded",
+      );
+      for (const b of [dome, rounded]) {
+        const found = doublyCurvedFaces(b.topology);
+        expect(found).toHaveLength(1);
+        expect(found[0]!.sourceFace).toBe(1);
+        expect(found[0]!.vertices).toBeGreaterThan(24);
+        for (const joint of ["glue", "insert"] as const) {
+          const r = build(b, { joint });
+          expect(r.parts).toEqual([]);
+          expect(r.connections).toEqual([]);
+          expect(r.classification).toMatchObject({ kind: "unsupported", supported: false });
+          expect(r.classification?.reason).toMatch(/curved in two directions/);
+          const errors = r.warnings.filter((w) => w.code === "unsupported-paper-shape");
+          expect(errors).toHaveLength(1);
+          expect(errors[0]!.severity).toBe("error");
+          expect(errors[0]!.message).toMatch(/flat faces, cylinders and cones/);
+          expect(errors[0]!.position).toBeDefined();
+        }
+      }
+      // The whole sphere has a total defect of 720°: the dome is half of it.
+      expect(doublyCurvedFaces(dome.topology)[0]!.defect).toBeGreaterThan(300);
+      expect(doublyCurvedFaces(dome.topology)[0]!.defect).toBeLessThan(360);
+    });
+
+    it("still cuts the flat faces when curved facets are not unfolded", () => {
+      const rows: [number, number][] = [
+        [30, 0],
+        [30, 20],
+        [28, 26],
+        [24, 29],
+        [20, 30],
+      ];
+      const b = revolved(rows, 24, "rounded");
+      expect(build(b).parts).toEqual([]);
+      const flat = build(b, { foldCurvedFacets: false });
+      expect(flat.classification?.supported).toBe(true);
+      expect(flat.parts).toHaveLength(2);
+      expect(flat.warnings.some((w) => w.code === "curved-face")).toBe(true);
+    });
+
+    describe("gores", () => {
+      const quarter = (k: number, n: number, radius: number, z0: number): [number, number] => [
+        // Exactly on the axis at the end of the quarter.
+        k === n ? 0 : radius * Math.cos((Math.PI / 2) * (k / n)),
+        z0 + radius * Math.sin((Math.PI / 2) * (k / n)),
+      ];
+      const GORES: Partial<PaperSettings> = { doublyCurved: "gores" };
+      /** Wall of 20 mm, the edge rounded with a radius of 10 mm, flat top. 12 facets round. */
+      const rounded = (): CadBody =>
+        revolved(
+          [
+            [30, 0],
+            ...Array.from({ length: 5 }, (_, k): [number, number] => {
+              const [r, z] = quarter(k, 4, 10, 20);
+              return [20 + r, z];
+            }),
+          ],
+          12,
+          "rounded",
+          // The wall is a face of its own, as the kernel has it.
+          [2, 1, 1, 1, 1],
+        );
+      const dome = (): CadBody =>
+        revolved(
+          Array.from({ length: 7 }, (_, k) => quarter(k, 6, 30, 0)),
+          12,
+          "dome",
+        );
+      const sphere = (): CadBody =>
+        revolved(
+          Array.from({ length: 9 }, (_, k): [number, number] => [
+            k === 0 || k === 8 ? 0 : 30 * Math.sin((Math.PI * k) / 8),
+            -30 * Math.cos((Math.PI * k) / 8),
+          ]),
+          12,
+          "sphere",
+        );
+      const added = (p: FlatPart): Vec2[][] =>
+        p.joints.flatMap((j) => (j.kind === "slot" || j.kind === "finger" ? [] : j.polygons));
+
+      /** What holds for the parts of every body made with gores. */
+      const expectSound = (b: CadBody, r: FabricationResult): void => {
+        expect(r.classification).toMatchObject({ kind: "gores", supported: true });
+        expect(r.warnings.some((w) => w.severity === "error")).toBe(false);
+        const faces = r.parts.flatMap((p) => p.sourceFaces).sort((x, y) => x - y);
+        expect(faces).toEqual(b.topology.faces.map((f) => f.id));
+        for (const p of r.parts) {
+          // The facets lie flat, side by side: the outline encloses exactly their area.
+          expect(signedArea(p.outline)).toBeCloseTo(surfaceArea(b, p.sourceFaces), 4);
+          expect(selfIntersects(p.outline)).toBe(false);
+          expect(p.folds).toHaveLength(p.sourceFaces.length - 1);
+          const outline = p.paths.find((x) => x.role === "outline")!;
+          expect(selfIntersects(outline.points)).toBe(false);
+          const tabArea = added(p).reduce((sum, t) => sum + Math.abs(signedArea(t)), 0);
+          expect(signedArea(outline.points)).toBeCloseTo(signedArea(p.outline) + tabArea, 4);
+        }
+        for (const c of r.connections) {
+          for (const end of [c.a, c.b]) {
+            const part = r.parts.find((p) => p.id === end.partId);
+            expect(part?.edges.some((e) => e.id === end.edgeId)).toBe(true);
+          }
+        }
+      };
+
+      it("plans one gore per facet of the boundary, in levels from there", () => {
+        const b = rounded();
+        const plan = planGores(b.topology, doublyCurvedFaces(b.topology));
+        expect(plan.gores).toBe(12);
+        // Four rows of twelve facets.
+        expect(plan.levels.size).toBe(48);
+        for (let level = 0; level < 4; level++) {
+          expect([...plan.levels.values()].filter((l) => l === level)).toHaveLength(12);
+        }
+        // Between the gores: twelve seams of four edges. Of the rim, every gore gives up one
+        // end: six at the wall, six at the top.
+        const inside = [...plan.cuts].filter((id) =>
+          b.topology.edges[id]!.faces.every((f) => plan.levels.has(f)),
+        );
+        expect(inside).toHaveLength(48);
+        expect(plan.cuts.size - inside.length).toBe(12);
+      });
+
+      it("makes a rounded edge from gores: half of them on the wall, half around the top", () => {
+        const b = rounded();
+        expect(build(b).parts).toEqual([]);
+        for (const joint of ["glue", "insert"] as const) {
+          const r = build(b, { ...GORES, joint });
+          expect(r.classification?.label).toBe("Gores (12, approximation)");
+          expectSound(b, r);
+          expect(r.parts).toHaveLength(2);
+          // Bottom, wall and six gores; top and six gores. A gore has four facets.
+          expect(r.parts.map((p) => p.sourceFaces.length).sort((x, y) => x - y)).toEqual([
+            1 + 6 * 4,
+            1 + 12 + 6 * 4,
+          ]);
+          // Every seam is joined: between the gores there is room for the tabs.
+          expect(r.warnings.filter((w) => w.code === "overlap")).toEqual([]);
+          const cut = b.topology.edges.length - r.parts.reduce((n, p) => n + p.folds.length, 0);
+          expect(r.connections.filter((c) => c.joint !== "fold")).toHaveLength(cut);
+          const note = r.warnings.find((w) => w.code === "curved-face");
+          expect(note?.severity).toBe("info");
+          expect(note?.message).toMatch(/12 gores/);
+        }
+      });
+
+      it("keeps the folds of a gore in one line: a strip, not a patch", () => {
+        const b = rounded();
+        const r = build(b, GORES);
+        const plan = planGores(b.topology, doublyCurvedFaces(b.topology));
+        // Inside the rounded face, a fold joins a facet to the next level, never to its
+        // neighbour in the same row.
+        for (const c of r.connections.filter((x) => x.joint === "fold")) {
+          const faces = b.topology.edges.find((e) => e.id === c.sourceEdge)!.faces;
+          if (!faces.every((f) => plan.levels.has(f))) continue;
+          const [l0, l1] = faces.map((f) => plan.levels.get(f)!);
+          expect(Math.abs(l0! - l1!)).toBe(1);
+        }
+      });
+
+      it("makes a dome: every second gore stands on the rim, the others are parts of their own", () => {
+        const b = dome();
+        const r = build(b, GORES);
+        expectSound(b, r);
+        // The bottom with six gores, and six single gores.
+        const sizes = r.parts.map((p) => p.sourceFaces.length).sort((x, y) => x - y);
+        expect(sizes).toEqual([6, 6, 6, 6, 6, 6, 1 + 6 * 6]);
+        expect(r.warnings.filter((w) => w.code === "overlap")).toEqual([]);
+      });
+
+      it("makes a sphere: gores joined at the equator", () => {
+        const b = sphere();
+        const found = doublyCurvedFaces(b.topology);
+        expect(found).toHaveLength(1);
+        // The angular defects of a closed surface add up to 720°.
+        expect(found[0]!.defect).toBeCloseTo(720, 6);
+        const r = build(b, GORES);
+        expectSound(b, r);
+        expect(r.parts).toHaveLength(1);
+        expect(r.parts[0]!.sourceFaces).toHaveLength(12 * 8);
+        // Joined side by side at one row of facets, the gores open like a fan.
+        const folds = r.connections.filter((c) => c.joint === "fold");
+        expect(folds).toHaveLength(12 * 8 - 1);
+      });
+
+      it("leaves bodies without such faces as they are", () => {
+        for (const b of [fx.boxBody(), fx.cylinderBody(24), fx.hexBody()]) {
+          const plain = build(b);
+          const withGores = build(b, GORES);
+          expect(withGores).toEqual(plain);
+          expect(withGores.classification?.kind).toBe("net");
+        }
+      });
+
+      it("asks for as many facets as there are gores, whatever the size of the body", () => {
+        expect(goreTessellation(12, 100)).toEqual({ tolerance: 15, angularTolerance: Math.PI / 3 });
+        expect(goreTessellation(24, 10).angularTolerance).toBeCloseTo(Math.PI / 6, 12);
+        expect(goreTessellation(24, 10).tolerance).toBeCloseTo(1.5, 12);
+        // Out of range, or no size: something usable all the same.
+        expect(goreTessellation(1, 100).angularTolerance).toBeCloseTo((4 * Math.PI) / 6, 12);
+        expect(goreTessellation(1000, 100).angularTolerance).toBeCloseTo((4 * Math.PI) / 72, 12);
+        expect(goreTessellation(Number.NaN, Number.NaN)).toEqual({
+          tolerance: 15,
+          angularTolerance: Math.PI / 3,
+        });
+      });
     });
   });
 });

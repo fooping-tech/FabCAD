@@ -6,6 +6,8 @@ import {
   type LaserFabricationSettings,
   type PaperOverrides,
   MAX_GLUE_TAB_ANGLE,
+  MAX_GORES,
+  MIN_GORES,
   resolveBoardSettings,
   resolvePaperSettings,
   updateFabricationSettings,
@@ -23,7 +25,9 @@ function setBoard<K extends keyof BoardOverrides>(key: K, value: BoardOverrides[
   }, LABEL);
 }
 
-function setPaper<K extends "joint" | "foldCurvedFacets" | "kerfCompensation">(
+function setPaper<
+  K extends "joint" | "doublyCurved" | "gores" | "foldCurvedFacets" | "kerfCompensation",
+>(
   key: K,
   value: PaperOverrides[K],
 ): void {
@@ -277,6 +281,36 @@ function PaperForm({ material, overrides }: PaperFormProps): ReactNode {
         checked={resolved.foldCurvedFacets}
         onChange={(v) => setPaper("foldCurvedFacets", v)}
       />
+      {resolved.foldCurvedFacets ? (
+        <SegmentedField
+          label="Double curvature"
+          value={resolved.doublyCurved}
+          options={[
+            {
+              value: "reject",
+              label: "Stop",
+              title:
+                "A body with a face curved in two directions (a sphere, a rounded circular edge) is not made",
+            },
+            {
+              value: "gores",
+              label: "Gores",
+              title: "Approximate such faces by narrow strips, like the gores of a globe",
+            },
+          ]}
+          onChange={(v) => setPaper("doublyCurved", v)}
+        />
+      ) : null}
+      {resolved.foldCurvedFacets && resolved.doublyCurved === "gores" ? (
+        <NumberField
+          label="Gores"
+          value={overrides.gores}
+          defaultValue={defaults.gores}
+          rule={{ min: MIN_GORES, max: MAX_GORES, allowEmpty: true }}
+          hint="Facets to a full turn, for every round face. More gores: rounder, and narrower strips"
+          onCommit={(v) => setPaper("gores", v === undefined ? undefined : Math.round(v))}
+        />
+      ) : null}
       <CheckField
         label="Kerf compensation"
         checked={resolved.kerfCompensation}

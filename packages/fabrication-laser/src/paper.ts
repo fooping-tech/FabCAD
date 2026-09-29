@@ -36,7 +36,9 @@ import {
   analyzeBody,
   compensateKerf,
   dedupeWarnings,
+  describeMaterial,
 } from "@fabcad/fabrication-core";
+import { type GorePlan, doublyCurvedFaces, planGores } from "./paperClassifier";
 import { boundsOfPaths, closeLoop, pushPoint } from "./shared";
 
 /**
@@ -84,6 +86,21 @@ export interface InsertTabSettings {
 }
 
 export interface PaperSettings extends StrategySettings {
+  /**
+   * What to do with a body that has faces curved in two directions (a sphere, the rounding
+   * of a circular edge), which cannot be laid flat:
+   *
+   * - "reject" (default): nothing is made, the body is reported as unsupported;
+   * - "gores": the faces are cut into narrow strips of facets, like the gores of a globe.
+   *   The result is an approximation: every strip is flat across its width.
+   */
+  doublyCurved: "reject" | "gores";
+  /**
+   * Number of gores around a full turn. The strategy itself does not use it: the gores are
+   * the facets of the body, and this is how finely the caller should have the body facetted
+   * (see `goreTessellation`). Default 12.
+   */
+  gores: number;
   /** How the cut edges are joined. Default "glue". */
   joint: PaperJoint;
   /**
@@ -117,8 +134,27 @@ export interface PaperSettings extends StrategySettings {
   kerfCompensation: boolean;
 }
 
+/**
+ * How a body should be facetted for gores: about `gores` facets around a full turn. `size`
+ * is the diagonal of the bounding box of the body (mm). Both values are passed to the
+ * geometry kernel when the topology is made. The linear tolerance is generous on purpose, so
+ * that the angle alone decides, and circles of every size get the same number of facets. The
+ * kernel divides a circle into steps of half the angular tolerance; the number it arrives at
+ * may differ from `gores` by one or two.
+ */
+export function goreTessellation(
+  gores: number,
+  size: number,
+): { tolerance: number; angularTolerance: number } {
+  const n = Math.min(72, Math.max(6, Math.round(Number.isFinite(gores) ? gores : 12)));
+  const d = Number.isFinite(size) && size > 0 ? size : 100;
+  return { tolerance: 0.15 * d, angularTolerance: (4 * Math.PI) / n };
+}
+
 export function defaultPaperSettings(_material?: MaterialProfile): PaperSettings {
   return {
+    doublyCurved: "reject",
+    gores: 12,
     joint: "glue",
     insertTabs: { width: 12, depth: 8, spacing: 20, flap: 8, neck: 1, clearance: 1.5, lock: 1.5 },
     glueTabs: { enabled: true, width: 8, angle: 30, inset: 0 },
@@ -209,9 +245,52 @@ function fabricatePaper(
     insertTabs: { ...defaults.insertTabs, ...(input.insertTabs ?? {}) },
   };
   const { topology } = body;
+  // Before anything is unfolded: faces curved in two directions cannot be made from paper.
+  let gorePlan: GorePlan | undefined;
+  if (settings.foldCurvedFacets) {
+    const doubly = doublyCurvedFaces(topology);
+    if (doubly.length > 0 && settings.doublyCurved === "gores") {
+      gorePlan = planGores(topology, doubly);
+    } else if (doubly.length > 0) {
+      const reason =
+        `This body has ${doubly.length} face${doubly.length === 1 ? "" : "s"} curved in two ` +
+        "directions (like a sphere, or the rounding of a circular edge). " +
+        "Paper bends but does not stretch: such a face cannot be laid flat.";
+      return {
+        bodyId: body.id,
+        material,
+        strategyId: "laser.paper",
+        parts: [],
+        connections: [],
+        classification: { kind: "unsupported", label: "Unsupported body", supported: false, reason },
+        warnings: [
+          {
+            code: "unsupported-paper-shape",
+            severity: "error",
+            message:
+              `"${body.name}" cannot be unfolded into ${describeMaterial(material)}. Reason: ${reason} ` +
+              "FabCAD unfolds flat faces, cylinders and cones. " +
+              'Set "Double curvature" to Gores to approximate such faces by strips, ' +
+              'or switch off "Unfold curved facets" to cut the flat faces only.',
+            position: doubly[0]!.position,
+          },
+        ],
+      };
+    }
+  }
   const warnings: FabricationWarning[] = analyzeBody(body).warnings.filter(
     (w) => w.code !== "curved-face" || !settings.foldCurvedFacets,
   );
+  if (gorePlan) {
+    warnings.push({
+      code: "curved-face",
+      severity: "info",
+      message:
+        `"${body.name}" has faces curved in two directions. They are approximated by ` +
+        `${gorePlan.gores} gores: strips that are flat across their width. ` +
+        "The model will show facets where the body is round.",
+    });
+  }
   const lookup = buildEdgeLookup(topology);
   const midpoint = (edge: TopoEdge): Vec3 =>
     lerp3(topology.vertices[edge.a]!, topology.vertices[edge.b]!, 0.5);
@@ -279,6 +358,8 @@ function fabricatePaper(
       for (let i = 0; i < ids.length; i++) {
         const edge = edgeAt(nf.face, 0, i);
         if (!edge || edge.faces.length !== 2) continue;
+        // Between two gores: always cut.
+        if (gorePlan?.cuts.has(edge.id)) continue;
         const otherId = edge.faces[0] === nf.face.id ? edge.faces[1]! : edge.faces[0]!;
         if (otherId === nf.face.id || !includedIds.has(otherId) || placed.has(otherId)) continue;
         const other = topology.faces[otherId];
@@ -973,6 +1054,9 @@ function fabricatePaper(
     bodyId: body.id,
     material,
     strategyId: "laser.paper",
+    classification: gorePlan
+      ? { kind: "gores", label: `Gores (${gorePlan.gores}, approximation)`, supported: true }
+      : { kind: "net", label: "Unfolded Net", supported: true },
     parts,
     connections,
     warnings: dedupeWarnings(warnings),

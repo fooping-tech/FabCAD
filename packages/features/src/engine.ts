@@ -6,6 +6,7 @@ import {
   type LoftSectionInput,
   type PathCurve3,
   type ShapeTransform,
+  type TessellationOptions,
   edgePolyline,
   nearestEdge,
   nearestVertex,
@@ -246,7 +247,10 @@ function decodeBase64(data: string): Uint8Array {
 export class FeatureEngine {
   private cache = new Map<string, CacheEntry>();
   private bodies = new Map<string, BodyState>();
-  private topologyCache = new Map<string, { hash: string; topology: SolidTopology }>();
+  private topologyCache = new Map<
+    string,
+    { hash: string; facets: string; topology: SolidTopology }
+  >();
   private sketches = new Map<string, SketchEval>();
   /** Construction planes evaluated so far by the recompute under way, by feature id. */
   private planes = new Map<string, PlaneResult>();
@@ -424,14 +428,18 @@ export class FeatureEngine {
     };
   }
 
-  /** Polyhedral topology of a body, as handed to manufacturing workspaces. */
-  bodyTopology(bodyId: string): SolidTopology | null {
+  /**
+   * Polyhedral topology of a body, as handed to manufacturing workspaces. `options` says how
+   * finely curved faces are facetted; without them the kernel uses its own default.
+   */
+  bodyTopology(bodyId: string, options?: TessellationOptions): SolidTopology | null {
     const state = this.bodies.get(bodyId);
     if (!state) return null;
+    const facets = options ? `${options.tolerance ?? ""}/${options.angularTolerance ?? ""}` : "";
     const cached = this.topologyCache.get(bodyId);
-    if (cached && cached.hash === state.hash) return cached.topology;
-    const topology = this.kernel.topology(state.shape);
-    this.topologyCache.set(bodyId, { hash: state.hash, topology });
+    if (cached && cached.hash === state.hash && cached.facets === facets) return cached.topology;
+    const topology = options ? this.kernel.topology(state.shape, options) : this.kernel.topology(state.shape);
+    this.topologyCache.set(bodyId, { hash: state.hash, facets, topology });
     return topology;
   }
 

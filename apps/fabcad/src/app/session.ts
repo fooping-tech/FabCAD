@@ -1,4 +1,4 @@
-import type { BodyGeometry } from "@fabcad/brep";
+import type { BodyGeometry, TessellationOptions } from "@fabcad/brep";
 import {
   type CadDocument,
   type Command,
@@ -307,8 +307,9 @@ export function requestRecompute(): void {
   void recomputeLoop();
 }
 
-export async function bodyTopology(bodyId: string) {
-  return engine().request({ type: "topology", bodyId });
+/** `options`: how finely curved faces are facetted; the kernel's default when left out. */
+export async function bodyTopology(bodyId: string, options?: TessellationOptions) {
+  return engine().request({ type: "topology", bodyId, ...(options ? { options } : {}) });
 }
 
 // ------------------------------------------------------------ files and export

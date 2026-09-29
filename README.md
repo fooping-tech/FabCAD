@@ -44,6 +44,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | --- | --- |
 | Material | MDF、Acrylic、Cardboard、Paper。厚み・kerf・fit offset を編集でき、独自の材料も追加できます |
 | Board（MDF / Acrylic / Cardboard） | まず Body を判定します。**Flat Part**（板厚と同じ厚みの 2D 形状。穴も可）は輪郭のまま 1 部品、**Rectangular Box**（直方体）は 6 枚のパネル → Joint → Thickness Compensation → Kerf Compensation。Joint は Tab & Slot / Finger / Flat。それ以外の立体は Unsupported として理由を表示し、カットデータを作りません |
+| Paper（2 方向に曲がった面） | **Double curvature** で選びます。**Stop**（既定）は作らずに理由を表示。**Gores** は、地球儀のように細い帯（舟形）に分けて近似します。**Gores** の数（1 周あたり、6〜72、既定 12）で丸さと帯の幅が決まり、Body の丸い面はすべてこの数で分割します。舟形は 1 本おきに面の反対側の端（上面のまわりなど）につながり、隣との間にのりしろを置く場所を空けます |
 | Paper | Unfold → Connected Net → Fold Line → 切り離した辺の継ぎ方。**Glue**（のりしろ。幅・角度・インセット）と **Tab & Slit**（タブを相手側の切り込みに差し込む。糊は不要）を選べます。Tab & Slit では、相手側に内側へ折り込むフラップが付き、その折り線（立体の稜線の位置）に切り込みが入ります。タブも内側に折って差し込むので、組み立てると継ぎ手は外から見えません。タブは立体を閉じる面（角柱の蓋など、切り離された辺の多い面）に付き、フラップと切り込みはそのまわりの面に付きます。まわりのフラップを内側に折ってから蓋を押し込むと、タブが切り込みを通って内側に入ります。タブの幅・深さ・間隔、フラップの高さ、首の長さ、ロック（タブの肩が切り込みより広い量）、クリアランスを指定できます。長い辺には複数のタブが付き、短すぎる辺はのりしろになります。展開図の切れ込みの中（蓋が側面につながる辺の隣など）では、のりしろ・フラップの側辺を切れ込みの角度に合わせ、タブは小さくして角から離れた位置に置きます |
 | Analyzer | concave corner、acute angle、short edge、narrow tab、曲面などを警告 |
 | Parts | 部品名、寸法、厚み、材料、joint、mating edge（`EdgeConnection` を明示的に保持） |
@@ -318,7 +319,7 @@ SheetGeometry  →  preview / SVG / DXF
 ### 設計上の決まり
 
 - **ユーザーの Sketch が正本です。** 長方形・星・多角形を特別扱いするコードはありません。長方形は 4 本の線と拘束です。
-- **Fabrication は形状の名前に依存しません。** 面・稜線・二面角だけから判定し、部品を作ります。Board は Flat Part と Rectangular Box だけを作り、角柱・角錐・斜めの接合を含む立体は Unsupported として止めます。Paper は任意の多面体を展開します。
+- **Fabrication は形状の名前に依存しません。** 面・稜線・二面角だけから判定し、部品を作ります。Board は Flat Part と Rectangular Box だけを作り、角柱・角錐・斜めの接合を含む立体は Unsupported として止めます。Paper は多面体と、円柱・円錐のように平らに広げられる曲面を展開し、2 方向に曲がった面は Unsupported として止めます。
 - **Part Geometry と Joint Geometry を混ぜません。** `FlatPart.outline` と `FlatPart.joints` は別に保持し、最終的な `paths` で合成します。
 - **接続は明示します。** 部品どうしの関係は `EdgeConnection` として立体のトポロジから作り、SVG 上の位置から推測しません。
 - **寸法の式はソルバーの外で評価します。** ソルバーが受け取るのは数値だけです。
@@ -328,7 +329,7 @@ SheetGeometry  →  preview / SVG / DXF
 
 ### 曲面の扱い
 
-OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚のポリゴン、曲面は同一平面上の三角形をまとめた小さな平面（facet）の集まりとして `SolidTopology` にします。Board は曲面を板で作れないので Unsupported にします（円板や丸穴のある板のように、曲面が板の側面であるものは Flat Part です）。Paper は facet を帯として展開します。
+OpenCASCADE のメッシュを B-Rep の面ごとにまとめ、平面は 1 枚のポリゴン、曲面は同一平面上の三角形をまとめた小さな平面（facet）の集まりとして `SolidTopology` にします。Board は曲面を板で作れないので Unsupported にします（円板や丸穴のある板のように、曲面が板の側面であるものは Flat Part です）。Paper は facet を帯として展開します。ただし、曲面の内側の頂点で facet の角の合計が 360° にならない（平らに広げられない）頂点が複数ある面は、2 方向に曲がった面と判定し、展開しません（`packages/fabrication-laser/src/paperClassifier.ts`）。頂点が 1 つだけの場合は円錐の先端です。Gores を選んだ場合は、面の境界から数えた段（level）ごとに facet を 1 つ前の段の facet へ折りでつなぎ、それ以外の辺を切ります（`planGores()`）。舟形の幅は Body の分割の粗さで決まるので、アプリは舟形の数に合わせた粗さの `SolidTopology` を幾何カーネルに要求します（`goreTessellation()`）。
 
 ### Board の厚み補正
 
@@ -391,6 +392,8 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | Ellipse と Spline | 拘束と寸法、Trim / Extend / Offset の対象外です（切る側としては使えます） |
 | 角度寸法 | 1 本目の線から 2 本目の線へ反時計回りに測ります |
 | Nesting | 外接矩形による row / shelf packing のみ |
+| 紙で展開できる面 | 平らな面、円柱、円錐です。2 方向に曲がった面（球、トーラス、円形の稜線の Fillet など）を持つ Body は、既定では Unsupported として理由を表示し、カットデータを作りません。**Unfold curved facets** をオフにすると、平らな面だけを切り出せます |
+| 舟形（Gores） | 近似です。帯は幅の方向に平らなので、丸い部分は多面体になります。舟形の数は幾何カーネルの分割に任せているため、指定した数から 1〜2 ずれることがあり、小さい半径では三角形の面が混ざることがあります。球は、舟形を 1 段の面で横につないだ扇形の展開図になり、つないだ付近ではのりしろを置けない辺が出ます。部分的にしか回っていない面や、穴のあいた面での動作は未検証です。実際の紙での組み立ても未検証です |
 | 紙の Tab & Slit | 切り込みは幅のない 1 本の切り線で、実際の幅はレーザーの切り幅です。厚い紙では Clearance を増やしてください。実際の紙での組み立ては未検証です |
 | 3D プリント | スライス（G-code の生成）はしません。見積もりは概算で、サポート材は含みません。実機での造形は未検証です |
 | Board の対象 | Flat Part と Rectangular Box だけです。角柱、角錐、屋根、斜めの接合、曲面のある立体は Unsupported です。Case / Enclosure の専用ジェネレーターは未実装です |

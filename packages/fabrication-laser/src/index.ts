@@ -31,8 +31,17 @@ export {
   type PaperJoint,
   type PaperSettings,
   defaultPaperSettings,
+  goreTessellation,
   laserPaperStrategy,
 } from "./paper";
+
+export {
+  type DoublyCurvedFace,
+  type PaperClassifierOptions,
+  type GorePlan,
+  doublyCurvedFaces,
+  planGores,
+} from "./paperClassifier";
 
 /** Add the laser strategies to a registry (the laser workspace calls this once). */
 export function registerLaserStrategies(registry: StrategyRegistry): void {

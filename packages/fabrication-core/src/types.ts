@@ -163,6 +163,7 @@ export type WarningCode =
   | "overlap"
   | "part-too-large"
   | "unsupported-board-shape"
+  | "unsupported-paper-shape"
   | "unsupported";
 
 export interface FabricationWarning {

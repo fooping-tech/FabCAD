@@ -42,6 +42,10 @@ export interface BoardOverrides {
 
 /** User overrides on top of `defaultPaperSettings(material)`. A missing key = default. */
 export interface PaperOverrides {
+  /** Faces curved in two directions: refuse the body, or approximate them by gores. */
+  doublyCurved?: PaperSettings["doublyCurved"];
+  /** Gores to a full turn. */
+  gores?: number;
   /** How cut edges are joined: glue tabs, or tabs pushed through slits. */
   joint?: PaperSettings["joint"];
   insertTabs?: Partial<PaperSettings["insertTabs"]>;
@@ -129,6 +133,9 @@ function compact<T extends object>(source: T): T {
 export const MATERIAL_CATEGORIES: readonly MaterialCategory[] = ["board", "paper"];
 export const CAP_JOINTS: readonly BoardSettings["capJoint"][] = ["tab-slot", "finger", "flat"];
 export const SIDE_JOINTS: readonly BoardSettings["sideJoint"][] = ["flat", "finger"];
+export const DOUBLY_CURVED: readonly PaperSettings["doublyCurved"][] = ["reject", "gores"];
+export const MIN_GORES = 6;
+export const MAX_GORES = 72;
 export const PAPER_JOINTS: readonly PaperSettings["joint"][] = ["glue", "insert"];
 export const NESTING_ALGORITHMS: readonly NestingAlgorithm[] = ["row", "shelf"];
 /** Largest glue tab taper in degrees (90° would be a tab without height). */
@@ -182,6 +189,11 @@ export function normalizePaperOverrides(value: unknown): PaperOverrides {
   if (!isDict(value)) return {};
   const out: PaperOverrides = compact<PaperOverrides>({
     joint: oneOf(value.joint, PAPER_JOINTS),
+    doublyCurved: oneOf(value.doublyCurved, DOUBLY_CURVED),
+    gores: ((n) =>
+      n !== undefined && n >= MIN_GORES && n <= MAX_GORES ? Math.round(n) : undefined)(
+      positive(value.gores),
+    ),
     foldCurvedFacets: bool(value.foldCurvedFacets),
     kerfCompensation: bool(value.kerfCompensation),
   });

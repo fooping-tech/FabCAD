@@ -1,5 +1,7 @@
-import type { SolidTopology } from "@fabcad/geometry";
+import type { TessellationOptions } from "@fabcad/brep";
+import type { SolidTopology, Vec3 } from "@fabcad/geometry";
 import type { CadBody, FabricationWarning } from "@fabcad/fabrication-core";
+import { goreTessellation } from "@fabcad/fabrication-laser";
 import { useEffect, useMemo, useState } from "react";
 import { bodyTopology, modelState, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
@@ -9,7 +11,9 @@ import {
   type LaserFabricationSettings,
   FABRICATION_EXTENSION_KEY,
   chooseBodies,
+  currentMaterial,
   normalizeFabricationSettings,
+  resolvePaperSettings,
 } from "./settingsModel";
 
 export type FabricationStatus = "idle" | "loading" | "ready" | "error";
@@ -33,7 +37,14 @@ const topologyCache = new Map<string, SolidTopology | null>();
 const topologyErrors = new Map<string, string>();
 const pending = new Map<string, Promise<void>>();
 
-const topologyKey = (bodyId: string, hash: string): string => `${bodyId}@${hash}`;
+/** How the kernel is asked to facet a body; `undefined` = its own default. */
+type Facets = TessellationOptions | undefined;
+
+const facetTag = (facets: Facets): string =>
+  facets ? `~${facets.tolerance ?? ""}/${facets.angularTolerance ?? ""}` : "";
+
+const topologyKey = (bodyId: string, hash: string, facets?: Facets): string =>
+  `${bodyId}@${hash}${facetTag(facets)}`;
 
 function remember(key: string, topology: SolidTopology | null): void {
   topologyCache.set(key, topology);
@@ -45,12 +56,12 @@ function remember(key: string, topology: SolidTopology | null): void {
 }
 
 /** Fetch the topology of a body once per hash. Resolves when the caches are up to date. */
-function loadTopology(bodyId: string, hash: string): Promise<void> {
-  const key = topologyKey(bodyId, hash);
+function loadTopology(bodyId: string, hash: string, facets?: Facets): Promise<void> {
+  const key = topologyKey(bodyId, hash, facets);
   if (topologyCache.has(key) || topologyErrors.has(key)) return Promise.resolve();
   const running = pending.get(key);
   if (running) return running;
-  const request = bodyTopology(bodyId)
+  const request = bodyTopology(bodyId, facets)
     .then((topology) => {
       // The worker answers with the CURRENT shape of the body. When the body changed while the
       // request was on its way, the answer does not belong to `hash`: drop it.
@@ -82,6 +93,29 @@ interface WantedBody {
   id: string;
   name: string;
   hash: string;
+  facets: Facets;
+}
+
+const keyOf = (w: WantedBody): string => topologyKey(w.id, w.hash, w.facets);
+
+/**
+ * Gores are the facets of the body: when faces curved in two directions are to be made from
+ * gores, the body is facetted as coarsely as there are gores to a full turn.
+ */
+function facetsFor(
+  settings: LaserFabricationSettings,
+  bounds: { min: Vec3; max: Vec3 } | undefined,
+): Facets {
+  const material = currentMaterial(settings);
+  if (material.category !== "paper") return undefined;
+  const paper = resolvePaperSettings(material, settings.paper);
+  if (paper.doublyCurved !== "gores" || !paper.foldCurvedFacets || !bounds) return undefined;
+  const size = Math.hypot(
+    bounds.max.x - bounds.min.x,
+    bounds.max.y - bounds.min.y,
+    bounds.max.z - bounds.min.z,
+  );
+  return goreTessellation(paper.gores, size);
 }
 
 let compileMemo: {
@@ -98,14 +132,14 @@ function compileShared(
   wanted: readonly WantedBody[],
   settings: LaserFabricationSettings,
 ): FabricationOutput {
-  const key = `${docId}#${wanted.map((w) => `${topologyKey(w.id, w.hash)}:${w.name}`).join("|")}`;
+  const key = `${docId}#${wanted.map((w) => `${keyOf(w)}:${w.name}`).join("|")}`;
   if (compileMemo && compileMemo.key === key && compileMemo.settings === settings) {
     return compileMemo.output;
   }
   const bodies: CadBody[] = [];
   const missing: FabricationWarning[] = [];
   for (const w of wanted) {
-    const topology = topologyCache.get(topologyKey(w.id, w.hash));
+    const topology = topologyCache.get(keyOf(w));
     if (topology) bodies.push({ id: w.id, name: w.name, topology });
     else {
       missing.push({
@@ -144,19 +178,25 @@ export function useFabrication(): FabricationState {
   const wanted = useMemo(() => {
     const list: WantedBody[] = [];
     for (const b of bodies) {
-      const hash = modelBodies[b.id]?.hash;
-      if (b.included && hash !== undefined) list.push({ id: b.id, name: b.name, hash });
+      const model = modelBodies[b.id];
+      if (!b.included || model === undefined) continue;
+      list.push({
+        id: b.id,
+        name: b.name,
+        hash: model.hash,
+        facets: facetsFor(settings, model.geometry.bounds),
+      });
     }
     return list;
-  }, [bodies, modelBodies]);
-  const requestKey = wanted.map((w) => topologyKey(w.id, w.hash)).join("|");
+  }, [bodies, modelBodies, settings]);
+  const requestKey = wanted.map((w) => keyOf(w)).join("|");
 
   useEffect(() => {
     let cancelled = false;
     for (const w of wanted) {
-      const key = topologyKey(w.id, w.hash);
+      const key = keyOf(w);
       if (topologyCache.has(key) || topologyErrors.has(key)) continue;
-      void loadTopology(w.id, w.hash).then(() => {
+      void loadTopology(w.id, w.hash, w.facets).then(() => {
         // Ignore results that arrive after the request set changed or the component unmounted.
         if (!cancelled) setTick((t) => t + 1);
       });
@@ -185,7 +225,7 @@ export function useFabrication(): FabricationState {
   }
 
   const failure = wanted
-    .map((w) => ({ body: w, message: topologyErrors.get(topologyKey(w.id, w.hash)) }))
+    .map((w) => ({ body: w, message: topologyErrors.get(keyOf(w)) }))
     .find((f) => f.message !== undefined);
   if (failure) {
     return {
@@ -202,7 +242,7 @@ export function useFabrication(): FabricationState {
   const awaitingModel =
     (model.busy || model.kernel !== "ready") &&
     bodies.some((b) => b.included && modelBodies[b.id] === undefined);
-  const loaded = wanted.every((w) => topologyCache.has(topologyKey(w.id, w.hash)));
+  const loaded = wanted.every((w) => topologyCache.has(keyOf(w)));
 
   if (loaded && !awaitingModel) {
     const output = compileShared(doc.id, wanted, settings);

@@ -1,12 +1,13 @@
 import type { CadDocument } from "@fabcad/cad-document";
 import type { RecomputeResult } from "@fabcad/features";
+import type { TessellationOptions } from "@fabcad/brep";
 import type { SolidTopology } from "@fabcad/geometry";
 
 /** Messages between the UI thread and the CAD worker that hosts the feature engine + kernel. */
 export type WorkerRequest =
   | { type: "init" }
   | { type: "recompute"; document: CadDocument; known: Record<string, string> }
-  | { type: "topology"; bodyId: string }
+  | { type: "topology"; bodyId: string; options?: TessellationOptions }
   | { type: "export-step"; bodies: { id: string; name: string }[] }
   | { type: "export-stl"; bodyIds: string[]; binary: boolean };
 

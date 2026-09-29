@@ -723,6 +723,12 @@ export const HELP: Record<string, HelpEntry> = {
           "with the width, depth and spacing of the tabs, the height of the flap, " +
           "and how far the tab locks behind the slit.",
       },
+      {
+        name: "Double curvature",
+        text:
+          "Paper only. Stop: a body with a face curved in two directions is not made. Gores: such " +
+          "faces are cut into narrow strips, like the gores of a globe. Gores: how many to a full turn (6 to 72).",
+      },
       { name: "Sheet", text: "Size, margin and gap between parts." },
     ],
     limitations: [
@@ -730,10 +736,13 @@ export const HELP: Record<string, HelpEntry> = {
       "A sheet is only a flat part when its thickness is the thickness of the material (within 0.1 mm).",
       "A box must be larger than twice the material thickness in every direction.",
       "Cases with lids, dividers or cut-outs are not generated.",
+      "Paper: flat faces, cylinders and cones are unfolded. A body with a face curved in two directions (a sphere, a torus, the rounding of a circular edge) is Unsupported: paper bends but does not stretch. With Double curvature set to Gores, such faces are approximated instead.",
+      "Gores are an approximation: every strip is flat across its width, so the model shows facets where the body is round. All round faces of the body, cylinders included, get as many facets to a full turn as there are gores (the number may be off by one or two). Every second gore hangs on the other end of the face, or is a part of its own, to leave room for the tabs.",
       "Tab & Slit: edges too short for a tab get a glue tab instead. Tabs on one side and a flap on the other make the net larger than glue tabs do, so it may need a larger sheet.",
     ],
     examples: [
       "Hexagon, Extrude 5.5, MDF 5.5 mm: one hexagonal part on one sheet.",
+      "Cylinder with a rounded edge, Paper 0.2 mm, Double curvature Gores, 12 gores: the wall with six gores standing on it, and the top with six gores around it.",
       "Box, Paper 0.2 mm, Joint Tab & Slit: fold the net and the flaps inwards, then push every tab through its slit until its shoulders catch.",
     ],
   },
