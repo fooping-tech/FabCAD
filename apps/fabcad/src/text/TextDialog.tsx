@@ -1,9 +1,10 @@
 import type { SketchTextProps } from "@fabcad/sketch";
-import { type ReactElement, type ReactNode, useEffect, useRef } from "react";
-import { appState } from "../app/appState";
+import { type ReactElement, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { appState, lastViewportPoint } from "../app/appState";
 import { useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { ExpressionInput } from "../panels/ExpressionInput";
+import { FloatingPanel } from "../ui/FloatingPanel";
 import { Icon } from "../ui/Icon";
 import {
   cancelText,
@@ -75,6 +76,8 @@ export function TextDialog(): ReactElement | null {
   const area = useRef<HTMLTextAreaElement>(null);
   const active = dialog?.type === "text" ? dialog : null;
   const text = active ? textOf(active.sketchId, active.textId) : null;
+  // Beside the click that placed (or opened) the text.
+  const anchor = useMemo(() => (active ? lastViewportPoint() : null), [active?.textId]);
 
   useEffect(() => {
     if (!active) return;
@@ -104,13 +107,13 @@ export function TextDialog(): ReactElement | null {
   const vertical = text.direction === "vertical";
 
   return (
-    <div className="floating text-dialog" role="dialog" aria-label="Text">
-      <div className="floating-title">
-        <span>{active.fresh ? "Text" : "Edit Text"}</span>
-        <button className="icon-btn" aria-label="Close" onClick={cancelText}>
-          <Icon name="close" size={14} />
-        </button>
-      </div>
+    <FloatingPanel
+      id="text-dialog"
+      anchor={anchor}
+      title={active.fresh ? "Text" : "Edit Text"}
+      className="text-dialog"
+      onClose={cancelText}
+    >
       <div className="floating-body">
         <Field label="Text">
           <textarea
@@ -349,6 +352,6 @@ export function TextDialog(): ReactElement | null {
           </button>
         </div>
       </div>
-    </div>
+    </FloatingPanel>
   );
 }

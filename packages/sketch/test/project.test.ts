@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { ORIGIN_PLANES, type Vec3 } from "@fabcad/geometry";
 import { createSketch } from "../src/model";
 import { editSketch } from "../src/edit";
-import { addProjection, projectPolyline, projectedEntityIds, updateProjection } from "../src/project";
+import {
+  addProjection,
+  projectPolyline,
+  projectedEntityIds,
+  projectedShapes,
+  sameProjectedShape,
+  updateProjection,
+} from "../src/project";
 
 const XY = ORIGIN_PLANES.XY;
 const circle3d = (r: number, z: number, from = 0, to = 2 * Math.PI, n = 48): Vec3[] =>
@@ -85,5 +92,21 @@ describe("projections in a sketch", () => {
     const after = editSketch(sketch, (b) => b.remove([lineId]));
     expect(after.projections).toHaveLength(0);
     expect(Object.keys(after.entities)).toHaveLength(0);
+  });
+});
+
+describe("projected shapes", () => {
+  it("tells when a new projection would lie on top of an existing one", () => {
+    const base = createSketch("s", "Sketch", { type: "origin", plane: "XY" });
+    const line = projectPolyline(XY, [{ x: 0, y: 0, z: 30 }, { x: 0, y: 30, z: 30 }])!;
+    const { sketch } = addProjection(base, line, { bodyId: "b", source: "edge", hint: { x: 20, y: 15, z: 0 } })!;
+    const shapes = projectedShapes(sketch);
+    expect(shapes).toHaveLength(1);
+    // The other seam of a cylinder seen from the side: another edge, the same line, reversed.
+    const seam = projectPolyline(XY, [{ x: 0, y: 30, z: -5 }, { x: 0, y: 0, z: -5 }])!;
+    expect(sameProjectedShape(shapes[0]!, seam)).toBe(true);
+    const beside = projectPolyline(XY, [{ x: 1, y: 0, z: 0 }, { x: 1, y: 30, z: 0 }])!;
+    expect(sameProjectedShape(shapes[0]!, beside)).toBe(false);
+    expect(sameProjectedShape(shapes[0]!, projectPolyline(XY, circle3d(5, 0))!)).toBe(false);
   });
 });

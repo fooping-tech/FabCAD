@@ -16,6 +16,7 @@ import { BrowserTree } from "./panels/BrowserTree";
 import { MeasurePanel } from "./measure/MeasurePanel";
 import { ContextMenu } from "./panels/ContextMenu";
 import { FeatureDialog } from "./panels/FeatureDialog";
+import { SketchToolPanel } from "./panels/SketchToolPanel";
 import { Header, openProject } from "./panels/Header";
 import { ImportDxfDialog } from "./panels/ImportDxfDialog";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
@@ -128,6 +129,7 @@ export function App(): ReactElement {
         </div>
         <TouchBar />
         {!fabrication && <FeatureDialog />}
+        {!fabrication && <SketchToolPanel />}
         {!fabrication && <MeasurePanel />}
         {!fabrication && <TextDialog />}
         {fabrication && !printing && (

@@ -1,7 +1,21 @@
-import { type BodyGeometry, type MeshEdgeGroup, edgePolyline, faceEdges } from "@fabcad/brep";
-import { type BodyNames, makeEdgeRef, resolveSketchPlane } from "@fabcad/features";
+import {
+  type BodyGeometry,
+  type MeshEdgeGroup,
+  edgePolyline,
+  faceEdges,
+  faceSilhouettes,
+  polylineMidpoint,
+} from "@fabcad/brep";
+import { type BodyNames, makeEdgeRef, makeFaceRef, resolveSketchPlane } from "@fabcad/features";
 import type { Plane3, TopologyRef, Vec3 } from "@fabcad/geometry";
-import { type Sketch, addProjection, projectPolyline } from "@fabcad/sketch";
+import {
+  type ProjectedShape,
+  type Sketch,
+  addProjection,
+  projectPolyline,
+  projectedShapes,
+  sameProjectedShape,
+} from "@fabcad/sketch";
 import { appState, toast } from "../app/appState";
 import { documentStore, editSketchSolved, modelState } from "../app/session";
 
@@ -21,6 +35,8 @@ export function projectInto(
 ): { sketch: Sketch; added: number; edges: number } {
   const edgeRef = (index: number): TopologyRef | undefined =>
     names ? (makeEdgeRef({ geometry, names }, index) ?? undefined) : undefined;
+  const faceRef = (index: number): TopologyRef | undefined =>
+    names ? (makeFaceRef({ geometry, names }, index) ?? undefined) : undefined;
   let edges: MeshEdgeGroup[] = [];
   if (pick.kind === "edge") {
     const e = geometry.edges[pick.edgeIndex];
@@ -30,24 +46,29 @@ export function projectInto(
   }
   let current = sketch;
   let added = 0;
+  // Edges that land on the same place (the two seams of a cylinder seen from the side, or an
+  // edge that is also a silhouette) are projected once, also across separate picks.
+  const shapes: ProjectedShape[] = projectedShapes(sketch);
   const add = (
     points: Vec3[],
-    source: "edge" | "vertex",
+    source: "edge" | "vertex" | "silhouette",
     hint: Vec3,
     index: number,
     count: number,
   ): void => {
     const shape = projectPolyline(plane, points);
-    if (!shape) return;
+    if (!shape || shapes.some((s) => sameProjectedShape(s, shape))) return;
+    const ref = source === "edge" ? edgeRef(index) : source === "silhouette" ? faceRef(index) : undefined;
     const result = addProjection(current, shape, {
       bodyId: pick.bodyId,
       source,
       hint,
       index,
       count,
-      ...(source === "edge" && names ? { ref: edgeRef(index) } : {}),
+      ...(ref ? { ref } : {}),
     });
     if (!result) return;
+    shapes.push(shape);
     current = result.sketch;
     added += 1;
   };
@@ -56,6 +77,12 @@ export function projectInto(
   }
   for (const e of edges) {
     add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length);
+  }
+  if (pick.kind === "face") {
+    // The outline of a curved face also includes where it turns away from the sketch plane.
+    for (const chain of faceSilhouettes(geometry, pick.faceIndex, plane.normal)) {
+      add(chain, "silhouette", polylineMidpoint(chain), pick.faceIndex, geometry.faces.length);
+    }
   }
   return { sketch: current, added, edges: edges.length };
 }

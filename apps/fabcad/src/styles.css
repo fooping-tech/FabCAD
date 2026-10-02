@@ -342,6 +342,18 @@ table.grid td input { padding: 2px 5px; }
 }
 .floating-title { display: flex; align-items: center; justify-content: space-between; font-weight: 680; font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel-alt); border-radius: 7px 7px 0 0; }
 .floating-body { padding: 9px 10px 10px; }
+/* Command windows (ui/FloatingPanel): beside the click, dragged by the title bar. */
+.floating-window { position: fixed; z-index: 60; max-height: calc(100dvh - 12px); overflow: auto; box-sizing: border-box; }
+.floating-window .floating-title { cursor: move; touch-action: none; user-select: none; -webkit-user-select: none; gap: 6px; position: sticky; top: 0; z-index: 1; }
+.floating-name { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.floating-grip { flex: none; width: 8px; height: 12px; background: radial-gradient(circle, var(--ink-faint) 1px, transparent 1.4px) 0 0 / 4px 4px; opacity: 0.8; }
+.tool-window { width: 236px; }
+.tool-field { grid-template-columns: 70px minmax(0, 1fr); }
+.tool-field.check { display: flex; gap: 6px; color: var(--ink); }
+.tool-input { display: flex; align-items: center; gap: 4px; }
+.tool-input input { width: 100%; min-width: 0; }
+.tool-input input[aria-invalid="true"] { border-color: var(--danger); }
+.tool-input .unit { color: var(--ink-faint); font-size: 11px; }
 
 .sketch-banner {
   position: absolute; z-index: 6; left: 50%; top: 10px; transform: translateX(-50%);
@@ -543,7 +555,8 @@ table.grid td input { padding: 2px 5px; }
   .side-grip::after { content: ""; display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto; }
   .side-backdrop { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(29, 43, 56, 0.28); }
 
-  .floating { left: 8px; right: 8px; top: auto; bottom: 100px; width: auto; max-height: 52dvh; overflow: auto; }
+  .floating { width: min(304px, calc(100vw - 16px)); max-height: 52dvh; overflow: auto; }
+  .floating.tool-window { width: min(236px, calc(100vw - 16px)); }
   .floating:not(.expanded) .field.secondary { display: none; }
   .floating .options-toggle { display: inline-flex; margin-left: auto; margin-right: 4px; }
   .floating-title { padding: 5px 8px; }

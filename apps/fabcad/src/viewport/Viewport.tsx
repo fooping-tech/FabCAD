@@ -26,6 +26,7 @@ import {
   type SolidDialog,
   appState,
   isAdditiveClick,
+  noteViewportPoint,
   select,
   selectionKey,
   toast,
@@ -584,6 +585,7 @@ export function Viewport(): ReactElement {
       }
       down = { x: e.clientX, y: e.clientY, button: e.button, time: e.timeStamp };
       if (e.button !== 0) return;
+      noteViewportPoint(e.clientX, e.clientY);
       const p = info(e);
 
       if (touch && touches.size > 1) {
@@ -623,6 +625,12 @@ export function Viewport(): ReactElement {
 
       if (!appState.get().activeSketchId) {
         if (touch) scene.setOneFingerGesture("rotate");
+        return;
+      }
+      if (touch && appState.get().tool !== "select" && controller.grabs(p)) {
+        // The previewed Offset curve follows the finger right away.
+        scene.setOneFingerGesture("none");
+        controller.pointerDown(p);
         return;
       }
       if (touch && appState.get().tool !== "select") {
@@ -1023,7 +1031,7 @@ export function Viewport(): ReactElement {
   // -------------------------------------------------------- sketch redraws
   useEffect(() => {
     controllerRef.current?.requestDraw();
-  }, [doc, app.showConstraints, app.showDimensions, app.workspace, app.toolOptions]);
+  }, [doc, app.showConstraints, app.showDimensions, app.workspace, app.toolOptions, app.sketchOffset]);
 
   // Keep the sketch in view: a dimension can push geometry far outside the window.
   useEffect(() => {
@@ -1053,6 +1061,11 @@ export function Viewport(): ReactElement {
   useEffect(() => {
     controllerRef.current?.toolChanged();
   }, [app.tool]);
+
+  // The hint of Offset changes between picking a curve and adjusting the preview.
+  useEffect(() => {
+    controllerRef.current?.refreshHint();
+  }, [app.sketchOffset === null]);
 
   useEffect(() => {
     sceneRef.current?.setProjection(app.projection);

@@ -36,7 +36,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "寸法をダブルクリックすると値を編集します。3D でスケッチの図形をダブルクリックすると、そのスケッチの編集に入ります。",
     ],
     when: ["ほかのコマンドを実行していないときの、エディタの基本の状態です。"],
-    examples: ["右クリック（タッチではダブルタップ）で、選択に合ったコマンドが出ます。"],
+    examples: [
+      "右クリック（タッチではダブルタップ）で、選択に合ったコマンドが出ます。",
+      "コマンドの窓（Extrude、Offset、Fillet など）は、クリックした位置のすぐ横に開きます。邪魔なときはタイトルバーをドラッグして動かせます。動かした窓は、このセッションの間はその位置に開きます。タイトルバーをダブルクリックすると、クリックした位置の横に戻ります。",
+    ],
   },
   "selection.multi": {
     title: "Multi-Select",
@@ -174,14 +177,14 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "中心、次に頂点をクリックします。頂点は、2 回目のクリックを通る円の上に並びます。",
       "2 回目のクリックで多角形の向きも決まります。中心の真上に動かすとそろう位置に吸着するので、頂点をちょうど上に置けます。",
     ],
-    parameters: [{ name: "Sides", text: "辺の数。3 以上。2 回目のクリックの前に Options で指定します。" }],
+    parameters: [{ name: "Sides", text: "辺の数。3 以上。1 回目のクリックの横に開く窓で指定します。プレビューも追従します。" }],
     examples: ["Sides を 6、中心を原点、2 回目のクリックを中心の真上にすると、頂点が上を向いた六角形になります。"],
   },
   "sketch.polygon-circumscribed": {
     title: "Circumscribed Polygon",
     summary: "中心と 1 辺の中点から正多角形を描きます。",
     what: ["中心、次に辺の中点をクリックします。辺は、2 回目のクリックを通る円に接します。"],
-    parameters: [{ name: "Sides", text: "辺の数。3 以上。2 回目のクリックの前に Options で指定します。" }],
+    parameters: [{ name: "Sides", text: "辺の数。3 以上。1 回目のクリックの横に開く窓で指定します。プレビューも追従します。" }],
     when: ["六角ナットのように、向かい合う辺の距離（二面幅）が分かっているとき。"],
   },
   "sketch.slot": {
@@ -225,6 +228,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     summary: "Body の稜線、面、頂点を、参照用の図形としてスケッチに取り込みます。",
     what: [
       "Body の稜線、面、頂点をクリックすると、スケッチ平面に投影した形がスケッチに加わります。",
+      "曲面をクリックすると、その輪郭（スケッチ平面から見て面が裏側へ回り込む線）も加わります。横から見た円柱は長方形、球は円になります。同じ線に重なる稜線（横から見た円柱の継ぎ目など）は 1 本だけ投影します。",
       "投影した図形は、Body が変わると追従します。",
     ],
     when: ["すでにある形を基準に、寸法や拘束を付けたいとき。"],
@@ -259,14 +263,14 @@ export const HELP_JA: Record<string, HelpEntry> = {
     shortcut: "F",
     summary: "2 本の線の角を、接する円弧で丸めます。",
     what: ["角で交わる 2 本の線をクリックします。線が短くなり、円弧でつながります。"],
-    parameters: [{ name: "Radius", text: "円弧の半径（mm）。Options で指定します。" }],
+    parameters: [{ name: "Radius", text: "円弧の半径（mm）。1 本目の線をクリックすると横に開く窓で指定します。" }],
     limitations: ["対象は 2 本の直線の角です。", "半径は、両方の線が残る大きさにします。"],
   },
   "sketch.modify.chamfer": {
     title: "Chamfer (Sketch)",
     summary: "2 本の線の角を、直線で切り落とします。",
     what: ["角で交わる 2 本の線をクリックします。線が短くなり、直線でつながります。"],
-    parameters: [{ name: "Distance", text: "角から切り始める位置までの距離。両方の線で同じです。Options で指定します。" }],
+    parameters: [{ name: "Distance", text: "角から切り始める位置までの距離。両方の線で同じです。1 本目の線をクリックすると横に開く窓で指定します。" }],
     limitations: ["対象は 2 本の直線の角です。"],
   },
   "sketch.modify.trim": {
@@ -295,8 +299,15 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "Offset",
     shortcut: "O",
     summary: "つながった曲線を、一定の距離だけ離してコピーします。",
-    what: ["曲線をクリックすると、それにつながる曲線全体を、クリックした側へオフセットします。"],
-    parameters: [{ name: "Distance", text: "コピーまでの距離（mm）。Options で指定します。" }],
+    what: [
+      "曲線をクリックすると、それにつながる曲線全体をクリックした側へオフセットしたプレビューが出て、クリックした位置の横に窓が開きます。",
+      "距離を入力するか、プレビューの曲線をつかんで動かします。Flip で反対側に切り替えます。OK（Enter）で追加し、Cancel（Esc）で取り消します。",
+      "別の曲線をクリックすると、プレビュー中のオフセットを追加して、次のオフセットを始めます。",
+    ],
+    parameters: [
+      { name: "Distance", text: "コピーまでの距離（mm）。Snap 1 mm がオンのとき、ドラッグは 1 mm 刻みです。Ctrl / Cmd を押すと細かく動きます。次のオフセットは最後に使った距離から始まります。" },
+      { name: "Direction", text: "Flip：つながった曲線の反対側（閉じた形なら内側と外側）に切り替えます。" },
+    ],
     limitations: ["内側の半径より大きい距離を指定すると、オフセットした形が自分自身と重なります。"],
   },
   "sketch.modify.move": {
@@ -315,7 +326,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "Scale",
     summary: "選択した図形を、1 点を基準に拡大・縮小します。",
     what: [SELECT_FIRST, "動かさない点（基準点）をクリックします。"],
-    parameters: [{ name: "Factor", text: "2 で 2 倍、0.5 で半分になります。Options で指定します。" }],
+    parameters: [{ name: "Factor", text: "2 で 2 倍、0.5 で半分になります。ツールを始めると開く窓で指定します。" }],
     limitations: ["拡大・縮小する図形に寸法が付いていると、寸法が値を保って元に戻します。先に寸法を削除してください。"],
   },
   "sketch.modify.mirror": {
@@ -325,7 +336,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     parameters: [
       {
         name: "Symmetry constraints",
-        text: "コピーを元の図形と結び付け、片方を変えるともう片方も変わるようにします。Options で指定します。",
+        text: "コピーを元の図形と結び付け、片方を変えるともう片方も変わるようにします。ツールを始めると開く窓で指定します。",
       },
     ],
   },
@@ -337,7 +348,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "点を 2 つクリックします。その 2 点が方向と間隔になります。行はそれと直角の方向に、同じ間隔で並びます。",
     ],
     parameters: [
-      { name: "Count", text: "方向に沿った個数。元の図形を含みます。" },
+      { name: "Count", text: "方向に沿った個数。元の図形を含みます。1 回目のクリックの横に開く窓で指定します。" },
       { name: "Rows", text: "直角の方向の行の数。" },
     ],
   },
@@ -345,7 +356,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "Circular Pattern (Sketch)",
     summary: "選択した図形を、中心のまわりに繰り返します。",
     what: [SELECT_FIRST, "中心をクリックします。コピーは 1 周に等間隔で並びます。"],
-    parameters: [{ name: "Count", text: "個数。元の図形を含みます。" }],
+    parameters: [{ name: "Count", text: "個数。元の図形を含みます。ツールを始めると開く窓で指定します。" }],
   },
   "sketch.modify.toggle-construction": {
     title: "Normal / Construction",

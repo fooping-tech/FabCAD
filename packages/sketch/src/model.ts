@@ -216,8 +216,12 @@ export interface ProjectedGeometryRef {
   id: string;
   mode: "project" | "include" | "intersect";
   bodyId: string;
-  /** What was picked on the body. Defaults to "edge". */
-  source?: "edge" | "vertex";
+  /**
+   * What was projected. Defaults to "edge". A "silhouette" is the outline of a curved face seen
+   * from the sketch plane (the sides of a cylinder seen from the side); `ref`, `index` and
+   * `count` then identify the face, and the hint picks the silhouette on it.
+   */
+  source?: "edge" | "vertex" | "silhouette";
   /** Point on the source edge or face used to re-identify it after recompute. */
   hint: Vec3;
   /**
@@ -227,7 +231,7 @@ export interface ProjectedGeometryRef {
    */
   index?: number;
   count?: number;
-  /** Persistent name of the source edge. Takes precedence over `index` and `hint`. */
+  /** Persistent name of the source edge (or face). Takes precedence over `index` and `hint`. */
   ref?: TopologyRef;
   entityIds: EntityId[];
 }

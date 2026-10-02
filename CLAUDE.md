@@ -38,6 +38,7 @@ npm run build
     - ヘルプがない、または内容が古いままの機能は、実装が終わっていない。
     - `apps/fabcad/test/help.test.ts` が、Create / Modify ツール、拘束、Feature、リボンに書いた ID のすべてに項目があること、英語と日本語の構成が一致することを確認する。
 13. **メニューは `ui/Popover` で出す。** 位置を CSS や座標の計算で個別に決めない。`Popover` は `document.body` の直下に描き、見えている範囲（visual viewport と safe area）に収まる位置を `ui/placement.ts` の `placeMenu()` で決める。
+    - コマンドの窓（Feature のダイアログ、スケッチのツールのオプション、Text、Measure）は `ui/FloatingPanel` で出す。クリックした位置の横（`placeBeside()`）に開き、タイトルバーで動かせる。動かした位置は窓の ID ごとにセッションの間だけ覚える。開く位置は `lastViewportPoint()`（`app/appState.ts`）か、スケッチのツールなら `appState.toolPanel`。
 14. **タッチのジェスチャーは `ui/gestures.ts` で判定する。** ダブルタップ（エディタのコンテキストメニュー）と長押し（ツールアイコンのヘルプ）を、ツールやコンポーネントごとに実装しない。
 15. **クリックで選択するところは `isAdditiveClick()`（`app/appState.ts`）で追加選択かどうかを決める。** 修飾キーを個別に調べない。Multi-Select（`appState.multiSelect`）が効かなくなる。
 
@@ -58,7 +59,7 @@ npm run build
 | `apps/fabcad/src/print/` | FABRICATION ワークスペースの 3D Print。設定は `extensions["fabrication.print"]`。受け取るのは Body のメッシュ（`modelState` の tessellation）だけ |
 | `apps/fabcad/src/fabrication/` | FABRICATION ワークスペース。`pipeline.ts` は React に依存しない純粋な関数。Body ごとの判定結果は `FabricationOutput.detections` |
 | `apps/fabcad/src/help/` | アプリ内ヘルプ。`content.ts`（英語の本文のレジストリ `HELP` と、項目がないときの `helpFor()`）、`content.ja.ts`（日本語の本文 `HELP_JA`）、`useHelpTrigger.ts`（右クリックと長押し）、`HelpMenu.tsx`（短い説明）、`HelpOverlay.tsx`（詳細）。状態は `appState.help` だけで、ドキュメントにもコマンドにも触れない |
-| `apps/fabcad/src/ui/` | `Icon.tsx`、`Menu.tsx`、`Popover.tsx`（画面内に収まるメニュー）、`placement.ts`（位置の計算。純粋な関数）、`gestures.ts`（ダブルタップと長押し。純粋な関数） |
+| `apps/fabcad/src/ui/` | `Icon.tsx`、`Menu.tsx`、`Popover.tsx`（画面内に収まるメニュー）、`FloatingPanel.tsx`（クリックの横に開く、動かせるコマンドの窓）、`placement.ts`（位置の計算。純粋な関数）、`gestures.ts`（ダブルタップと長押し。純粋な関数） |
 
 スケッチは 3D ビューの上に重ねた 2D キャンバスに、3D カメラで投影して描く。マウス位置は視線とスケッチ平面の交点でスケッチ座標に変換する。
 
@@ -73,6 +74,10 @@ npm run build
 テキストの輪郭は派生データで、`SketchText.outline` にキャッシュする。`outline.key` が入力（文字列、フォント、評価済みの数値、パスの形）と一致しなくなったら、`refreshTexts()` が作り直して `documentStore.amend()` で差し替える（履歴は増えない）。テキストのダイアログは `documentStore.begin()` のトランザクションの中でドキュメントを直接書き換え、OK で 1 つの履歴にまとめる。
 
 Hole、Pattern、Mirror、Move、Align、Split、Sweep、Loft、Offset Plane のダイアログは `app/solidDialogs.ts`（ダイアログ ↔ Command の入力、検証、どの欄が何を受け取るか。純粋な関数）と `panels/SolidDialogFields.tsx`。数が評価結果で決まる Body（Pattern のインスタンスなど）は ID が `featureId:bodyId:n` で、再計算のたびに `syncBodyRecords()` でドキュメントの Body の記録を合わせる。
+
+スケッチの Offset は、クリックでプレビュー（`appState.sketchOffset`）を出し、窓の OK か Enter で確定する。形の計算は `sketch/offsetGeometry.ts`（純粋な関数）、状態の操作は `sketch/offsetTool.ts`。オプションのあるスケッチのツールは `sketch/toolWindows.ts` の `TOOLS_WITH_WINDOW` に載せ、窓の中身は `panels/SketchToolPanel.tsx` に書く。
+
+Project で曲面を選ぶと、稜線に加えて輪郭（シルエット）も投影する。輪郭は稜線ではないので、メッシュから `faceSilhouettes()`（`packages/brep/src/query.ts`）で求め、`source: "silhouette"` の投影として面の `TopologyRef` で覚える。
 
 Sketch の Create ツールを足すときは `packages/sketch/src/create.ts` に関数を、`apps/fabcad/src/sketch/createTools.ts` の `CREATE_TOOLS` に定義を 1 つ追加する。
 

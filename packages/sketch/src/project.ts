@@ -124,7 +124,7 @@ export function projectPolyline(plane: Plane3, points: readonly Vec3[]): Project
 
 export interface ProjectionSource {
   bodyId: string;
-  source: "edge" | "vertex";
+  source: "edge" | "vertex" | "silhouette";
   /** Point on the source geometry, used to find it again after a recompute. */
   hint: Vec3;
   index?: number;
@@ -255,6 +255,51 @@ export function updateProjection(
     entities: next,
     projections: sketch.projections.map((r) => (r.id === ref.id ? { ...r, hint } : r)),
   };
+}
+
+/** Whether two projected shapes cover the same geometry (e.g. two edges seen edge-on). */
+export function sameProjectedShape(a: ProjectedShape, b: ProjectedShape, tolerance = 1e-4): boolean {
+  const near = (p: Vec2, q: Vec2): boolean => dist2(p, q) <= tolerance;
+  if (a.type === "point" && b.type === "point") return near(a.at, b.at);
+  if (a.type === "line" && b.type === "line") {
+    return (near(a.a, b.a) && near(a.b, b.b)) || (near(a.a, b.b) && near(a.b, b.a));
+  }
+  if (a.type === "circle" && b.type === "circle") {
+    return near(a.center, b.center) && Math.abs(a.radius - b.radius) <= tolerance;
+  }
+  if (a.type === "arc" && b.type === "arc") {
+    return near(a.center, b.center) && near(a.start, b.start) && near(a.end, b.end);
+  }
+  return false;
+}
+
+/** The shapes that the projections of a sketch cover now, to avoid projecting one twice. */
+export function projectedShapes(sketch: Sketch): ProjectedShape[] {
+  const at = (id: EntityId): Vec2 | null => {
+    const e = sketch.entities[id];
+    return e?.type === "point" ? { x: e.x, y: e.y } : null;
+  };
+  const out: ProjectedShape[] = [];
+  for (const ref of sketch.projections) {
+    const curve = ref.entityIds.map((id) => sketch.entities[id]).find((e) => e && e.type !== "point");
+    if (!curve) {
+      const p = ref.entityIds[0] ? at(ref.entityIds[0]) : null;
+      if (p) out.push({ type: "point", at: p });
+    } else if (curve.type === "line") {
+      const a = at(curve.p1);
+      const b = at(curve.p2);
+      if (a && b) out.push({ type: "line", a, b });
+    } else if (curve.type === "circle") {
+      const center = at(curve.center);
+      if (center) out.push({ type: "circle", center, radius: curve.radius });
+    } else if (curve.type === "arc") {
+      const center = at(curve.center);
+      const start = at(curve.start);
+      const end = at(curve.end);
+      if (center && start && end) out.push({ type: "arc", center, start, end });
+    }
+  }
+  return out;
 }
 
 /** Ids of all entities that belong to a projection. */

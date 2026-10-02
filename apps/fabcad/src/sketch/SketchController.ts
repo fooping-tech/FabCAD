@@ -53,6 +53,7 @@ import {
 import {
   type Selection,
   appState,
+  lastViewportPoint,
   select,
   selectionKey,
   setSelection,
@@ -77,6 +78,10 @@ import { textState } from "../text/typography";
 import type { ViewportScene } from "../viewport/scene";
 import { SKETCH_COLORS } from "../viewport/theme";
 import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension } from "./constraintTools";
+import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "./offsetGeometry";
+import { cancelOffset, commitOffset, patchOffset } from "./offsetTool";
+import { TOOLS_WITH_WINDOW } from "./toolWindows";
+import { dragStep } from "../viewport/extrudeManipulator";
 import {
   type BuiltShape,
   type ToolPick,
@@ -189,6 +194,8 @@ export class SketchController {
   private preview: BuiltShape | null = null;
   private previewSketch: Sketch | null = null;
   private drag: Drag | null = null;
+  /** The previewed Offset curve is being dragged. */
+  private offsetDrag = false;
   private labelHits: LabelHit[] = [];
   private hoverProfile: HoverProfile | null = null;
   private raf = 0;
@@ -348,7 +355,9 @@ export class SketchController {
       break: "Break: click a curve where it should be split",
       fillet: this.entityPicks.length === 0 ? "Fillet: pick the first line" : "Fillet: pick the second line",
       chamfer: this.entityPicks.length === 0 ? "Chamfer: pick the first line" : "Chamfer: pick the second line",
-      offset: "Offset: click a curve on the side to offset to",
+      offset: appState.get().sketchOffset
+        ? "Offset: drag the preview or type the distance, then OK (Enter). Click another curve to offset it too"
+        : "Offset: click a curve on the side to offset to",
       text: "Text: click where the text starts",
       project: "Project: click edges, faces or vertices of a body to project them onto the sketch",
       mirror: "Mirror: select the geometry first, then click the mirror line",
@@ -364,8 +373,9 @@ export class SketchController {
 
   /** Cancel the running command. Returns true when there was something to cancel. */
   cancel(): boolean {
+    this.offsetDrag = false;
     const had =
-      this.picks.length > 0 || this.entityPicks.length > 0 || this.drag !== null;
+      cancelOffset() || this.picks.length > 0 || this.entityPicks.length > 0 || this.drag !== null;
     if (this.drag) {
       if (documentStore.inTransaction) documentStore.cancel();
       this.drag = null;
@@ -486,13 +496,28 @@ export class SketchController {
     this.preview = null;
     this.previewSketch = null;
     this.cursor = null;
+    this.offsetDrag = false;
+    appState.set({ sketchOffset: null, toolPanel: null });
     const { tool, selection, activeSketchId } = appState.get();
     if (SELECTION_TOOLS.has(tool) && activeSketchId) {
       const ids = selection.filter((s) => s.kind === "entity" && s.sketchId === activeSketchId);
       if (ids.length === 0) toast("Select the geometry first, then start the command.", "warning");
+      // Commands on the selection have their options at hand from the start, beside the
+      // place where the geometry was selected.
+      else if (TOOLS_WITH_WINDOW.has(tool)) this.openToolPanel(null);
     }
     this.refreshHint();
     this.requestDraw();
+  }
+
+  /**
+   * Open the options window of the running command beside the click at `p` (canvas
+   * coordinates), or beside the last click in the view.
+   */
+  private openToolPanel(p: PointerInfo | null): void {
+    const r = this.canvas.getBoundingClientRect();
+    const at = p ? { x: p.x + r.left, y: p.y + r.top } : (lastViewportPoint() ?? { x: r.left + 16, y: r.top + 16 });
+    appState.set({ toolPanel: at });
   }
 
   private selectedEntityIds(sketchId: string): EntityId[] {
@@ -516,6 +541,10 @@ export class SketchController {
 
     if (this.drag) {
       this.continueDrag(feature, p);
+      return true;
+    }
+    if (this.offsetDrag) {
+      this.dragOffset(feature, p);
       return true;
     }
 
@@ -635,6 +664,11 @@ export class SketchController {
       return true;
     }
 
+    if (this.grabsOffset(p)) {
+      this.offsetDrag = true;
+      return true;
+    }
+
     if (SELECTION_TOOLS.has(tool)) {
       this.transformClick(feature, p);
       return true;
@@ -657,6 +691,10 @@ export class SketchController {
   pointerUp(p: PointerInfo): boolean {
     const feature = this.activeFeature();
     if (!feature) return false;
+    if (this.offsetDrag) {
+      this.offsetDrag = false;
+      return true;
+    }
     const drag = this.drag;
     if (!drag) return true;
     this.drag = null;
@@ -730,6 +768,11 @@ export class SketchController {
   confirm(): boolean {
     const feature = this.activeFeature();
     if (!feature) return false;
+    if (appState.get().sketchOffset) {
+      commitOffset();
+      this.requestDraw();
+      return true;
+    }
     const create = createTool(appState.get().tool);
     if (create && create.clicks === "many" && this.picks.length >= create.minPicks) {
       this.finishCreate(feature);
@@ -747,6 +790,10 @@ export class SketchController {
     const last = this.picks[this.picks.length - 1];
     if (last && dist2(last.position, pick.position) < 1e-9) return;
     this.picks.push(pick);
+    if (this.picks.length === 1 && TOOLS_WITH_WINDOW.has(tool) && !appState.get().toolPanel) {
+      const s = this.projectorFor(feature.sketch).toScreen(pick.position);
+      this.openToolPanel({ x: s.x, y: s.y, shift: false, meta: false });
+    }
 
     if (create.clicks === "many") {
       // Clicking the first point again closes the shape.
@@ -1138,29 +1185,20 @@ export class SketchController {
         return;
       case "offset": {
         if (!curve) return;
-        const chain = connectedChain(sketch, curve.id);
-        apply("Offset", (s) => {
-          // Try both signs and keep the result that lies on the side that was clicked.
-          const candidates = [options.offsetDistance, -options.offsetDistance].flatMap((d) => {
-            try {
-              const r = offsetEntities(s, chain, d);
-              const first = r.created[0];
-              if (!first) return [];
-              const hit = hitTestSketch(
-                editSketch(r.sketch, (b) => b.remove(Object.keys(s.entities).filter((id) => s.entities[id]!.type !== "point"))),
-                at,
-                Infinity,
-                { points: false },
-              );
-              return [{ sketch: r.sketch, distance: hit ? hit.distance : Infinity }];
-            } catch {
-              return [];
-            }
-          });
-          candidates.sort((a, b) => a.distance - b.distance);
-          if (candidates.length === 0) throw new Error("This chain cannot be offset.");
-          return candidates[0]!.sketch;
-        });
+        // Another curve: the offset that was waiting is kept, and the new one starts.
+        if (appState.get().sketchOffset) commitOffset();
+        const current = this.activeFeature() ?? feature;
+        const chain = connectedChain(current.sketch, curve.id);
+        const distance = options.offsetDistance;
+        const side = offsetSideAt(current.sketch, chain, distance, at);
+        if (side === null) {
+          toast("This chain cannot be offset.", "warning");
+          return;
+        }
+        appState.set({ sketchOffset: { sketchId: feature.id, chain, distance, side }, hover: null });
+        this.openToolPanel(p);
+        this.refreshHint();
+        this.requestDraw();
         return;
       }
       case "fillet":
@@ -1172,6 +1210,7 @@ export class SketchController {
         if (this.entityPicks.includes(curve.id)) return;
         this.entityPicks.push(curve.id);
         if (this.entityPicks.length < 2) {
+          if (!appState.get().toolPanel) this.openToolPanel(p);
           this.syncPickSelection(feature.id);
           return;
         }
@@ -1189,6 +1228,36 @@ export class SketchController {
       default:
         return;
     }
+  }
+
+  /** Whether a pointer going down at `p` grabs something of the running command. */
+  grabs(p: PointerInfo): boolean {
+    return this.grabsOffset(p);
+  }
+
+  /** Whether `p` is on the previewed Offset curve, which can be dragged to a distance. */
+  private grabsOffset(p: PointerInfo): boolean {
+    const offset = appState.get().sketchOffset;
+    const feature = this.activeFeature();
+    if (!offset || !feature || feature.id !== offset.sketchId) return false;
+    const projector = this.projectorFor(feature.sketch);
+    const at = projector.toSketch(p.x, p.y);
+    if (!at) return false;
+    return onOffsetPreview(feature.sketch, offset, at, projector.pixel(at) * HIT_PX * this.reach);
+  }
+
+  private dragOffset(feature: SketchFeature, p: PointerInfo): void {
+    const offset = appState.get().sketchOffset;
+    if (!offset) return;
+    const projector = this.projectorFor(feature.sketch);
+    const at = projector.toSketch(p.x, p.y);
+    if (!at) return;
+    // Whole millimetres with the grid snap, otherwise a step that suits the zoom.
+    const step = this.gridSnap(p) ? 1 : p.meta ? 0.01 : dragStep(projector.pixel(at)) / 10;
+    const next = offsetThrough(feature.sketch, offset.chain, at, step);
+    if (next && (next.distance !== offset.distance || next.side !== offset.side)) patchOffset(next);
+    appState.set({ cursor: at });
+    this.requestDraw();
   }
 
   /** Move / Copy / Scale / Mirror / Patterns on the current selection. */
@@ -1235,6 +1304,7 @@ export class SketchController {
     }
     if (this.picks.length === 0) {
       this.picks = [pick];
+      if (TOOLS_WITH_WINDOW.has(tool) && !appState.get().toolPanel) this.openToolPanel(p);
       this.refreshHint();
       this.requestDraw();
       return;
@@ -1539,7 +1609,10 @@ export class SketchController {
       if (state.showConstraints) drawConstraints(ctx, projector, sketch, drawState, this.labelHits);
 
       // Preview of the shape being created or transformed.
-      const previewSketch = this.preview?.sketch ?? this.previewSketch;
+      const offset = state.sketchOffset;
+      const offsetPreview =
+        offset && offset.sketchId === f.id ? offsetSketch(sketch, offset) : null;
+      const previewSketch = this.preview?.sketch ?? this.previewSketch ?? offsetPreview;
       if (previewSketch) {
         const fresh = new Set(
           Object.keys(previewSketch.entities).filter((e) => !sketch.entities[e]),

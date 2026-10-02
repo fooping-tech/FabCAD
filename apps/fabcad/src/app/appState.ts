@@ -324,6 +324,16 @@ export interface ToolOptions {
 
 export type FabricationProcess = "laser" | "print";
 
+/** Sketch Offset waiting for OK: the chain, and the distance and side previewed. */
+export interface SketchOffset {
+  sketchId: string;
+  chain: string[];
+  /** mm, positive. */
+  distance: number;
+  /** Sign given to `offsetEntities` (+1: to the right of the chain, outward for loops). */
+  side: 1 | -1;
+}
+
 export interface AppState {
   workspace: Workspace;
   /** Manufacturing process shown in the FABRICATION workspace. */
@@ -340,6 +350,13 @@ export interface AppState {
   projection: Projection;
   dialog: Dialog | null;
   dimensionEdit: DimensionEdit | null;
+  /**
+   * The options window of the running sketch command, opened beside the click that started
+   * the operation (client coordinates). Null while the command has no window.
+   */
+  toolPanel: { x: number; y: number } | null;
+  /** Sketch Offset previewed and waiting for OK. */
+  sketchOffset: SketchOffset | null;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
   cursor: Vec2 | null;
   toasts: Toast[];
@@ -398,6 +415,8 @@ export const appState = new TinyStore<AppState>({
   projection: "perspective",
   dialog: null,
   dimensionEdit: null,
+  toolPanel: null,
+  sketchOffset: null,
   cursor: null,
   toasts: [],
   hint: "",
@@ -431,6 +450,18 @@ export function setSelection(selection: Selection[]): void {
  * the multi-selection mode is on. Every place that selects by click asks here, so that the
  * viewport, the browser and the timeline behave alike.
  */
+let viewportPoint: { x: number; y: number } | null = null;
+
+/** Remember where the pointer last went down in the 3D view (client coordinates). */
+export function noteViewportPoint(x: number, y: number): void {
+  viewportPoint = { x, y };
+}
+
+/** Where the pointer last went down in the 3D view: command windows open beside it. */
+export function lastViewportPoint(): { x: number; y: number } | null {
+  return viewportPoint;
+}
+
 export function isAdditiveClick(e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }): boolean {
   return e.shiftKey || e.metaKey || e.ctrlKey || appState.get().multiSelect;
 }

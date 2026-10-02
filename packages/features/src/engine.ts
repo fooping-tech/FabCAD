@@ -8,8 +8,10 @@ import {
   type ShapeTransform,
   type TessellationOptions,
   edgePolyline,
+  faceSilhouettes,
   nearestEdge,
   nearestVertex,
+  polylineMidpoint,
 } from "@fabcad/brep";
 import {
   type BodyNames,
@@ -516,7 +518,28 @@ export class FeatureEngine {
       const geometry = body.geometry;
       let points: Vec3[];
       let hint: Vec3;
-      if ((ref.source ?? "edge") === "vertex") {
+      if (ref.source === "silhouette") {
+        const index = ref.ref
+          ? (resolveFaceRef(ref.ref, body)?.index ?? -1)
+          : ref.index !== undefined && ref.count === geometry.faces.length
+            ? ref.index
+            : -1;
+        if (index < 0) continue;
+        // The silhouette nearest to where it was: a face can have several.
+        let best: Vec3[] | null = null;
+        let bestD = Infinity;
+        for (const chain of faceSilhouettes(geometry, index, plane.normal)) {
+          const mid = polylineMidpoint(chain);
+          const d = Math.hypot(mid.x - ref.hint.x, mid.y - ref.hint.y, mid.z - ref.hint.z);
+          if (d < bestD) {
+            bestD = d;
+            best = chain;
+          }
+        }
+        if (!best) continue;
+        points = best;
+        hint = polylineMidpoint(best);
+      } else if ((ref.source ?? "edge") === "vertex") {
         // Vertices have no name of their own: the index holds while the body keeps its
         // structure, then the position decides.
         const total = geometry.vertices.length / 3;

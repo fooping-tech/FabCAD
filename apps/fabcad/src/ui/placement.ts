@@ -72,3 +72,39 @@ export function placeMenu(
 
   return { left, top, maxHeight, maxWidth, side };
 }
+
+/**
+ * Move a window of `size` with its top left corner at `at` so that all of it lies inside
+ * `visible`. A window larger than the area keeps its top left corner visible.
+ */
+export function clampInto(
+  at: { left: number; top: number },
+  size: { width: number; height: number },
+  visible: Box,
+): { left: number; top: number } {
+  const left = Math.max(visible.left, Math.min(at.left, visible.right - size.width));
+  const top = Math.max(visible.top, Math.min(at.top, visible.bottom - size.height));
+  return { left, top };
+}
+
+/**
+ * Place a window of `size` beside a clicked point, inside `visible`: right of and below the
+ * point so that the point stays in view, left of it when there is no room on the right, and
+ * above it when there is none below.
+ */
+export function placeBeside(
+  point: { x: number; y: number },
+  size: { width: number; height: number },
+  visible: Box,
+  gap = 28,
+): { left: number; top: number } {
+  let left = point.x + gap;
+  if (left + size.width > visible.right && point.x - gap - size.width >= visible.left) {
+    left = point.x - gap - size.width;
+  }
+  let top = point.y + gap;
+  if (top + size.height > visible.bottom && point.y - gap - size.height >= visible.top) {
+    top = point.y - gap - size.height;
+  }
+  return clampInto({ left, top }, size, visible);
+}

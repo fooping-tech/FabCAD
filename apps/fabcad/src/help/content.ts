@@ -47,6 +47,7 @@ export const HELP: Record<string, HelpEntry> = {
     when: ["Whenever no other command is running: it is the idle state of the editor."],
     examples: [
       "Right-click (double tap on a touch screen) for the commands that fit the selection.",
+      "The window of a command (Extrude, Offset, Fillet …) opens beside the click. Drag it by its title bar to move it out of the way; it opens there again for the rest of the session. Double-click the title bar to bring it back beside the click.",
     ],
   },
   "selection.multi": {
@@ -194,7 +195,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Click the centre, then a corner. The corners lie on a circle through the second click.",
       "The second click also turns the polygon: move it straight above the centre, where it snaps into line, to get a corner exactly at the top.",
     ],
-    parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in Options before the second click." }],
+    parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in the window that opens beside the first click; the preview follows." }],
     examples: ["Sides 6, centre on the origin, second click straight above it: a hexagon standing on a corner."],
   },
   "sketch.polygon-circumscribed": {
@@ -203,7 +204,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click the centre, then the middle of a side. The sides touch a circle through the second click.",
     ],
-    parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in Options before the second click." }],
+    parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in the window that opens beside the first click; the preview follows." }],
     when: ["When the distance across the flats is what is known, as for a hexagon nut."],
   },
   "sketch.slot": {
@@ -251,6 +252,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Bring edges, faces or vertices of a body into the sketch as reference geometry.",
     what: [
       "Click an edge, a face or a vertex of a body: its projection onto the sketch plane is added to the sketch.",
+      "A curved face also gives its silhouette: where it turns away from the sketch plane. A cylinder seen from the side becomes a rectangle, a sphere a circle. Edges that land on the same line (the seams of a cylinder seen from the side) are projected once.",
       "Projected geometry follows the body when the body changes.",
     ],
     when: ["To dimension or constrain against what is already there."],
@@ -287,14 +289,14 @@ export const HELP: Record<string, HelpEntry> = {
     shortcut: "F",
     summary: "Round a corner between two lines with a tangent arc.",
     what: ["Click the two lines that meet at the corner. They are shortened and joined by an arc."],
-    parameters: [{ name: "Radius", text: "Radius of the arc in mm, set in Options." }],
+    parameters: [{ name: "Radius", text: "Radius of the arc in mm, set in the window that opens beside the first line." }],
     limitations: ["Works on corners between two straight lines.", "The radius must leave something of both lines."],
   },
   "sketch.modify.chamfer": {
     title: "Chamfer (Sketch)",
     summary: "Cut a corner between two lines with a straight line.",
     what: ["Click the two lines that meet at the corner. They are shortened and joined by a straight line."],
-    parameters: [{ name: "Distance", text: "How far from the corner the cut starts on both lines, set in Options." }],
+    parameters: [{ name: "Distance", text: "How far from the corner the cut starts on both lines, set in the window that opens beside the first line." }],
     limitations: ["Works on corners between two straight lines."],
   },
   "sketch.modify.trim": {
@@ -326,8 +328,15 @@ export const HELP: Record<string, HelpEntry> = {
     title: "Offset",
     shortcut: "O",
     summary: "A copy of a chain of curves at a constant distance.",
-    what: ["Click a curve: the chain it belongs to is offset to the side of the click."],
-    parameters: [{ name: "Distance", text: "Distance of the copy in mm, set in Options." }],
+    what: [
+      "Click a curve: the chain it belongs to is previewed offset to the side of the click, and a window opens beside the click.",
+      "Type the distance, or drag the previewed curve to where it should go. Flip moves it to the other side. OK (Enter) adds it; Cancel (Esc) drops it.",
+      "Clicking another curve keeps the previewed offset and starts the next one.",
+    ],
+    parameters: [
+      { name: "Distance", text: "Distance of the copy in mm. Dragging steps in whole millimetres with Snap 1 mm on; hold Ctrl / Cmd for finer steps. The next offset starts with the last distance." },
+      { name: "Direction", text: "Flip: offset to the other side of the chain (inside or outside of a closed loop)." },
+    ],
     limitations: ["A distance larger than an inner radius makes the offset fold over itself."],
   },
   "sketch.modify.move": {
@@ -352,7 +361,7 @@ export const HELP: Record<string, HelpEntry> = {
     title: "Scale",
     summary: "Scale the selected entities about a point.",
     what: ["Select the entities first, then start the tool.", "Click the point that stays where it is."],
-    parameters: [{ name: "Factor", text: "2 doubles the size, 0.5 halves it. Set in Options." }],
+    parameters: [{ name: "Factor", text: "2 doubles the size, 0.5 halves it. Set in the window that opens when the tool starts." }],
     limitations: ["Dimensions on the scaled geometry keep their values and pull it back: remove them first."],
   },
   "sketch.modify.mirror": {
@@ -362,7 +371,7 @@ export const HELP: Record<string, HelpEntry> = {
     parameters: [
       {
         name: "Symmetry constraints",
-        text: "Ties the copy to the original, so that both change together. Set in Options.",
+        text: "Ties the copy to the original, so that both change together. Set in the window that opens when the tool starts.",
       },
     ],
   },
@@ -374,7 +383,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Click two points: they give the direction and the spacing. Rows follow at right angles, at the same spacing.",
     ],
     parameters: [
-      { name: "Count", text: "Number of copies along the direction, the original included." },
+      { name: "Count", text: "Number of copies along the direction, the original included. Set in the window that opens beside the first click." },
       { name: "Rows", text: "Number of rows at right angles to it." },
     ],
   },
@@ -385,7 +394,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Select the entities first, then start the tool.",
       "Click the centre. The copies are spread evenly over the full turn.",
     ],
-    parameters: [{ name: "Count", text: "Number of copies, the original included." }],
+    parameters: [{ name: "Count", text: "Number of copies, the original included. Set in the window that opens when the tool starts." }],
   },
   "sketch.modify.toggle-construction": {
     title: "Normal / Construction",

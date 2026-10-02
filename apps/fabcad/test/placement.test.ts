@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Box, placeMenu } from "../src/ui/placement";
+import { type Box, clampInto, placeBeside, placeMenu } from "../src/ui/placement";
 
 /** A phone in portrait: 390 × 844, with a 6 px margin taken off. */
 const phone: Box = { left: 6, top: 6, right: 384, bottom: 838 };
@@ -91,5 +91,33 @@ describe("placeMenu", () => {
     expect(p.left).toBe(tiny.left);
     expect(p.top).toBeGreaterThanOrEqual(tiny.top);
     expect(p.top + p.maxHeight).toBeLessThanOrEqual(tiny.bottom);
+  });
+});
+
+describe("placeBeside", () => {
+  const panel = { width: 240, height: 160 };
+
+  it("opens right of and below the click, leaving the clicked point in view", () => {
+    expect(placeBeside({ x: 400, y: 300 }, panel, desktop)).toEqual({ left: 428, top: 328 });
+  });
+
+  it("goes to the left of the click near the right edge, and above it near the bottom", () => {
+    expect(placeBeside({ x: 1400, y: 850 }, panel, desktop)).toEqual({ left: 1132, top: 662 });
+  });
+
+  it("stays inside a screen that is too small for either side", () => {
+    const p = placeBeside({ x: 200, y: 400 }, panel, phone);
+    expect(p.left).toBeGreaterThanOrEqual(phone.left);
+    expect(p.left + panel.width).toBeLessThanOrEqual(phone.right);
+  });
+});
+
+describe("clampInto", () => {
+  it("keeps a dragged window inside the visible area", () => {
+    const size = { width: 300, height: 200 };
+    expect(clampInto({ left: -50, top: 2000 }, size, desktop)).toEqual({ left: 6, top: 694 });
+    expect(clampInto({ left: 100, top: 100 }, size, desktop)).toEqual({ left: 100, top: 100 });
+    // Larger than the area: its top left corner, with the title to drag it by, stays visible.
+    expect(clampInto({ left: 50, top: 50 }, { width: 500, height: 1000 }, phone)).toEqual({ left: 6, top: 6 });
   });
 });

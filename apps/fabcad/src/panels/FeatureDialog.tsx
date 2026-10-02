@@ -1,5 +1,5 @@
 import { FEATURE_LABELS } from "@fabcad/cad-document";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import {
   DIALOG_COMMANDS,
   closeDialog,
@@ -7,11 +7,11 @@ import {
   dialogProblem,
   patchDialog,
 } from "../app/actions";
-import { type Dialog, appState } from "../app/appState";
+import { type Dialog, appState, lastViewportPoint } from "../app/appState";
 import { useDocument } from "../app/session";
 import { isSolidDialog } from "../app/solidDialogs";
 import { useStore } from "../app/tinyStore";
-import { Icon } from "../ui/Icon";
+import { FloatingPanel } from "../ui/FloatingPanel";
 import { Field, OperationFields, PickBox } from "./dialogFields";
 import { ExpressionInput } from "./ExpressionInput";
 import { SolidDialogBody } from "./SolidDialogFields";
@@ -269,19 +269,30 @@ const TITLES: Partial<Record<Dialog["type"], string>> = {
   "offset-plane": DIALOG_COMMANDS["offset-plane"]?.label,
 };
 
-/** Floating dialog of the running solid feature command. */
+/**
+ * Floating dialog of the running solid feature command. It opens beside the last click in the
+ * view (where the profile, face or edge was picked) and can be dragged out of the way.
+ */
 export function FeatureDialog(): ReactElement | null {
   const dialog = useStore(appState, (s) => s.dialog);
   const [expanded, setExpanded] = useState(false);
+  const type = dialog?.type ?? null;
+  // Taken when the command starts: picks made in the dialog do not move it around.
+  const anchor = useMemo(() => (type ? lastViewportPoint() : null), [type]);
   if (!dialog) return null;
   const title = TITLES[dialog.type];
   if (!title) return null;
   const problem = dialogProblem(dialog);
   const editing = "editing" in dialog && dialog.editing !== null;
   return (
-    <div className={`floating${expanded ? " expanded" : ""}`} role="dialog" aria-label={title}>
-      <div className="floating-title">
-        <span>{editing ? `Edit ${title}` : title}</span>
+    <FloatingPanel
+      id="feature-dialog"
+      anchor={anchor}
+      title={editing ? `Edit ${title}` : title}
+      className={expanded ? "expanded" : ""}
+      onClose={closeDialog}
+      closeLabel="Cancel (Esc)"
+      headerExtra={
         <button
           className="btn small options-toggle"
           aria-expanded={expanded}
@@ -289,10 +300,8 @@ export function FeatureDialog(): ReactElement | null {
         >
           {expanded ? "Less" : "Options"}
         </button>
-        <button className="icon-btn" aria-label="Cancel" title="Cancel (Esc)" onClick={closeDialog}>
-          <Icon name="close" size={13} />
-        </button>
-      </div>
+      }
+    >
       <div className="floating-body">
         <div className="form">
           <Body dialog={dialog} />
@@ -311,6 +320,6 @@ export function FeatureDialog(): ReactElement | null {
           </button>
         </div>
       </div>
-    </div>
+    </FloatingPanel>
   );
 }

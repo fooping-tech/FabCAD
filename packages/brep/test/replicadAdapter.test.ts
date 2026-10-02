@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { type Loop2, type Profile2, ORIGIN_PLANES, type Vec2 } from "@fabcad/geometry";
 import type { GeometryKernel } from "../src/kernel";
+import { faceSilhouettes } from "../src/query";
 import { nodeKernel } from "./nodeKernel";
 
 const polygonLoop = (pts: Vec2[]): Loop2 => ({
@@ -156,5 +157,60 @@ describe("replicad adapter", () => {
     const box = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 10);
     expect(() => kernel.fillet(box, [{ point: { x: 0, y: 0, z: 5 } }], 50)).toThrow(/Fillet/);
     expect(() => kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 0)).toThrow(/zero/);
+  });
+});
+
+describe("faceSilhouettes", () => {
+  it("finds the sides of a cylinder seen from the side, exactly", () => {
+    const g = kernel.tessellate(
+      kernel.extrude([{ outer: circleLoop(0, 0, 20), holes: [] }], ORIGIN_PLANES.XY, 0, 30),
+    );
+    const curved = g.faces.flatMap((f, i) => (f.surface === "cylinder" ? [i] : []));
+    expect(curved.length).toBeGreaterThan(0);
+    // Seen along X, the silhouettes are the lines y = ±20, 0 ≤ z ≤ 30.
+    const lines = curved.flatMap((i) => faceSilhouettes(g, i, { x: 1, y: 0, z: 0 }));
+    expect(lines).toHaveLength(2);
+    const ys = lines.map((l) => l[0]!.y).sort((a, b) => a - b);
+    expect(ys[0]).toBeCloseTo(-20, 4);
+    expect(ys[1]).toBeCloseTo(20, 4);
+    for (const l of lines) {
+      for (const p of l) {
+        expect(Math.abs(p.x)).toBeLessThan(1e-4);
+        expect(Math.abs(Math.abs(p.y) - 20)).toBeLessThan(1e-4);
+      }
+      const zs = l.map((p) => p.z);
+      expect(Math.min(...zs)).toBeCloseTo(0, 4);
+      expect(Math.max(...zs)).toBeCloseTo(30, 4);
+    }
+    // Seen along its axis a cylinder has no silhouette: its circles are the outline.
+    expect(curved.flatMap((i) => faceSilhouettes(g, i, { x: 0, y: 0, z: 1 }))).toEqual([]);
+    // Flat faces have none.
+    const flat = g.faces.findIndex((f) => f.surface === "plane");
+    expect(faceSilhouettes(g, flat, { x: 1, y: 0, z: 0 })).toEqual([]);
+  });
+
+  it("finds the outline of a sphere as a closed curve on the sphere", () => {
+    const half: Profile2 = {
+      outer: {
+        curves: [
+          { type: "arc", center: { x: 0, y: 0 }, radius: 10, startAngle: 0, sweep: Math.PI },
+          { type: "line", a: { x: -10, y: 0 }, b: { x: 10, y: 0 } },
+        ],
+      },
+      holes: [],
+    };
+    const g = kernel.tessellate(
+      kernel.revolve([half], ORIGIN_PLANES.XY, { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, 360),
+    );
+    const d = { x: 0.3, y: 0.5, z: 0.8 };
+    const n = Math.hypot(d.x, d.y, d.z);
+    const points = g.faces
+      .flatMap((f, i) => (f.surface === "sphere" ? faceSilhouettes(g, i, d) : []))
+      .flat();
+    expect(points.length).toBeGreaterThan(10);
+    for (const p of points) {
+      expect(Math.hypot(p.x, p.y, p.z)).toBeCloseTo(10, 3);
+      expect((p.x * d.x + p.y * d.y + p.z * d.z) / n).toBeCloseTo(0, 3);
+    }
   });
 });

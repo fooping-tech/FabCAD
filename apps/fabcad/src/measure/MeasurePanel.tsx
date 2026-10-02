@@ -1,9 +1,10 @@
 import { type MeasureValue, formatMeasure } from "@fabcad/geometry";
 import { type ReactElement, useMemo } from "react";
 import { stopMeasure } from "../app/actions";
-import { appState, toast } from "../app/appState";
+import { appState, lastViewportPoint, toast } from "../app/appState";
 import { documentStore, modelState, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { FloatingPanel } from "../ui/FloatingPanel";
 import { Icon } from "../ui/Icon";
 import { type MeasureContext, type Measurement, measureSelection } from "./items";
 
@@ -55,6 +56,8 @@ export function MeasurePanel(): ReactElement | null {
   const selection = useStore(appState, (s) => s.selection);
   const bodies = useStore(modelState, (s) => s.bodies);
   const doc = useDocument();
+  // Opened beside the click where measuring started; later picks do not move it.
+  const anchor = useMemo(() => (measuring ? lastViewportPoint() : null), [measuring]);
   const result = useMemo(
     () => (measuring ? measureSelection(selection, measureContext()) : null),
     // The document and the bodies are read through the context.
@@ -67,13 +70,7 @@ export function MeasurePanel(): ReactElement | null {
     ...result.picks.flatMap((p, i) => p.values.map((v) => ({ ...v, label: `${i + 1} ${v.label}` }))),
   ];
   return (
-    <div className="floating measure" role="dialog" aria-label="Measure">
-      <div className="floating-title">
-        <span>Measure</span>
-        <button className="icon-btn" aria-label="Close" onClick={stopMeasure}>
-          <Icon name="close" size={14} />
-        </button>
-      </div>
+    <FloatingPanel id="measure" anchor={anchor} title="Measure" className="measure" onClose={stopMeasure}>
       <div className="floating-body">
         {result.picks.length === 0 && (
           <p className="field-hint" style={{ margin: 0 }}>
@@ -119,6 +116,6 @@ export function MeasurePanel(): ReactElement | null {
           </div>
         )}
       </div>
-    </div>
+    </FloatingPanel>
   );
 }

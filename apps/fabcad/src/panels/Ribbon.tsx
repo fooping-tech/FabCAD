@@ -96,41 +96,6 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function NumberOption({
-  label,
-  value,
-  min,
-  step = 1,
-  unit,
-  onChange,
-}: {
-  unit?: string;
-  label: string;
-  value: number;
-  min: number;
-  step?: number;
-  onChange: (v: number) => void;
-}): ReactElement {
-  return (
-    <label>
-      {label}
-      <input
-        type="number"
-        inputMode="decimal"
-        value={value}
-        min={min}
-        step={step}
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          if (Number.isFinite(v) && v >= min) onChange(v);
-        }}
-        onKeyDown={(e) => e.stopPropagation()}
-      />
-      {unit}
-    </label>
-  );
-}
-
 /** Tools shown directly in the sketch ribbon; the rest live in the "More" menus. */
 const PRIMARY_CREATE = ["line", "rectangle-2point", "circle", "arc-3point", "polygon-inscribed", "slot", "spline-fit"];
 const PRIMARY_MODIFY = ["trim", "extend", "offset", "mirror", "move", "copy", "fillet"];
@@ -314,37 +279,6 @@ function SketchRibbon(): ReactElement {
             active={options.construction}
             onClick={toggleSelectedConstruction}
           />
-          {(tool === "polygon-inscribed" || tool === "polygon-circumscribed") && (
-            <NumberOption label="Sides" value={options.polygonSides} min={3} onChange={(v) => setOptions({ polygonSides: Math.round(v) })} />
-          )}
-          {tool === "fillet" && (
-            <NumberOption unit="mm" label="Radius" value={options.filletRadius} min={0.01} step={0.5} onChange={(v) => setOptions({ filletRadius: v })} />
-          )}
-          {tool === "chamfer" && (
-            <NumberOption unit="mm" label="Distance" value={options.chamferDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ chamferDistance: v })} />
-          )}
-          {tool === "offset" && (
-            <NumberOption unit="mm" label="Distance" value={options.offsetDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ offsetDistance: v })} />
-          )}
-          {tool === "scale" && (
-            <NumberOption label="Factor" value={options.scaleFactor} min={0.001} step={0.1} onChange={(v) => setOptions({ scaleFactor: v })} />
-          )}
-          {(tool === "rectangular-pattern" || tool === "circular-pattern") && (
-            <NumberOption label="Count" value={options.patternCount} min={2} onChange={(v) => setOptions({ patternCount: Math.round(v) })} />
-          )}
-          {tool === "rectangular-pattern" && (
-            <NumberOption label="Rows" value={options.patternCountY} min={1} onChange={(v) => setOptions({ patternCountY: Math.round(v) })} />
-          )}
-          {tool === "mirror" && (
-            <label>
-              <input
-                type="checkbox"
-                checked={options.mirrorSymmetry}
-                onChange={(e) => setOptions({ mirrorSymmetry: e.target.checked })}
-              />
-              Symmetry constraints
-            </label>
-          )}
           <label title="Snap free positions to whole millimetres (hold Ctrl / Cmd to switch off)">
             <input
               type="checkbox"

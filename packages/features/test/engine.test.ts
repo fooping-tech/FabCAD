@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { type GeometryKernel, edgePolyline } from "@fabcad/brep";
+import { type GeometryKernel, edgePolyline, faceSilhouettes, polylineMidpoint } from "@fabcad/brep";
 import { ORIGIN_PLANES } from "@fabcad/geometry";
 import {
   type CadDocument,
@@ -41,7 +41,7 @@ import {
 } from "@fabcad/sketch";
 import { createDefaultSolver } from "@fabcad/sketch-solver";
 import { nodeKernel } from "../../brep/test/nodeKernel";
-import { FeatureEngine, resolveDocumentSketches, solveSketchWithParameters } from "../src";
+import { FeatureEngine, makeFaceRef, resolveDocumentSketches, solveSketchWithParameters } from "../src";
 
 let kernel: GeometryKernel;
 const solver = createDefaultSolver();
@@ -455,6 +455,68 @@ describe("feature engine", () => {
     expect(result.sketchUpdates).toEqual({});
     store.undo();
     expect(length(store.document)).toBeCloseTo(100, 6);
+  });
+
+  it("re-projects the silhouette of a cylinder when its radius changes", async () => {
+    const store = new DocumentStore(createDocument());
+    run(store, addParameter({ name: "r", expression: "20", unit: "mm" }));
+    const s: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, s));
+    solvedEdit(store, s.id!, (sk) =>
+      editSketch(sk, (b) => {
+        const c = createCircle(b, { x: 0, y: 0 }, 20);
+        b.dimension("radius", [c.entities[0]!], "r");
+        b.constrain("fix", c.points[0]!);
+      }),
+    );
+    const region = detectProfiles(sketchOf(store.document, s.id!))[0]!;
+    const e: CreatedRef = {};
+    store.execute(addExtrude({ sketchId: s.id!, profiles: [profileRefOf(region)], distance: "30" }, e));
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    const geometry = engine.bodyGeometry(e.bodyId!)!;
+    const names = engine.bodyNames(e.bodyId!)!;
+
+    // Seen from the side (YZ plane), every curved face has a silhouette at y = ±r.
+    const plane = ORIGIN_PLANES.YZ;
+    const p: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "YZ" }, p));
+    store.execute(
+      updateSketch(p.id!, "Project", (sk) => {
+        let current = sk;
+        geometry.faces.forEach((f, i) => {
+          for (const chain of faceSilhouettes(geometry, i, plane.normal)) {
+            const shape = projectPolyline(plane, chain)!;
+            current = addProjection(current, shape, {
+              bodyId: e.bodyId!,
+              source: "silhouette",
+              hint: polylineMidpoint(chain),
+              ref: makeFaceRef({ geometry, names }, i)!,
+            })!.sketch;
+          }
+        });
+        return current;
+      }),
+    );
+    const xs = (doc: CadDocument): number[] => {
+      const sk = sketchOf(doc, p.id!);
+      return sk.projections
+        .flatMap((r) => r.entityIds)
+        .flatMap((id) => (sk.entities[id]!.type === "point" ? [(sk.entities[id] as { x: number }).x] : []))
+        .map((x) => Math.round(Math.abs(x) * 1e4) / 1e4);
+    };
+    expect(sketchOf(store.document, p.id!).projections).toHaveLength(2);
+    expect(new Set(xs(store.document))).toEqual(new Set([20]));
+
+    run(store, updateParameter(store.document.parameters[0]!.id, { expression: "25" }));
+    const result = await engine.recompute(store.document);
+    const updated = result.sketchUpdates[p.id!]!;
+    expect(updated).toBeDefined();
+    store.amend((doc) => ({
+      ...doc,
+      features: { ...doc.features, [p.id!]: { ...(doc.features[p.id!] as SketchFeature), sketch: updated } },
+    }));
+    expect(new Set(xs(store.document))).toEqual(new Set([25]));
   });
 
   it("exports STEP and STL", async () => {
