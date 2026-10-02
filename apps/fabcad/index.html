@@ -37,6 +37,7 @@
           <a href="#design">Design</a>
           <a href="#fabrication">Fabrication</a>
           <a href="#workflow">How it works</a>
+          <a href="#ai-agents">AI Agents</a>
           <a href="https://github.com/fooping-tech/FabCAD" rel="noopener">GitHub</a>
         </nav>
         <a class="button primary small" href="./app/">FabCADを開く</a>
@@ -227,6 +228,66 @@
               <p class="fine">スマートフォンでの動作は、ブラウザのエミュレーションで確認しています。</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="section" id="ai-agents">
+        <div class="wrap">
+          <p class="eyebrow center">FOR AI AGENTS</p>
+          <h2 class="center">Let an AI agent do the clicking.</h2>
+          <p class="sub center">画面を見てマウスとキーボードで操作するAIエージェント（computer use）に、FabCADでの作図を頼めます。エージェント向けのガイド、座標の入力、コマンドパレット、作業の記録を用意しています。ここでは、エージェントに指示を出す人のための使い方をまとめます。</p>
+
+          <div class="cards reveal">
+            <article class="card">
+              <h3>頼み方</h3>
+              <ol class="plain-steps">
+                <li>ブラウザを操作できるAIエージェントに、FabCADを開かせます。</li>
+                <li>作業の前に、エージェント向けガイド <a class="link" href="./llms.txt">llms.txt</a> を読ませます（<a class="link" href="./agents/">HTML版</a>）。</li>
+                <li>作りたい物を、寸法と基準の位置まで数値で伝えます。</li>
+                <li>終わったら、作業の記録で結果を確かめさせ、報告させます。</li>
+              </ol>
+            </article>
+            <article class="card">
+              <h3>うまく頼むコツ</h3>
+              <ul class="plain-list">
+                <li>「だいたい」ではなく数値で。原点をどこに置くか、どの平面に描くか（XY平面など）も書きます。</li>
+                <li>点は座標の入力（<code>30, 20</code>、<code>@60, 40</code>）で、コマンドはコマンドパレット（Ctrl / Cmd + K）で、と指示すると、クリックの位置ずれで失敗しにくくなります。</li>
+                <li>部品は1つずつ。複雑な形は手順に分けて頼みます。</li>
+                <li>レーザー加工なら、材料と厚さも伝えます。板の厚さと材料の厚さが合わないと部品になりません。</li>
+              </ul>
+            </article>
+            <article class="card">
+              <h3>確かめ方</h3>
+              <ul class="plain-list">
+                <li>タイムラインの左端のボタンで「作業の記録」が開きます。各ステップの成否とBodyの体積が並び、画面で読めるので、エージェントも確かめられます。Copyでプロジェクトの中身も含めてコピーできます。</li>
+                <li>エージェントに、記録のステップがすべて ok か、体積が計算どおりかを確認させます。</li>
+                <li>うまくいかなかったときは、この記録を貼れば状況を正確に伝えられます。</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="prompt reveal">
+            <div class="prompt-head">
+              <h3>指示文の例</h3>
+              <button class="button ghost small" type="button" data-copy="agent-prompt">コピー</button>
+            </div>
+            <pre id="agent-prompt">FabCAD（https://fooping-tech.github.io/FabCAD/app/）で、次の部品を作ってください。
+作業を始める前に https://fooping-tech.github.io/FabCAD/llms.txt を読み、そこに書かれた操作方法に従ってください。
+
+作るもの
+- XY平面に、原点を左下の角とする 60 × 40 mm の長方形を描き、5 mm 押し出した板
+- 板の中心（30, 20）に、直径 8 mm の貫通穴
+- 材料：MDF、厚さ 5 mm。レーザー加工用の SVG を書き出す
+
+進め方
+- 点は座標の入力（x, y や @dx, dy）で置き、コマンドはコマンドパレット（Ctrl / Cmd + K）で実行する
+- 各ステップの後、ステータスバーと画面の表示で結果を確かめてから次に進む
+
+完了の確認
+- タイムラインの左端のボタンで作業の記録を開き、すべてのステップが ok であること、Body の体積が 60 × 40 × 5 − π × 4² × 5 ≒ 11749 mm³ であることを確かめて報告する</pre>
+          </div>
+
+          <p class="fine center">AIエージェントは間違えることがあります。書き出したファイルは、加工の前に寸法を確かめてください。プロジェクトはこのブラウザの中に保存され、どこにも送信されません。</p>
         </div>
       </section>
 

@@ -2,7 +2,6 @@ import { listFeatures, setFeatureSuppressed, setTimelineCursor } from "@fabcad/c
 import type { ReactElement } from "react";
 import { editFeature, featureIcon, pickInDialog } from "../app/actions";
 import { appState, isAdditiveClick, isSelected, select, toast } from "../app/appState";
-import { copyHistoryLog } from "../app/copyHistoryLog";
 import { useHelpTrigger } from "../help/useHelpTrigger";
 import { openContextMenu } from "../app/contextMenu";
 import { documentStore, modelState, run, useDocument } from "../app/session";
@@ -10,16 +9,16 @@ import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
 
 function CopyLogButton(): ReactElement {
-  const title = "Copy history log — the steps, their errors and the project, for a bug report";
-  const trigger = useHelpTrigger({ id: "timeline.copy-log", title: "Copy History Log" });
+  const title = "History log — the steps, their errors and the bodies; Copy adds the project, for a bug report";
+  const trigger = useHelpTrigger({ id: "timeline.copy-log", title: "History Log" });
   const { guard, ...handlers } = trigger ?? { guard: (f: () => void) => f };
   return (
     <button
       className="icon-btn"
       title={title}
-      aria-label="Copy history log"
+      aria-label="History log"
       {...handlers}
-      onClick={guard(() => void copyHistoryLog())}
+      onClick={guard(() => appState.set((st) => ({ historyLogOpen: !st.historyLogOpen })))}
     >
       <Icon name="copy" size={14} />
     </button>

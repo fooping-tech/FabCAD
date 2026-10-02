@@ -51,3 +51,22 @@ void hasSavedProject().then((saved) => {
   const banner = document.getElementById("welcome-back");
   if (saved && banner) banner.hidden = false;
 });
+
+/** Copy buttons: copy the text of the element named by `data-copy`. */
+for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+  button.addEventListener("click", () => {
+    const target = document.getElementById(button.dataset.copy ?? "");
+    if (!target) return;
+    const label = button.textContent;
+    navigator.clipboard
+      .writeText(target.textContent ?? "")
+      .then(() => {
+        button.textContent = "コピーしました";
+        setTimeout(() => (button.textContent = label), 1600);
+      })
+      .catch(() => {
+        // Without clipboard access the text can still be selected by hand.
+        getSelection()?.selectAllChildren(target);
+      });
+  });
+}

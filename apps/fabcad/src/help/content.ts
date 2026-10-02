@@ -96,11 +96,11 @@ export const HELP: Record<string, HelpEntry> = {
     when: ["When a tool is in a menu, its icon is hard to tell apart, or the keyboard is quicker."],
   },
   "timeline.copy-log": {
-    title: "Copy History Log",
-    summary: "Copy the design history as text, to report a problem.",
+    title: "History Log",
+    summary: "The design history as text: to check a result, or to report a problem.",
     what: [
-      "The button at the left end of the timeline copies every step with its status and error message, the settings of each step, the size and make-up of each body (volume, faces, separate pieces), and the project itself.",
-      "Paste it into a bug report: with the project in it, the result can be computed again exactly.",
+      "The button at the left end of the timeline opens the history log: every step with its status and error message, the settings of each step, and the size and make-up of each body (volume, faces, separate pieces). It follows the model while it is open.",
+      "Copy puts it on the clipboard together with the project itself. Paste it into a bug report: with the project in it, the result can be computed again exactly.",
     ],
     limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],
   },

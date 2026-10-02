@@ -348,6 +348,8 @@ table.grid td input { padding: 2px 5px; }
 .floating-name { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .floating-grip { flex: none; width: 8px; height: 12px; background: radial-gradient(circle, var(--ink-faint) 1px, transparent 1.4px) 0 0 / 4px 4px; opacity: 0.8; }
 .tool-window { width: 236px; }
+.floating.history-log { width: min(560px, calc(100vw - 16px)); }
+.history-log-text { margin: 0; max-height: min(52vh, 460px); overflow: auto; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel-alt); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; user-select: text; }
 .tool-field { grid-template-columns: 70px minmax(0, 1fr); }
 .tool-field.check { display: flex; gap: 6px; color: var(--ink); }
 .tool-input { display: flex; align-items: center; gap: 4px; }

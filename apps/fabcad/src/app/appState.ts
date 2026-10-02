@@ -361,6 +361,8 @@ export interface AppState {
   pointEntry: { text: string; error?: string } | null;
   /** The command palette (Ctrl / Cmd + K) while it is open, with what has been typed. */
   commandPalette: { query: string } | null;
+  /** The window with the history log (steps, bodies) is open. */
+  historyLogOpen: boolean;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
   cursor: Vec2 | null;
   toasts: Toast[];
@@ -423,6 +425,7 @@ export const appState = new TinyStore<AppState>({
   sketchOffset: null,
   pointEntry: null,
   commandPalette: null,
+  historyLogOpen: false,
   cursor: null,
   toasts: [],
   hint: "",

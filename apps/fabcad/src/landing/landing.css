@@ -142,3 +142,11 @@ p { margin: 0; }
   .steps { grid-template-columns: minmax(0, 1fr); }
   .lede { font-size: 16.5px; }
 }
+
+/* For AI agents: how to instruct one. */
+.plain-steps, .plain-list { margin: 12px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+.plain-steps li, .plain-list li { margin-top: 6px; }
+.prompt { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px 22px; }
+.prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.prompt pre { margin: 14px 0 0; padding: 16px 18px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 8px; color: var(--text); font: 13px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+#ai-agents .fine { margin-top: 22px; }
