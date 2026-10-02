@@ -47,6 +47,12 @@ export interface MeshEdgeGroup {
   /** For circles and circular arcs. */
   radius?: number;
   center?: Vec3;
+  /**
+   * Control points of a Bézier edge (the spans of sketch splines and ellipses), trimmed to the
+   * edge, in the direction of the curve. A projection of the edge onto a plane is the Bézier
+   * of the projected control points: exact, unlike anything fitted to the tessellation.
+   */
+  bezier?: Vec3[];
 }
 
 /** Display geometry of one body. All arrays are transferable between threads. */

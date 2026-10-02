@@ -197,6 +197,64 @@ function fuseAll(shapes: Shape3D[]): Shape3D {
 
 const vec = (v: { x: number; y: number; z: number }): Vec3 => ({ x: v.x, y: v.y, z: v.z });
 
+interface BezierLike {
+  IsRational(): boolean;
+  NbPoles(): number;
+  Pole(i: number): { X(): number; Y(): number; Z(): number };
+}
+interface CurveAdaptorLike {
+  Bezier(): BezierLike;
+  FirstParameter(): number;
+  LastParameter(): number;
+}
+
+/** Control points of a polynomial Bézier edge, cut down to the part the edge uses. */
+function bezierPoles(edge: replicad.Edge): Vec3[] | null {
+  let curve: replicad.Curve | null = null;
+  try {
+    curve = edge.curve;
+    const adaptor = curve.wrapped as unknown as CurveAdaptorLike;
+    const bezier = adaptor.Bezier();
+    if (bezier.IsRational()) return null;
+    const poles: Vec3[] = [];
+    for (let i = 1; i <= bezier.NbPoles(); i++) {
+      const p = bezier.Pole(i);
+      poles.push({ x: p.X(), y: p.Y(), z: p.Z() });
+    }
+    return trimBezier(poles, adaptor.FirstParameter(), adaptor.LastParameter());
+  } catch {
+    return null;
+  } finally {
+    curve?.delete();
+  }
+}
+
+/** The control points of the part [u0, u1] of a Bézier curve (de Casteljau, twice). */
+export function trimBezier(poles: Vec3[], u0: number, u1: number): Vec3[] {
+  const split = (pts: Vec3[], t: number): [Vec3[], Vec3[]] => {
+    const left: Vec3[] = [];
+    const right: Vec3[] = [];
+    let row = pts;
+    while (row.length > 0) {
+      left.push(row[0]!);
+      right.unshift(row[row.length - 1]!);
+      const next: Vec3[] = [];
+      for (let i = 0; i + 1 < row.length; i++) {
+        const a = row[i]!;
+        const b = row[i + 1]!;
+        next.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
+      }
+      row = next;
+    }
+    return [left, right];
+  };
+  if (Math.abs(u0) < 1e-12 && Math.abs(u1 - 1) < 1e-12) return poles;
+  const [, after] = split(poles, u0);
+  if (u1 >= 1 - 1e-12) return after;
+  const [middle] = split(after, (u1 - u0) / (1 - u0));
+  return middle;
+}
+
 /** Circle through three points in space. */
 function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: number } | null {
   const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
@@ -657,6 +715,10 @@ class ReplicadKernel implements GeometryKernel {
           to,
           closed: dist3(from, to) < 1e-7 && (edge?.length ?? 0) > 1e-7,
         };
+        if (edge && type === "BEZIER_CURVE") {
+          const poles = bezierPoles(edge);
+          if (poles) group.bezier = poles;
+        }
         if (edge && type === "CIRCLE") {
           // Three points on the curve give the circle exactly.
           const circle = circleThrough(vec(edge.pointAt(0)), vec(edge.pointAt(1 / 3)), vec(edge.pointAt(2 / 3)));

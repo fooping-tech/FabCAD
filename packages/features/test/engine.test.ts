@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { type GeometryKernel, edgePolyline, faceSilhouettes, polylineMidpoint } from "@fabcad/brep";
-import { ORIGIN_PLANES } from "@fabcad/geometry";
+import { type GeometryKernel, edgePolyline, faceEdges, faceSilhouettes, polylineMidpoint } from "@fabcad/brep";
+import { ORIGIN_PLANES, makePlane } from "@fabcad/geometry";
 import {
   type CadDocument,
   type CreatedRef,
@@ -30,8 +30,10 @@ import {
 import {
   type Sketch,
   addProjection,
+  projectCurve,
   projectPolyline,
   createCircle,
+  createSpline,
   createPolyline,
   createRectangle2Point,
   detectProfiles,
@@ -455,6 +457,77 @@ describe("feature engine", () => {
     expect(result.sketchUpdates).toEqual({});
     store.undo();
     expect(length(store.document)).toBeCloseTo(100, 6);
+  });
+
+  it("projects spline edges exactly, so that a cut along a face outline stays one clean body", async () => {
+    // The shape of the report: a closed fit spline extruded, then a sketch on its face with the
+    // outline of the face projected, cut 2 mm into the body.
+    const store = new DocumentStore(createDocument());
+    const s: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, s));
+    solvedEdit(store, s.id!, (sk) =>
+      editSketch(sk, (b) => {
+        createSpline(
+          b,
+          "fit",
+          [
+            { x: 28, y: 29 },
+            { x: 13, y: 37 },
+            { x: -13, y: 35 },
+            { x: -38, y: 40 },
+            { x: -43, y: 51 },
+            { x: -25, y: 54 },
+            { x: 20, y: 45 },
+          ],
+          true,
+        );
+      }),
+    );
+    const region = detectProfiles(sketchOf(store.document, s.id!))[0]!;
+    const e: CreatedRef = {};
+    store.execute(addExtrude({ sketchId: s.id!, profiles: [profileRefOf(region)], distance: "10" }, e));
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    const geometry = engine.bodyGeometry(e.bodyId!)!;
+    const before = geometry.volume;
+    const top = geometry.faces.findIndex((f) => f.surface === "plane" && f.normal.z > 0.99);
+    const outline = faceEdges(geometry, top);
+    expect(outline.length).toBe(7);
+    expect(outline.every((edge) => edge.bezier?.length === 4)).toBe(true);
+
+    const plane = makePlane({ x: 0, y: 0, z: 10 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 });
+    const p: CreatedRef = {};
+    store.execute(addSketch({ type: "custom", plane }, p));
+    store.execute(
+      updateSketch(p.id!, "Project", (sk) =>
+        outline.reduce((current, edge) => {
+          const shape = projectCurve(plane, edgePolyline(geometry, edge), edge.bezier)!;
+          expect(shape).toMatchObject({ type: "spline", kind: "control" });
+          return addProjection(current, shape, { bodyId: e.bodyId!, source: "edge", hint: edge.midpoint })!.sketch;
+        }, sk),
+      ),
+    );
+    // The projected curves are the original ones: the profile has the area of the face.
+    const projected = detectProfiles(sketchOf(store.document, p.id!));
+    expect(projected).toHaveLength(1);
+    expect(projected[0]!.area).toBeCloseTo(before / 10, 3);
+
+    store.execute(
+      addExtrude({
+        sketchId: p.id!,
+        profiles: [profileRefOf(projected[0]!)],
+        distance: "2",
+        direction: "negative",
+        operation: "cut",
+        targetBodyIds: [e.bodyId!],
+      }),
+    );
+    const result = await engine.recompute(store.document);
+    expect(Object.values(result.features).every((f) => f.state === "ok")).toBe(true);
+    const cut = engine.bodyGeometry(e.bodyId!)!;
+    expect(cut.volume).toBeCloseTo((before * 8) / 10, 1);
+    // Still one block with the faces of the original: no slivers.
+    expect(cut.faces.length).toBe(geometry.faces.length);
   });
 
   it("re-projects the silhouette of a cylinder when its radius changes", async () => {

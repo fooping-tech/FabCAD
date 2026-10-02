@@ -377,6 +377,13 @@ table.grid td input { padding: 2px 5px; }
 .overlay-card p { margin: 0 0 10px; color: var(--ink-soft); }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; margin: 0 auto 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.spinner.small { width: 11px; height: 11px; border-width: 2px; margin: 0; display: inline-block; flex: none; }
+.computing-badge {
+  position: absolute; z-index: 7; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 7px; pointer-events: none;
+  background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line); border-radius: 14px;
+  padding: 4px 11px; font-size: 11px; color: var(--ink-soft); box-shadow: 0 1px 3px rgba(29, 43, 56, 0.1);
+}
 
 /* ----------------------------------------------------------------- timeline */
 .timeline {
@@ -499,6 +506,7 @@ table.grid td input { padding: 2px 5px; }
 
 @media (pointer: coarse) {
   .touch-bar { display: flex; }
+  .computing-badge { bottom: auto; top: 50px; }
   .tool { min-width: 42px; height: 42px; }
   .tree-row { height: 32px; }
   .tree-eye { opacity: 1; width: 30px; height: 30px; }

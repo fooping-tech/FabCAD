@@ -1130,6 +1130,14 @@ export function Viewport(): ReactElement {
     return out;
   }
 
+  // After the page is opened, nothing is shown until the project is found and its history has
+  // been computed: say so. Later recomputes keep the old bodies on screen, so a small badge is
+  // enough, and only when they take long enough to notice.
+  const building =
+    model.kernel === "ready" &&
+    (model.restoring || (model.busy && doc.timeline.length > 0 && Object.keys(model.bodies).length === 0));
+  const computing = useDelayed(model.kernel === "ready" && model.busy && !building, 400);
+
   const activeSketch = app.activeSketchId ? doc.features[app.activeSketchId] : undefined;
   const view = activeSketch?.type === "sketch" ? sketchView(activeSketch.sketch, doc) : null;
   const tooling = app.activeSketchId !== null && app.tool !== "select";
@@ -1218,6 +1226,22 @@ export function Viewport(): ReactElement {
         </div>
       </div>
 
+      {building && (
+        <div className="overlay-note" role="status" aria-live="polite">
+          <div className="overlay-card">
+            <div className="spinner" />
+            <h3>{model.restoring ? "Opening the project" : "Building the model"}</h3>
+            <p>The bodies appear as soon as the history has been computed.</p>
+          </div>
+        </div>
+      )}
+      {computing && (
+        <div className="computing-badge" role="status" aria-live="polite">
+          <span className="spinner small" />
+          Computing…
+        </div>
+      )}
+
       {model.kernel !== "ready" && (
         <div className="overlay-note">
           <div className="overlay-card">
@@ -1238,6 +1262,20 @@ export function Viewport(): ReactElement {
       )}
     </div>
   );
+}
+
+/** `value`, but true only once it has stayed true for `ms` (no flicker for short work). */
+function useDelayed(value: boolean, ms: number): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!value) {
+      setShown(false);
+      return;
+    }
+    const t = setTimeout(() => setShown(true), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return value && shown;
 }
 
 /** Inline expression editor shown on top of a dimension label. */

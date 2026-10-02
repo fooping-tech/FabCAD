@@ -91,7 +91,7 @@ import {
   entityToCurves,
   getPoint,
   hitTestSketch,
-  projectPolyline,
+  projectCurve,
   resolveProfileRefs,
   textOutlineAt,
   updateProjection,
@@ -518,6 +518,7 @@ export class FeatureEngine {
       const geometry = body.geometry;
       let points: Vec3[];
       let hint: Vec3;
+      let bezier: Vec3[] | undefined;
       if (ref.source === "silhouette") {
         const index = ref.ref
           ? (resolveFaceRef(ref.ref, body)?.index ?? -1)
@@ -567,8 +568,9 @@ export class FeatureEngine {
         if (!edge) continue;
         points = edgePolyline(geometry, edge);
         hint = edge.midpoint;
+        bezier = edge.bezier;
       }
-      const shape = projectPolyline(plane, points);
+      const shape = projectCurve(plane, points, bezier);
       const live = current.projections.find((r) => r.id === ref.id);
       if (!shape || !live) continue;
       current = updateProjection(current, live, shape, hint) ?? current;

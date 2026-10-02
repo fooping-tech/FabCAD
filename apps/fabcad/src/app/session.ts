@@ -53,6 +53,8 @@ export interface ModelState {
   kernel: "loading" | "ready" | "error";
   kernelError: string;
   busy: boolean;
+  /** The automatically saved project is still being looked for after the page was opened. */
+  restoring: boolean;
   bodies: Record<string, BodyModel>;
   /** Construction planes as evaluated, by feature id. */
   planes: Record<string, PlaneResult>;
@@ -65,6 +67,7 @@ export const modelState = new TinyStore<ModelState>({
   kernel: "loading",
   kernelError: "",
   busy: false,
+  restoring: true,
   bodies: {},
   planes: {},
   features: {},
@@ -448,18 +451,21 @@ export function startSession(): void {
     }, 1200);
   });
 
-  void loadAutosave().then((json) => {
-    if (!json || documentStore.canUndo) return;
-    try {
-      const doc = deserializeDocument(json);
-      if (doc.timeline.length > 0 || doc.parameters.length > 0) {
-        loadDocument(doc);
-        toast("Restored the automatically saved project.");
+  void loadAutosave()
+    .then((json) => {
+      if (!json || documentStore.canUndo) return;
+      try {
+        const doc = deserializeDocument(json);
+        if (doc.timeline.length > 0 || doc.parameters.length > 0) {
+          loadDocument(doc);
+          toast("Restored the automatically saved project.");
+        }
+      } catch {
+        // A broken autosave is ignored.
       }
-    } catch {
-      // A broken autosave is ignored.
-    }
-  });
+    })
+    .catch(() => undefined)
+    .finally(() => modelState.set({ restoring: false }));
 
   engine()
     .request({ type: "init" })

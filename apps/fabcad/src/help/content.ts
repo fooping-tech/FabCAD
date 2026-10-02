@@ -263,6 +263,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click an edge, a face or a vertex of a body: its projection onto the sketch plane is added to the sketch.",
       "A curved face also gives its silhouette: where it turns away from the sketch plane. A cylinder seen from the side becomes a rectangle, a sphere a circle. Edges that land on the same line (the seams of a cylinder seen from the side) are projected once.",
+      "Curved edges made from sketch splines (and ellipses) are projected exactly, as control splines, so that a profile drawn on the projection matches the faces of the body.",
       "Projected geometry follows the body when the body changes.",
     ],
     when: ["To dimension or constrain against what is already there."],

@@ -4,6 +4,7 @@ import { createSketch } from "../src/model";
 import { editSketch } from "../src/edit";
 import {
   addProjection,
+  projectCurve,
   projectPolyline,
   projectedEntityIds,
   projectedShapes,
@@ -108,5 +109,34 @@ describe("projected shapes", () => {
     const beside = projectPolyline(XY, [{ x: 1, y: 0, z: 0 }, { x: 1, y: 30, z: 0 }])!;
     expect(sameProjectedShape(shapes[0]!, beside)).toBe(false);
     expect(sameProjectedShape(shapes[0]!, projectPolyline(XY, circle3d(5, 0))!)).toBe(false);
+  });
+});
+
+describe("projectCurve", () => {
+  const poles = [
+    { x: 0, y: 0, z: 7 },
+    { x: 10, y: 0.1, z: 7 },
+    { x: 20, y: 0.1, z: 7 },
+    { x: 30, y: 0, z: 7 },
+  ];
+  // A nearly straight span tessellated with two points looks like a line.
+  const samples = [poles[0]!, poles[3]!];
+
+  it("keeps a Bézier edge as the Bézier of its projected control points", () => {
+    expect(projectPolyline(XY, samples)).toMatchObject({ type: "line" });
+    expect(projectCurve(XY, samples, poles)).toEqual({
+      type: "spline",
+      kind: "control",
+      points: poles.map((p) => ({ x: p.x, y: p.y })),
+      closed: false,
+    });
+  });
+
+  it("raises a quadratic to a cubic, and falls back to the samples when seen edge-on", () => {
+    const quad = projectCurve(XY, samples, [poles[0]!, { x: 15, y: 6, z: 7 }, poles[3]!]);
+    expect(quad).toMatchObject({ type: "spline", kind: "control" });
+    if (quad?.type === "spline") expect(quad.points[1]).toEqual({ x: 10, y: 4 });
+    const edgeOn = projectCurve(ORIGIN_PLANES.XZ, [poles[0]!, poles[3]!], poles);
+    expect(edgeOn).toMatchObject({ type: "line" });
   });
 });

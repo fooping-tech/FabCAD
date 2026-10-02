@@ -24,7 +24,8 @@ export type ProjectedShape =
   | { type: "circle"; center: Vec2; radius: number }
   /** Counter-clockwise from `start` to `end`. */
   | { type: "arc"; center: Vec2; start: Vec2; end: Vec2 }
-  | { type: "spline"; points: Vec2[]; closed: boolean };
+  /** A fit spline through `points`, or with `kind: "control"` the control polygon of a Bézier. */
+  | { type: "spline"; points: Vec2[]; closed: boolean; kind?: "control" };
 
 const TOL = 1e-6;
 
@@ -122,6 +123,42 @@ export function projectPolyline(plane: Plane3, points: readonly Vec3[]): Project
   return picked.length >= 2 ? { type: "spline", points: picked, closed } : null;
 }
 
+/**
+ * Project an edge. A Bézier edge (`bezier`: its control points) projects exactly to the
+ * Bézier of the projected control points, which a control spline holds as it is; anything else
+ * is recognised from the sampled `points` (`projectPolyline`).
+ */
+export function projectCurve(
+  plane: Plane3,
+  points: readonly Vec3[],
+  bezier?: readonly Vec3[],
+): ProjectedShape | null {
+  if (!bezier || bezier.length < 2 || bezier.length > 4) return projectPolyline(plane, points);
+  const poles = bezier.map((p) => {
+    const q = worldToPlane(plane, p);
+    return { x: q.x, y: q.y };
+  });
+  const first = poles[0]!;
+  const last = poles[poles.length - 1]!;
+  const size = Math.max(...poles.map((p) => dist2(p, first)));
+  // Seen edge-on, or straight to begin with: the sampled points give the line and its extent.
+  const flat = poles.every((p) => Math.abs(cross2(sub2(last, first), sub2(p, first))) <= 1e-9 * Math.max(1, size * size));
+  if (flat || dist2(first, last) < 1e-9) return projectPolyline(plane, points);
+  const cubic =
+    poles.length === 4
+      ? poles
+      : poles.length === 3
+        ? [
+            poles[0]!,
+            { x: poles[0]!.x + ((poles[1]!.x - poles[0]!.x) * 2) / 3, y: poles[0]!.y + ((poles[1]!.y - poles[0]!.y) * 2) / 3 },
+            { x: poles[2]!.x + ((poles[1]!.x - poles[2]!.x) * 2) / 3, y: poles[2]!.y + ((poles[1]!.y - poles[2]!.y) * 2) / 3 },
+            poles[2]!,
+          ]
+        : null;
+  if (!cubic) return projectPolyline(plane, points);
+  return { type: "spline", kind: "control", points: cubic, closed: false };
+}
+
 export interface ProjectionSource {
   bodyId: string;
   source: "edge" | "vertex" | "silhouette";
@@ -166,7 +203,7 @@ export function addProjection(
       ids.push(b.arc(point(shape.center), point(shape.start), point(shape.end)));
       break;
     case "spline":
-      ids.push(b.spline("fit", shape.points.map(point), shape.closed));
+      ids.push(b.spline(shape.kind ?? "fit", shape.points.map(point), shape.closed));
       break;
   }
   const built = b.build();
@@ -227,6 +264,7 @@ export function updateProjection(
       break;
     case "spline":
       if (curve?.type !== "spline" || curve.points.length !== shape.points.length) return null;
+      if (curve.kind !== (shape.kind ?? "fit")) return null;
       targets = shape.points;
       break;
   }
@@ -270,6 +308,10 @@ export function sameProjectedShape(a: ProjectedShape, b: ProjectedShape, toleran
   if (a.type === "arc" && b.type === "arc") {
     return near(a.center, b.center) && near(a.start, b.start) && near(a.end, b.end);
   }
+  if (a.type === "spline" && b.type === "spline" && a.points.length === b.points.length) {
+    const same = (p: Vec2[], q: Vec2[]): boolean => p.every((x, i) => near(x, q[i]!));
+    return (a.kind ?? "fit") === (b.kind ?? "fit") && (same(a.points, b.points) || same(a.points, [...b.points].reverse()));
+  }
   return false;
 }
 
@@ -297,6 +339,16 @@ export function projectedShapes(sketch: Sketch): ProjectedShape[] {
       const start = at(curve.start);
       const end = at(curve.end);
       if (center && start && end) out.push({ type: "arc", center, start, end });
+    } else if (curve.type === "spline") {
+      const points = curve.points.map(at);
+      if (points.every((p) => p !== null)) {
+        out.push({
+          type: "spline",
+          points: points as Vec2[],
+          closed: curve.closed,
+          ...(curve.kind === "control" ? { kind: "control" as const } : {}),
+        });
+      }
     }
   }
   return out;
