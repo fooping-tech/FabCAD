@@ -144,11 +144,6 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       saveProject();
       return;
     }
-    if (meta && key === "k") {
-      e.preventDefault();
-      appState.set((st) => ({ commandPalette: st.commandPalette ? null : { query: "" }, contextMenu: null }));
-      return;
-    }
     if (meta && key === "o") {
       e.preventDefault();
       hooks.openProject();
@@ -288,5 +283,18 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
     if (tool) beginSketchPlanePick(tool);
   };
   window.addEventListener("keydown", onKey);
-  return () => window.removeEventListener("keydown", onKey);
+  // Ctrl / Cmd + K opens the command palette from anywhere, also from fields that keep their
+  // keys to themselves: it is looked at on the way down, before any field sees it.
+  const onPaletteKey = (e: KeyboardEvent): void => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+    if (e.key.toLowerCase() !== "k" && e.code !== "KeyK") return;
+    e.preventDefault();
+    e.stopPropagation();
+    appState.set((st) => ({ commandPalette: st.commandPalette ? null : { query: "" }, contextMenu: null }));
+  };
+  window.addEventListener("keydown", onPaletteKey, { capture: true });
+  return () => {
+    window.removeEventListener("keydown", onKey);
+    window.removeEventListener("keydown", onPaletteKey, { capture: true });
+  };
 }

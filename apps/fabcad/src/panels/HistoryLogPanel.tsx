@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { appState } from "../app/appState";
-import { copyHistoryLog, currentHistoryLog } from "../app/copyHistoryLog";
+import { copyHistoryLog, currentHistoryLog, fabricationLog } from "../app/copyHistoryLog";
 import { modelState, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -15,6 +15,7 @@ export function HistoryLogPanel(): ReactElement | null {
   useDocument();
   useStore(modelState, (s) => s.features);
   useStore(modelState, (s) => s.bodies);
+  useStore(fabricationLog, (s) => s.lines);
   if (!open) return null;
   const close = (): void => appState.set({ historyLogOpen: false });
   return (

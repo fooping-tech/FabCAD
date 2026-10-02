@@ -58,6 +58,39 @@ export interface FabricationOutput {
 }
 
 /**
+ * What laser fabrication makes of the bodies, as lines of the history log: the material, what
+ * each body was recognised as, and every part with its size. It tells a plate cut as one part
+ * from a box net or a paper net at a glance, without opening the exported file.
+ */
+export function fabricationSummary(output: FabricationOutput): string[] {
+  const m = output.material;
+  const round = (v: number): number => Math.round(v * 100) / 100;
+  const lines = [
+    `Material: ${m.name} (${m.category}), thickness ${round(m.thickness)} mm, kerf ${round(m.kerf)} mm · strategy ${output.strategyId}`,
+  ];
+  for (const d of output.detections) {
+    lines.push(`- ${d.bodyName}: ${d.label} · ${d.parts} part${d.parts === 1 ? "" : "s"}${d.reason ? ` — ${d.reason}` : ""}`);
+  }
+  for (const p of output.parts) {
+    const xs = p.outline.map((v) => v.x);
+    const ys = p.outline.map((v) => v.y);
+    // Larger side first: a part may lie turned in its own frame.
+    const sides = [round(Math.max(...xs) - Math.min(...xs)), round(Math.max(...ys) - Math.min(...ys))];
+    const [w, h] = sides.sort((a, b) => b - a) as [number, number];
+    const extras = [
+      p.holes.length > 0 ? `${p.holes.length} hole${p.holes.length === 1 ? "" : "s"}` : "",
+      p.joints.length > 0 ? `${p.joints.length} joints` : "",
+      p.folds.length > 0 ? `${p.folds.length} folds` : "",
+    ].filter(Boolean);
+    lines.push(`  part "${p.name}": ${w} × ${h} mm${extras.length ? ` · ${extras.join(" · ")}` : ""}`);
+  }
+  if (output.parts.length === 0) lines.push("  no parts: nothing would be exported");
+  lines.push(`Sheets: ${output.layout.sheetCount}${output.layout.unplaced.length ? ` · ${output.layout.unplaced.length} parts do not fit` : ""}`);
+  for (const w of output.warnings) if (w.severity === "error") lines.push(`Error: ${w.message}`);
+  return lines;
+}
+
+/**
  * Why there is nothing to export: the bodies that could not be made into parts, with the
  * reason the strategy gave ("Body001: Unsupported — 5 mm thick, the material is 5.5 mm"), or
  * that there is no body at all.

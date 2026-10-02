@@ -100,6 +100,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "The design history as text: to check a result, or to report a problem.",
     what: [
       "The button at the left end of the timeline opens the history log: every step with its status and error message, the settings of each step, and the size and make-up of each body (volume, faces, separate pieces). It follows the model while it is open.",
+      "Its last part, Fabrication (laser), says what would be cut: the material, what each body was recognised as (Flat Part, Rectangular Box, Unfolded Net, Unsupported) and every part with its size.",
       "Copy puts it on the clipboard together with the project itself. Paste it into a bug report: with the project in it, the result can be computed again exactly.",
     ],
     limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],

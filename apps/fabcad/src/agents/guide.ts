@@ -63,6 +63,7 @@ const SECTIONS: Section[] = [
           "Messages appear for a few seconds as toasts at the bottom centre.",
           "Command windows (Extrude, Offset, Fillet …) show their problem next to OK, e.g. \"Select a profile\"; OK stays disabled until it is solved.",
           "For a complete record, press the button at the left end of the timeline (or run \"History Log\" from the command palette): a window lists every step with its status and settings, and the volume, faces and number of separate pieces of each body. Read it there to check a result; its Copy button also copies the project as JSON for a bug report.",
+          "The history log ends with \"Fabrication (laser)\": the material, what each body was recognised as (Flat Part, Rectangular Box, Unfolded Net, Unsupported) and every part with its size. Check it before you export, and again before you report an export as done.",
         ],
       },
     ],
@@ -132,7 +133,9 @@ const SECTIONS: Section[] = [
           {
             steps: [
               "Click FABRICATION in the header. Laser is the process selected at the top left.",
-              "In MATERIAL on the left, set Thickness to the thickness of the plate (5): a flat part must be as thick as the material. Click into the field, select its text, type 5, Enter.",
+              "In MATERIAL on the left, keep a board material in the Material list (MDF, acrylic, cardboard). Paper and Kraft unfold the body into a folding net instead of cutting it as a plate.",
+              "Set Thickness to the thickness of the plate (5): a flat part must be as thick as the material. Click into the Thickness field, select its text, type 5, Enter. Do not type while the Material list has the focus: that changes the material.",
+              "Open the History Log (command palette → History Log). Under \"Fabrication (laser)\" it must read \"Body001: Flat Part · 1 part\" and \"60 × 40 mm · 1 hole\". Anything else (Unfolded Net, Rectangular Box, Unsupported, more parts) means the settings are wrong: fix them before exporting.",
               "The Parts and Sheet tabs at the top of the view show the parts and their layout on the sheet. A body that cannot be made into parts is listed as Unsupported, with the reason.",
               "Export → \"SVG — laser cutting\" (or DXF) downloads the file. When nothing can be cut, a message says why.",
             ],

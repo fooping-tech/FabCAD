@@ -11,7 +11,10 @@ export function historyLog(
   doc: CadDocument,
   statuses: Record<string, FeatureStatus | undefined>,
   bodies: Record<string, { geometry: BodyGeometry } | undefined>,
-  meta: { version: string; date: Date; project?: boolean } = { version: "", date: new Date() },
+  meta: { version: string; date: Date; project?: boolean; fabrication?: string[] | null } = {
+    version: "",
+    date: new Date(),
+  },
 ): string {
   const features = listFeatures(doc);
   const cursor = doc.timelineCursor ?? features.length;
@@ -40,6 +43,7 @@ export function historyLog(
     const g = bodies[b.id]?.geometry;
     lines.push(`- ${b.name} (${b.id})${b.visible ? "" : " hidden"}: ${g ? describeBody(g) : "no result"}`);
   }
+  if (meta.fabrication) lines.push("", "Fabrication (laser):", ...meta.fabrication);
   // Left out where the log is read on screen; the copy carries it.
   if (meta.project !== false) lines.push("", "Project (JSON):", serializeDocument(doc, false));
   return lines.join("\n");

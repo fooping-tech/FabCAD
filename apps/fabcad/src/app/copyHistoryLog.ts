@@ -1,6 +1,13 @@
 import { toast } from "./appState";
 import { historyLog } from "./historyLog";
 import { documentStore, modelState } from "./session";
+import { TinyStore } from "./tinyStore";
+
+/**
+ * What laser fabrication makes of the bodies now (`fabricationSummary`), kept up to date by the
+ * fabrication pipeline that runs in every workspace (`App.tsx`). Null before the first result.
+ */
+export const fabricationLog = new TinyStore<{ lines: string[] | null }>({ lines: null });
 
 /** The history log of the document as it is now; `project: false` leaves out the JSON. */
 export function currentHistoryLog(project = true): string {
@@ -9,6 +16,7 @@ export function currentHistoryLog(project = true): string {
     version: __APP_VERSION__,
     date: new Date(),
     project,
+    fabrication: fabricationLog.get().lines,
   });
 }
 

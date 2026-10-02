@@ -10,6 +10,7 @@ import {
   buildSheetFiles,
   compileFabrication,
   fabricationStats,
+  fabricationSummary,
   noPartsMessage,
   usedSheets,
 } from "../src/fabrication/pipeline";
@@ -256,6 +257,19 @@ describe("compileFabrication", () => {
     expect(out.connections).toHaveLength(0);
     expect(usedSheets(out)).toHaveLength(1);
     expect(out.layout.placements).toHaveLength(1);
+  });
+
+  it("sums up what would be cut: a plate is one part, paper makes a net", () => {
+    const plate = body("Body001", rectangle(60, 40), 5.5);
+    const board = fabricationSummary(compileFabrication([plate], settings()));
+    expect(board[0]).toMatch(/^Material: MDF 5\.5 mm \(board\), thickness 5\.5 mm/);
+    expect(board).toContain("- Body001: Flat Part · 1 part");
+    expect(board.some((l) => /part ".*": 60 × 40 mm$/.test(l))).toBe(true);
+    const paper = allMaterials(defaultFabricationSettings()).find((m) => m.category === "paper")!;
+    const net = fabricationSummary(compileFabrication([plate], settings({ materialId: paper.id })));
+    expect(net[0]).toContain("(paper)");
+    expect(net.some((l) => l.startsWith("- Body001: Unfolded Net"))).toBe(true);
+    expect(net.some((l) => l.includes("folds"))).toBe(true);
   });
 
   it("says why there is nothing to export", () => {

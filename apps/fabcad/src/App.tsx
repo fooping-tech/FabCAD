@@ -10,7 +10,8 @@ import {
   exportSheets,
   useFabrication,
 } from "./fabrication";
-import { noPartsMessage } from "./fabrication/pipeline";
+import { fabricationSummary, noPartsMessage } from "./fabrication/pipeline";
+import { fabricationLog } from "./app/copyHistoryLog";
 import { HelpMenu } from "./help/HelpMenu";
 import { HelpOverlay } from "./help/HelpOverlay";
 import { BrowserTree } from "./panels/BrowserTree";
@@ -43,6 +44,11 @@ function FabricationExportBridge({
   register: (fn: (format: "svg" | "dxf") => void) => void;
 }): null {
   const fabrication = useFabrication();
+  // The history log reports what would be cut, whatever the workspace.
+  useEffect(() => {
+    const out = fabrication.output;
+    fabricationLog.set({ lines: out && fabrication.status !== "loading" ? fabricationSummary(out) : null });
+  }, [fabrication.output, fabrication.status]);
   useEffect(() => {
     register((format) => {
       const { output, settings, status, stale } = fabrication;
@@ -133,7 +139,7 @@ export function App(): ReactElement {
         <TouchBar />
         {!fabrication && <FeatureDialog />}
         {!fabrication && <SketchToolPanel />}
-        {!fabrication && <HistoryLogPanel />}
+
         {!fabrication && <MeasurePanel />}
         {!fabrication && <TextDialog />}
         {fabrication && !printing && (
@@ -148,6 +154,7 @@ export function App(): ReactElement {
       <StatusBar />
       <Toasts />
       <ContextMenu />
+      <HistoryLogPanel />
       <CommandPalette
         exportFabrication={(format) => exportHandler(format)}
         exportPrint={(format) => printExportHandler(format)}
