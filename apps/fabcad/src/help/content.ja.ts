@@ -75,6 +75,16 @@ export const HELP_JA: Record<string, HelpEntry> = {
     ],
   },
 
+  "timeline.copy-log": {
+    title: "Copy History Log",
+    summary: "不具合を報告するために、設計の履歴をテキストでコピーします。",
+    what: [
+      "タイムラインの左端のボタンで、各ステップとその状態・エラーメッセージ、各ステップの設定、各 Body の大きさと構成（体積、面、離れた部分の数）、プロジェクトそのものをコピーします。",
+      "不具合の報告に貼り付けてください。プロジェクトが含まれているので、同じ結果を計算し直せます。",
+    ],
+    limitations: ["自分で読み込んだフォントは、保存したプロジェクトと同じく含まれません。"],
+  },
+
   // ------------------------------------------------------------ sketch: create
   "solid.pick-sketch-plane": {
     title: "Create Sketch",
@@ -438,6 +448,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: [
       "スケッチの閉じた Profile を、スケッチ平面の法線方向に動かして立体にします。ビューの矢印をドラッグして距離を決められます。",
       "Body の平らな面は、スケッチを描かずにそのまま押し出せます。",
+      "押し出しを反対側に向けたとき（Flipped にする、または矢印をスケッチの反対側までドラッグする）、Body の中に入るなら Join が Cut に変わり、入った Body だけを削る対象にします。どの Body にも入らない向きに戻すと、Cut は Join に戻ります。",
     ],
     requires: ["スケッチの閉じた Profile、テキスト、または平らな面。"],
     parameters: [

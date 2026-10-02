@@ -54,3 +54,24 @@ export function directionForOperation(
   const wanted = removes(to) ? towards : away;
   return wanted === current ? null : wanted;
 }
+
+/** Where an extrusion reaches along the plane normal, as the feature engine builds it. */
+export function extrudeRange(direction: ExtrudeDirection, distance: number): [number, number] {
+  if (direction === "symmetric") return [-distance / 2, distance / 2];
+  return direction === "negative" ? [-distance, 0] : [0, distance];
+}
+
+/**
+ * Operation to switch to when an extrusion has been turned to the other side of its sketch,
+ * as in Fusion: Join becomes Cut when it now goes into bodies (`into`: the bodies that hold
+ * the middle of the extrusion), and Cut becomes Join again when it goes into none. Null leaves
+ * the operation alone.
+ */
+export function operationForSide(
+  operation: BodyOperation,
+  into: readonly string[],
+): { operation: BodyOperation; targetBodyIds?: string[] } | null {
+  if (operation === "join" && into.length > 0) return { operation: "cut", targetBodyIds: [...into] };
+  if (operation === "cut" && into.length === 0) return { operation: "join" };
+  return null;
+}

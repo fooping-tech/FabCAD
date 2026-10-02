@@ -24,8 +24,10 @@ import {
   dot3,
   makePlane,
   norm3,
+  planeToWorld,
   scale3,
 } from "@fabcad/geometry";
+import { pointInBody } from "@fabcad/brep";
 import {
   type ProfileRef,
   type Sketch,
@@ -36,7 +38,7 @@ import {
 } from "@fabcad/sketch";
 import { resolveSketchPlane } from "@fabcad/features";
 import { projectInto } from "../sketch/projectTool";
-import { directionForOperation } from "./extrudeDirection";
+import { directionForOperation, extrudeRange, operationForSide } from "./extrudeDirection";
 import { cancelText, commitText, deleteTexts } from "../text/textCommands";
 import { viewportApi } from "../viewport/api";
 import { edgeRefOf, faceIndexOf, faceRefOf, pickedOf } from "./topology";
@@ -861,7 +863,13 @@ export function patchDialog(patch: Partial<Dialog>): void {
   if (!d) return;
   let next = { ...d, ...patch } as Dialog;
   if (d.type === "extrude" && next.type === "extrude") {
-    if ("direction" in patch) {
+    const turned = ("direction" in patch || "distance" in patch) && !("operation" in patch)
+      ? operationAfterTurn(d, next)
+      : null;
+    if (turned) {
+      // The operation follows the side; the side stays what the user made it.
+      next = { ...next, ...turned, directionChosen: true };
+    } else if ("direction" in patch) {
       // A direction picked by the user is kept whatever the operation becomes.
       next = { ...next, directionChosen: true };
     } else if (!d.directionChosen && next.operation !== d.operation) {
@@ -873,6 +881,53 @@ export function patchDialog(patch: Partial<Dialog>): void {
 }
 
 type ExtrudeDialog = Extract<Dialog, { type: "extrude" }>;
+
+/** The side of its sketch an extrusion goes to: 1, -1, or 0 for symmetric or unknown. */
+function extrudeSide(dialog: ExtrudeDialog): number {
+  try {
+    const [from, to] = extrudeRange(dialog.direction, evaluateAs(dialog.distance, "length", currentScope()));
+    return Math.sign(from + to);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Join ↔ Cut when the extrusion has been turned to the other side of its sketch (direction
+ * buttons, or the arrow dragged through the sketch). It goes into a body when the middle of
+ * the extrusion under a picked profile lies inside that body.
+ */
+function operationAfterTurn(from: ExtrudeDialog, to: ExtrudeDialog): Partial<ExtrudeDialog> | null {
+  const side = extrudeSide(to);
+  if (side === 0 || side === extrudeSide(from)) return null;
+  if (to.operation !== "join" && to.operation !== "cut") return null;
+  const doc = documentStore.document;
+  const f = to.sketchId ? doc.features[to.sketchId] : undefined;
+  if (f?.type !== "sketch" || to.profiles.length === 0) return null;
+  const plane = resolveSketchPlane(f.sketch.plane);
+  let range: [number, number];
+  try {
+    range = extrudeRange(to.direction, evaluateAs(to.distance, "length", currentScope()));
+  } catch {
+    return null;
+  }
+  const mid = (range[0] + range[1]) / 2;
+  const samples = to.profiles.map((p) => {
+    const q = planeToWorld(plane, p.point);
+    return { x: q.x + plane.normal.x * mid, y: q.y + plane.normal.y * mid, z: q.z + plane.normal.z * mid };
+  });
+  const computed = modelState.get().bodies;
+  const own = to.editing ? doc.features[to.editing] : undefined;
+  const ownBody = own && "bodyId" in own ? own.bodyId : "";
+  const into = Object.values(doc.bodies)
+    .filter((b) => b.visible && b.id !== ownBody)
+    .filter((b) => {
+      const g = computed[b.id]?.geometry;
+      return g ? samples.some((p) => pointInBody(g, p)) : false;
+    })
+    .map((b) => b.id);
+  return operationForSide(to.operation, into);
+}
 
 function defaultDirection(from: ExtrudeDialog, to: ExtrudeDialog): ExtrudeDialog["direction"] | null {
   const doc = documentStore.document;

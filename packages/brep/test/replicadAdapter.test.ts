@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { type Loop2, type Profile2, ORIGIN_PLANES, type Vec2 } from "@fabcad/geometry";
 import type { GeometryKernel } from "../src/kernel";
-import { faceSilhouettes } from "../src/query";
+import { faceSilhouettes, pointInBody } from "../src/query";
 import { nodeKernel } from "./nodeKernel";
 
 const polygonLoop = (pts: Vec2[]): Loop2 => ({
@@ -212,5 +212,17 @@ describe("faceSilhouettes", () => {
       expect(Math.hypot(p.x, p.y, p.z)).toBeCloseTo(10, 3);
       expect((p.x * d.x + p.y * d.y + p.z * d.z) / n).toBeCloseTo(0, 3);
     }
+  });
+});
+
+describe("pointInBody", () => {
+  it("tells points inside a body from points outside it and in its holes", () => {
+    const profile: Profile2 = { ...rect(100, 80), holes: [circleLoop(50, 40, 10, false)] };
+    const g = kernel.tessellate(kernel.extrude([profile], ORIGIN_PLANES.XY, 0, 10));
+    expect(pointInBody(g, { x: 20, y: 20, z: 5 })).toBe(true);
+    expect(pointInBody(g, { x: 50, y: 40, z: 5 })).toBe(false);
+    expect(pointInBody(g, { x: 20, y: 20, z: 11 })).toBe(false);
+    expect(pointInBody(g, { x: 20, y: 20, z: -1 })).toBe(false);
+    expect(pointInBody(g, { x: 99.5, y: 0.5, z: 9.5 })).toBe(true);
   });
 });

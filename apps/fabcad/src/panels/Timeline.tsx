@@ -1,11 +1,45 @@
 import { listFeatures, setFeatureSuppressed, setTimelineCursor } from "@fabcad/cad-document";
 import type { ReactElement } from "react";
 import { editFeature, featureIcon, pickInDialog } from "../app/actions";
-import { appState, isAdditiveClick, isSelected, select } from "../app/appState";
+import { appState, isAdditiveClick, isSelected, select, toast } from "../app/appState";
+import { historyLog } from "../app/historyLog";
+import { useHelpTrigger } from "../help/useHelpTrigger";
 import { openContextMenu } from "../app/contextMenu";
-import { modelState, run, useDocument } from "../app/session";
+import { documentStore, modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
+
+/** Copy the history log (steps, bodies and the project) for a bug report. */
+async function copyHistoryLog(): Promise<void> {
+  const { features, bodies } = modelState.get();
+  const text = historyLog(documentStore.document, features, bodies, {
+    version: __APP_VERSION__,
+    date: new Date(),
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied the history log.");
+  } catch {
+    toast("The browser did not allow copying.", "warning");
+  }
+}
+
+function CopyLogButton(): ReactElement {
+  const title = "Copy history log — the steps, their errors and the project, for a bug report";
+  const trigger = useHelpTrigger({ id: "timeline.copy-log", title: "Copy History Log" });
+  const { guard, ...handlers } = trigger ?? { guard: (f: () => void) => f };
+  return (
+    <button
+      className="icon-btn"
+      title={title}
+      aria-label="Copy history log"
+      {...handlers}
+      onClick={guard(() => void copyHistoryLog())}
+    >
+      <Icon name="copy" size={14} />
+    </button>
+  );
+}
 
 export function Timeline(): ReactElement {
   const doc = useDocument();
@@ -39,6 +73,7 @@ export function Timeline(): ReactElement {
         <button className="icon-btn" title="Move the history marker to the end" aria-label="History to end" disabled={cursor >= features.length} onClick={() => run(setTimelineCursor(null))}>
           <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M14 4h2v12h-2zM4 4v12l9-6z" /></svg>
         </button>
+        <CopyLogButton />
       </div>
       <div className="timeline-track">
         {features.length === 0 && (

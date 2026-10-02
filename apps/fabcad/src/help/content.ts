@@ -85,6 +85,16 @@ export const HELP: Record<string, HelpEntry> = {
     ],
   },
 
+  "timeline.copy-log": {
+    title: "Copy History Log",
+    summary: "Copy the design history as text, to report a problem.",
+    what: [
+      "The button at the left end of the timeline copies every step with its status and error message, the settings of each step, the size and make-up of each body (volume, faces, separate pieces), and the project itself.",
+      "Paste it into a bug report: with the project in it, the result can be computed again exactly.",
+    ],
+    limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],
+  },
+
   // ------------------------------------------------------------ sketch: create
   "solid.pick-sketch-plane": {
     title: "Create Sketch",
@@ -476,6 +486,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Moves closed profiles of a sketch along the normal of the sketch plane. The arrow in the view can be dragged to set the distance.",
       "A flat face of a body can be extruded as it is, without drawing a sketch first.",
+      "Turning the extrusion to the other side (Flipped, or the arrow dragged through the sketch) changes Join to Cut when it now goes into a body, and cuts exactly the bodies it goes into. Turned back out of every body, Cut becomes Join again.",
     ],
     requires: ["A closed profile of a sketch, a text, or a flat face."],
     parameters: [

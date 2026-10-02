@@ -214,3 +214,36 @@ export function polylineMidpoint(points: readonly Vec3[]): Vec3 {
   }
   return points[0] ?? { x: 0, y: 0, z: 0 };
 }
+
+/**
+ * Whether `p` lies inside the closed mesh of a body: a ray from it crosses the surface an odd
+ * number of times. The ray goes in a skewed direction so that it rarely grazes an edge.
+ */
+export function pointInBody(geometry: BodyGeometry, p: Vec3): boolean {
+  const { min, max } = geometry.bounds;
+  if (p.x < min.x || p.y < min.y || p.z < min.z || p.x > max.x || p.y > max.y || p.z > max.z) {
+    return false;
+  }
+  const d = unit({ x: 0.5773, y: 0.5871, z: 0.5675 });
+  const { positions, indices } = geometry;
+  let crossings = 0;
+  for (let k = 0; k + 2 < indices.length; k += 3) {
+    const a = at(positions, indices[k]!);
+    const b = at(positions, indices[k + 1]!);
+    const c = at(positions, indices[k + 2]!);
+    // Möller–Trumbore.
+    const e1 = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const e2 = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+    const h = { x: d.y * e2.z - d.z * e2.y, y: d.z * e2.x - d.x * e2.z, z: d.x * e2.y - d.y * e2.x };
+    const det = dot(e1, h);
+    if (Math.abs(det) < 1e-12) continue;
+    const s = { x: p.x - a.x, y: p.y - a.y, z: p.z - a.z };
+    const u = dot(s, h) / det;
+    if (u < 0 || u > 1) continue;
+    const q = { x: s.y * e1.z - s.z * e1.y, y: s.z * e1.x - s.x * e1.z, z: s.x * e1.y - s.y * e1.x };
+    const v = dot(d, q) / det;
+    if (v < 0 || u + v > 1) continue;
+    if (dot(e2, q) / det > 1e-9) crossings++;
+  }
+  return crossings % 2 === 1;
+}
