@@ -2,6 +2,7 @@ import { viewportApi } from "../viewport/api";
 import { createTool } from "../sketch/createTools";
 import { startsPointEntry } from "../sketch/pointEntry";
 import { submitPointEntry } from "../panels/PointEntry";
+import { runPaletteSelection } from "../panels/CommandPalette";
 import {
   beginSketchPlanePick,
   closeDialog,
@@ -143,12 +144,28 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       saveProject();
       return;
     }
+    if (meta && key === "k") {
+      e.preventDefault();
+      appState.set((st) => ({ commandPalette: st.commandPalette ? null : { query: "" }, contextMenu: null }));
+      return;
+    }
     if (meta && key === "o") {
       e.preventDefault();
       hooks.openProject();
       return;
     }
     if (isEditable(e.target)) return;
+    // Keys that arrive before the palette's box has the focus belong to it.
+    const palette = appState.get().commandPalette;
+    if (palette && !meta) {
+      if (e.key === "Enter") runPaletteSelection();
+      else if (e.key === "Escape") appState.set({ commandPalette: null });
+      else if (e.key === "Backspace") appState.set({ commandPalette: { query: palette.query.slice(0, -1) } });
+      else if (e.key.length === 1) appState.set({ commandPalette: { query: palette.query + e.key } });
+      else return;
+      e.preventDefault();
+      return;
+    }
     // Keys that arrive before the point box has the focus belong to it.
     const entry = appState.get().pointEntry;
     if (entry && appState.get().activeSketchId && !meta) {

@@ -389,6 +389,17 @@ table.grid td input { padding: 2px 5px; }
 .point-entry input[aria-invalid="true"] { border-color: var(--danger); }
 .point-entry-hint { font-size: 10.5px; color: var(--ink-faint); }
 .point-entry-hint.error { color: var(--danger); }
+.palette-backdrop { position: fixed; inset: 0; z-index: 88; background: rgba(29, 43, 56, 0.12); }
+.command-palette { position: fixed; z-index: 90; width: 460px; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--line-strong); border-radius: 9px; box-shadow: 0 16px 40px rgba(29, 43, 56, 0.22); overflow: hidden; box-sizing: border-box; }
+.palette-input { margin: 8px; width: calc(100% - 16px); box-sizing: border-box; font-size: 14px; padding: 8px 10px; }
+.palette-list { list-style: none; margin: 0; padding: 0 6px 6px; overflow: auto; min-height: 0; flex: 1; }
+.palette-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.palette-list li.on { background: var(--active); }
+.palette-name { font-weight: 600; color: var(--ink-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-list kbd { font: 10.5px var(--mono); color: var(--ink-soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.palette-group { font-size: 10.5px; color: var(--ink-faint); white-space: nowrap; }
+.palette-detail { grid-column: 1 / -1; font-size: 11px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-empty { color: var(--ink-faint); cursor: default !important; }
 .computing-badge {
   position: absolute; z-index: 7; left: 50%; bottom: 12px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px; pointer-events: none;
@@ -546,6 +557,7 @@ table.grid td input { padding: 2px 5px; }
   .brand-tag, .doc-name, .header-sep, .header > .btn { display: none; }
   .workspace-tabs button { padding: 6px 9px; font-size: 10px; letter-spacing: 0.4px; }
   .header .menu-wrap > .btn { padding: 6px 8px; }
+  .commands-btn span { display: none; }
 
   .ribbon { padding: 0 2px; -webkit-overflow-scrolling: touch; }
   .ribbon-group { padding: 5px 5px 3px; }

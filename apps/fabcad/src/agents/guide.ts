@@ -40,7 +40,7 @@ const SECTIONS: Section[] = [
         table: {
           head: ["Area", "Where", "What it is for"],
           rows: [
-            ["Header", "top", "DESIGN / FABRICATION workspace switch, File menu (New, Open, Save, Import, Parameters), Undo / Redo, Save, Export"],
+            ["Header", "top", "DESIGN / FABRICATION workspace switch, File menu (New, Open, Save, Import, Parameters), Undo / Redo, Commands (the command palette), Save, Export"],
             ["Ribbon", "below the header", "the commands of the workspace, in labelled groups (SKETCH, CREATE, MODIFY, CONSTRAINTS …). Every button has a tooltip with its name and shortcut"],
             ["Browser", "left, upper half", "the tree of the document: Origin (XY / XZ / YZ planes, axes), Sketches, Bodies, Components. Rows can be clicked to select, and to pick a plane"],
             ["Properties", "left, lower half", "properties of the selection, and the Parameters of the document"],
@@ -77,6 +77,19 @@ const SECTIONS: Section[] = [
           "Dimensions: press D, click a line (or two points, a circle …), click empty space to place the dimension, type the value in the box that opens, Enter. A dimension can be edited later by double-clicking it.",
           "Feature values (Extrude distance, Fillet radius …) are typed in the command window; Enter in the window, or OK, applies the feature.",
           "Parameters: File → Parameters… defines named values that every field accepts.",
+        ],
+      },
+    ],
+  },
+  {
+    title: "Running commands by name",
+    blocks: [
+      { p: "Ctrl / Cmd + K (or the Commands button in the header) opens the command palette: a text box at the top of the window with the commands that can run now. Type part of a name, check the highlighted row, press Enter. Esc closes it." },
+      {
+        list: [
+          "`ext` → Extrude, `fillet` → Fillet, `view top` → the top view, `fit` → Fit, `export svg` → the laser-cutting SVG (in FABRICATION).",
+          "Inside a sketch the palette lists the sketch tools, constraints and Finish Sketch; outside a sketch the features, Create Sketch and the exports.",
+          "It is the safest way to start a command whose icon is in a menu (Split Body, Align, Loft …) or hard to tell apart.",
         ],
       },
     ],

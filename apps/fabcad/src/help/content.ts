@@ -85,6 +85,16 @@ export const HELP: Record<string, HelpEntry> = {
     ],
   },
 
+  "command-palette": {
+    title: "Command Palette",
+    shortcut: "Ctrl/Cmd+K",
+    summary: "Run any command by typing its name.",
+    what: [
+      "Ctrl / Cmd + K, or Commands in the header, opens a box at the top of the window. Type a part of the name of a command (\"ext\" for Extrude, \"view top\", \"export svg\"); the arrow keys choose, Enter runs it, Esc closes.",
+      "Only the commands that can run now are listed: the sketch tools and constraints inside a sketch, the features and exports outside, the exports in FABRICATION.",
+    ],
+    when: ["When a tool is in a menu, its icon is hard to tell apart, or the keyboard is quicker."],
+  },
   "timeline.copy-log": {
     title: "Copy History Log",
     summary: "Copy the design history as text, to report a problem.",

@@ -153,6 +153,7 @@ const P: Record<string, ReactElement> = {
   offset: <path d="M4 16V8a4 4 0 014-4h8M8 16v-6a2 2 0 012-2h6" />,
   move: <path d="M10 3v14M3 10h14M7.5 5.5L10 3l2.5 2.5M7.5 14.5L10 17l2.5-2.5M5.5 7.5L3 10l2.5 2.5M14.5 7.5L17 10l-2.5 2.5" />,
   copy: <path d="M7 7h9v9H7zM4 13V4h9" />,
+  search: <path d="M8.5 3.5a5 5 0 100 10 5 5 0 000-10zM12.2 12.2L17 17" />,
   scale: <path d="M4 16h7V9H4zM11 9l5-5M12.5 4H16v3.5" />,
   mirror: <path d="M10 3v14M7.5 6L3 14h4.5zM12.5 6L17 14h-4.5z" strokeDasharray="0" />,
   "rectangular-pattern": <path d="M4 4h4v4H4zM12 4h4v4h-4zM4 12h4v4H4zM12 12h4v4h-4z" />,

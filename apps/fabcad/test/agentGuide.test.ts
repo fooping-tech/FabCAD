@@ -8,7 +8,7 @@ describe("guide for AI agents", () => {
 
   it("is an llms.txt: a title, a summary, then sections", () => {
     expect(md.startsWith("# FabCAD — guide for AI agents\n\n> ")).toBe(true);
-    for (const title of ["Screen layout", "Entering exact values", "Recipes", "Keyboard shortcuts", "Tool reference"]) {
+    for (const title of ["Screen layout", "Entering exact values", "Running commands by name", "Recipes", "Keyboard shortcuts", "Tool reference"]) {
       expect(md).toContain(`## ${title}`);
     }
   });

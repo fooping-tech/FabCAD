@@ -359,6 +359,8 @@ export interface AppState {
   sketchOffset: SketchOffset | null;
   /** The box where a point of the running Create tool is typed (`sketch/pointEntry.ts`). */
   pointEntry: { text: string; error?: string } | null;
+  /** The command palette (Ctrl / Cmd + K) while it is open, with what has been typed. */
+  commandPalette: { query: string } | null;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
   cursor: Vec2 | null;
   toasts: Toast[];
@@ -420,6 +422,7 @@ export const appState = new TinyStore<AppState>({
   toolPanel: null,
   sketchOffset: null,
   pointEntry: null,
+  commandPalette: null,
   cursor: null,
   toasts: [],
   hint: "",

@@ -18,6 +18,7 @@ import {
 import { useStore } from "../app/tinyStore";
 import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import { pickDxf } from "../sketch/importDxf";
+import { useHelpTrigger } from "../help/useHelpTrigger";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 
@@ -36,6 +37,24 @@ export function createProject(): void {
     if (!window.confirm("Discard the unsaved changes of the current project?")) return;
   }
   newProject();
+}
+
+/** Opens the command palette; the same as Ctrl / Cmd + K. */
+function CommandsButton(): ReactElement {
+  const title = `Commands (${mod}K) — run any command by typing its name`;
+  const trigger = useHelpTrigger({ id: "command-palette", title: "Command Palette" });
+  const { guard, ...handlers } = trigger ?? { guard: (f: () => void) => f };
+  return (
+    <button
+      className="btn commands-btn"
+      title={title}
+      aria-label={title}
+      {...handlers}
+      onClick={guard(() => appState.set({ commandPalette: { query: "" }, contextMenu: null }))}
+    >
+      <Icon name="search" size={14} /> <span>Commands</span>
+    </button>
+  );
 }
 
 export function Header({
@@ -154,6 +173,7 @@ export function Header({
 
       <div className="header-spacer" />
 
+      <CommandsButton />
       <button className="btn" onClick={saveProject} title={`Save project (${mod}S)`}>
         Save
       </button>

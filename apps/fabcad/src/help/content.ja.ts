@@ -75,6 +75,16 @@ export const HELP_JA: Record<string, HelpEntry> = {
     ],
   },
 
+  "command-palette": {
+    title: "Command Palette",
+    shortcut: "Ctrl/Cmd+K",
+    summary: "コマンド名を入力して、どのコマンドでも実行します。",
+    what: [
+      "Ctrl / Cmd + K、またはヘッダーの Commands で、画面の上に入力欄が開きます。コマンド名の一部を入力し（Extrude なら \"ext\"、\"view top\"、\"export svg\" など）、矢印キーで選んで Enter で実行します。Esc で閉じます。",
+      "いま実行できるコマンドだけが並びます。スケッチの中ではスケッチのツールと拘束、外では Feature と書き出し、FABRICATION では書き出しです。",
+    ],
+    when: ["ツールがメニューの中にあるとき、アイコンが見分けにくいとき、キーボードのほうが速いとき。"],
+  },
   "timeline.copy-log": {
     title: "Copy History Log",
     summary: "不具合を報告するために、設計の履歴をテキストでコピーします。",

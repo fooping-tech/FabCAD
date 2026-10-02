@@ -18,6 +18,7 @@ import { MeasurePanel } from "./measure/MeasurePanel";
 import { ContextMenu } from "./panels/ContextMenu";
 import { FeatureDialog } from "./panels/FeatureDialog";
 import { SketchToolPanel } from "./panels/SketchToolPanel";
+import { CommandPalette } from "./panels/CommandPalette";
 import { Header, openProject } from "./panels/Header";
 import { ImportDxfDialog } from "./panels/ImportDxfDialog";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
@@ -145,6 +146,10 @@ export function App(): ReactElement {
       <StatusBar />
       <Toasts />
       <ContextMenu />
+      <CommandPalette
+        exportFabrication={(format) => exportHandler(format)}
+        exportPrint={(format) => printExportHandler(format)}
+      />
       <HelpMenu />
       <HelpOverlay />
       {dialog?.type === "parameters" && <ParametersDialog />}

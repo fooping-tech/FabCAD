@@ -1,4 +1,4 @@
-import { SKETCH_MODIFY_TOOLS, type Sketch, toggleConstruction } from "@fabcad/sketch";
+import { SKETCH_MODIFY_TOOLS } from "@fabcad/sketch";
 import type { ReactElement } from "react";
 import {
   DIALOG_COMMANDS,
@@ -14,17 +14,15 @@ import {
   type SelectionFilter,
   type ToolOptions,
   appState,
-  setSelection,
   toast,
 } from "../app/appState";
-import { documentStore, editSketchSolved } from "../app/session";
 import { useStore } from "../app/tinyStore";
-import { CONSTRAINT_TOOLS, constraintRefs } from "../sketch/constraintTools";
+import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS } from "../sketch/createTools";
 import { useHelpTrigger } from "../help/useHelpTrigger";
+import { applyConstraintToSelection, toggleSelectedConstruction } from "../app/sketchCommands";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
-import { editSketch } from "@fabcad/sketch";
 
 /** Name and one-line description of a tool, from a tooltip such as "Line — two points". */
 const topicOf = (help: string, title: string): { id: string; title: string; summary?: string } => {
@@ -100,44 +98,6 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 const PRIMARY_CREATE = ["line", "rectangle-2point", "circle", "arc-3point", "polygon-inscribed", "slot", "spline-fit"];
 const PRIMARY_MODIFY = ["trim", "extend", "offset", "mirror", "move", "copy", "fillet"];
 
-function applyConstraintToSelection(type: (typeof CONSTRAINT_TOOLS)[number]["type"]): void {
-  const { selection, activeSketchId } = appState.get();
-  if (!activeSketchId) return;
-  const f = documentStore.document.features[activeSketchId];
-  if (!f || f.type !== "sketch") return;
-  const picked = selection.flatMap((s) => {
-    if (s.kind !== "entity" || s.sketchId !== activeSketchId) return [];
-    const e = f.sketch.entities[s.entityId];
-    return e ? [e] : [];
-  });
-  const def = CONSTRAINT_TOOLS.find((c) => c.type === type)!;
-  const state = picked.length > 0 ? constraintRefs(type, picked) : { state: "incomplete" as const };
-  if (state.state !== "ready") {
-    // Nothing usable selected: switch to the pick-driven command.
-    setSelection([]);
-    setTool(`constraint:${type}`);
-    return;
-  }
-  const refs = state.refs;
-  const ok = editSketchSolved(
-    activeSketchId,
-    def.label,
-    (sketch: Sketch) => {
-      const existing = Object.values(sketch.constraints).find(
-        (c) => c.type === type && c.refs.length === refs.length && c.refs.every((r) => refs.includes(r)),
-      );
-      if (existing) {
-        return type === "fix" ? editSketch(sketch, (b) => b.removeConstraint(existing.id)) : sketch;
-      }
-      return editSketch(sketch, (b) => {
-        b.constrain(type, ...refs);
-      });
-    },
-    { rejectOverConstrained: true },
-  );
-  if (ok) setSelection([]);
-}
-
 function SketchRibbon(): ReactElement {
   const tool = useStore(appState, (s) => s.tool);
   const options = useStore(appState, (s) => s.toolOptions);
@@ -157,19 +117,6 @@ function SketchRibbon(): ReactElement {
   const modifyMore = SKETCH_MODIFY_TOOLS.filter(
     (t) => !PRIMARY_MODIFY.includes(t.id) && t.id !== "toggle-construction",
   );
-
-  const toggleSelectedConstruction = (): void => {
-    const { selection, activeSketchId } = appState.get();
-    if (!activeSketchId) return;
-    const ids = selection.flatMap((s) =>
-      s.kind === "entity" && s.sketchId === activeSketchId ? [s.entityId] : [],
-    );
-    if (ids.length === 0) {
-      setOptions({ construction: !options.construction });
-      return;
-    }
-    editSketchSolved(activeSketchId, "Normal / Construction", (s) => toggleConstruction(s, ids));
-  };
 
   const activeMoreCreate = moreCreate.find((t) => t.id === tool);
   const activeMoreModify = modifyMore.find((t) => t.id === tool);
