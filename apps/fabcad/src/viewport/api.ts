@@ -10,6 +10,10 @@ export interface ViewportApi {
   setView(view: ViewName): void;
   /** Open the inline editor of a dimension of the active sketch. */
   editDimension(dimensionId: string): void;
+  /** Place a typed point (sketch coordinates) for the running Create tool. */
+  typePoint(point: { x: number; y: number }): boolean;
+  /** The last point placed by the running Create tool, the base of relative typed points. */
+  lastPick(): { x: number; y: number } | null;
 }
 
 let current: ViewportApi | null = null;

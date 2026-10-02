@@ -232,6 +232,17 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "Explode Text はテキストを通常の曲線に変換します。変換後はテキストとして編集できません。",
     ],
   },
+  "sketch.point-entry": {
+    title: "Typed Points",
+    summary: "描いている図形の点を、クリックの代わりに入力します。",
+    what: [
+      "Create ツールの実行中に数字（または @、-、.）を入力すると、ビューの下に Point の入力欄が開きます。",
+      "x, y でその位置に、@dx, dy で図形の直前の点からの相対位置（最初の点は原点から）に置きます。length<angle と @length<angle は極座標で、角度は X 軸から測った度です。",
+      "Enter で点を置き、入力欄は次の点のために開いたままです。空のまま Enter を押すとポリラインやスプラインを終え、Esc で入力欄を閉じます。",
+    ],
+    parameters: [{ name: "Values", text: EXPRESSIONS }],
+    examples: ["長方形：0, 0 Enter のあと @60, 40 Enter。線：0, 0 Enter、@25<30 Enter。"],
+  },
   "sketch.project": {
     title: "Project",
     shortcut: "P",

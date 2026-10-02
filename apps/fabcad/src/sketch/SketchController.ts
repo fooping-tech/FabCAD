@@ -336,7 +336,8 @@ export class SketchController {
     if (!activeSketchId) return;
     const create = createTool(tool);
     if (create) {
-      this.setHint(create.hints[Math.min(this.picks.length, create.hints.length - 1)] ?? "");
+      const step = create.hints[Math.min(this.picks.length, create.hints.length - 1)] ?? "";
+      this.setHint(`${step} · or type x, y (@dx, dy) for an exact point`);
       return;
     }
     if (tool.startsWith("constraint:")) {
@@ -497,7 +498,7 @@ export class SketchController {
     this.previewSketch = null;
     this.cursor = null;
     this.offsetDrag = false;
-    appState.set({ sketchOffset: null, toolPanel: null });
+    appState.set({ sketchOffset: null, toolPanel: null, pointEntry: null });
     const { tool, selection, activeSketchId } = appState.get();
     if (SELECTION_TOOLS.has(tool) && activeSketchId) {
       const ids = selection.filter((s) => s.kind === "entity" && s.sketchId === activeSketchId);
@@ -762,6 +763,32 @@ export class SketchController {
       }
     }
     return true;
+  }
+
+  /** A point typed for the running Create tool, as if it had been clicked there. */
+  typePoint(point: Vec2): boolean {
+    const feature = this.activeFeature();
+    const create = createTool(appState.get().tool);
+    if (!feature || !create) return false;
+    // A typed point on an existing point is that point, so that shapes join up.
+    const existing = Object.values(feature.sketch.entities).find(
+      (e) => e.type === "point" && Math.hypot(e.x - point.x, e.y - point.y) < 1e-6,
+    );
+    const pick: ToolPick = {
+      position: { x: point.x, y: point.y },
+      snap: existing ? { point, pointId: existing.id, kind: "point" } : { point, kind: "none" },
+    };
+    this.cursor = pick;
+    this.addCreatePick(feature, pick);
+    const current = this.activeFeature();
+    if (current) this.updateCreatePreview(current.sketch);
+    this.requestDraw();
+    return true;
+  }
+
+  lastPick(): Vec2 | null {
+    const last = this.picks[this.picks.length - 1];
+    return last ? { ...last.position } : null;
   }
 
   /** Enter: finish open-ended tools. */

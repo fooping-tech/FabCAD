@@ -75,6 +75,8 @@ npm run build
 
 Hole、Pattern、Mirror、Move、Align、Split、Sweep、Loft、Offset Plane のダイアログは `app/solidDialogs.ts`（ダイアログ ↔ Command の入力、検証、どの欄が何を受け取るか。純粋な関数）と `panels/SolidDialogFields.tsx`。数が評価結果で決まる Body（Pattern のインスタンスなど）は ID が `featureId:bodyId:n` で、再計算のたびに `syncBodyRecords()` でドキュメントの Body の記録を合わせる。
 
+AI エージェント向けのガイド（`/FabCAD/agents/` と `/FabCAD/llms.txt`）は `src/agents/guide.ts` で、ビルド時に `vite.config.ts` のプラグインが書き出す。ツールの説明はヘルプ（`HELP`）から作るので、ヘルプを直せば追従する。画面の配置、手順（Recipes）、注意点は手で書いているので、画面や操作を変えたら同じ変更で直す。手順は Playwright でキー操作と見えている要素のクリックだけで再現できることを確かめる。スケッチの Create ツールでは、数字を打つと点の座標を入力できる（`sketch/pointEntry.ts`、`panels/PointEntry.tsx`）。
+
 スケッチの Offset は、クリックでプレビュー（`appState.sketchOffset`）を出し、窓の OK か Enter で確定する。形の計算は `sketch/offsetGeometry.ts`（純粋な関数）、状態の操作は `sketch/offsetTool.ts`。オプションのあるスケッチのツールは `sketch/toolWindows.ts` の `TOOLS_WITH_WINDOW` に載せ、窓の中身は `panels/SketchToolPanel.tsx` に書く。
 
 Project で曲面を選ぶと、稜線に加えて輪郭（シルエット）も投影する。輪郭は稜線ではないので、メッシュから `faceSilhouettes()`（`packages/brep/src/query.ts`）で求め、`source: "silhouette"` の投影として面の `TopologyRef` で覚える。

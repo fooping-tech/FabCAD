@@ -1,4 +1,7 @@
 import { viewportApi } from "../viewport/api";
+import { createTool } from "../sketch/createTools";
+import { startsPointEntry } from "../sketch/pointEntry";
+import { submitPointEntry } from "../panels/PointEntry";
 import {
   beginSketchPlanePick,
   closeDialog,
@@ -146,6 +149,17 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       return;
     }
     if (isEditable(e.target)) return;
+    // Keys that arrive before the point box has the focus belong to it.
+    const entry = appState.get().pointEntry;
+    if (entry && appState.get().activeSketchId && !meta) {
+      if (e.key === "Enter") submitPointEntry();
+      else if (e.key === "Escape") appState.set({ pointEntry: null });
+      else if (e.key === "Backspace") appState.set({ pointEntry: { text: entry.text.slice(0, -1) } });
+      else if (e.key.length === 1) appState.set({ pointEntry: { text: entry.text + e.key } });
+      else return;
+      e.preventDefault();
+      return;
+    }
     // Letters typed through an input method must not reach the page as text.
     if (composing && physical && !meta) e.preventDefault();
 
@@ -215,6 +229,12 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       }
       if (key === "h") {
         openDialog("hole");
+        return;
+      }
+      // Digits (and @ - . ( ) start a typed point of the running Create tool.
+      const typed = composing ? (/^Digit(\d)$/.exec(e.code)?.[1] ?? "") : e.key;
+      if (createTool(state.tool) && startsPointEntry(typed)) {
+        appState.set({ pointEntry: { text: typed } });
         return;
       }
       const tool = SKETCH_KEYS[key];

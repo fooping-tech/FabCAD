@@ -256,6 +256,17 @@ export const HELP: Record<string, HelpEntry> = {
       "Explode Text turns a text into plain curves, which can no longer be edited as text.",
     ],
   },
+  "sketch.point-entry": {
+    title: "Typed Points",
+    summary: "Type the points of the shape being drawn instead of clicking them.",
+    what: [
+      "While a Create tool runs, type a digit (or @, -, .): a Point box opens at the bottom of the view.",
+      "x, y places the point there; @dx, dy places it relative to the previous point of the shape (the origin for the first one); length<angle and @length<angle are polar, with the angle in degrees from the X axis.",
+      "Enter places the point and the box stays open for the next one. Enter on an empty box finishes a polyline or a spline; Esc closes the box.",
+    ],
+    parameters: [{ name: "Values", text: EXPRESSIONS }],
+    examples: ["Rectangle: 0, 0 Enter, then @60, 40 Enter. Line: 0, 0 Enter, @25<30 Enter."],
+  },
   "sketch.project": {
     title: "Project",
     shortcut: "P",

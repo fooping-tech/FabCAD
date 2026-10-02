@@ -58,6 +58,7 @@ import { editSketch } from "@fabcad/sketch";
 import { createDoubleTapDetector } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
+import { PointEntry } from "../panels/PointEntry";
 import {
   type ExtrudeDialog,
   type ExtrudeManipulator,
@@ -916,6 +917,8 @@ export function Viewport(): ReactElement {
       fit: () => scene.fitAll(sketchExtents()),
       setView: (view) => scene.setView(view),
       editDimension: (id) => controller.editDimension(id),
+      typePoint: (point) => controller.typePoint(point),
+      lastPick: () => controller.lastPick(),
     });
 
     return () => {
@@ -1183,6 +1186,7 @@ export function Viewport(): ReactElement {
       )}
 
       {app.dimensionEdit && <DimensionEditor />}
+      <PointEntry />
 
       <div className="view-tools">
         <div className="view-card">

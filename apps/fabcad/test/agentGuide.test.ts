@@ -1,0 +1,30 @@
+import { describe, expect, it } from "vitest";
+import { agentGuideHtml, agentGuideMarkdown } from "../src/agents/guide";
+import { HELP } from "../src/help/content";
+
+describe("guide for AI agents", () => {
+  const md = agentGuideMarkdown(HELP);
+  const html = agentGuideHtml(HELP);
+
+  it("is an llms.txt: a title, a summary, then sections", () => {
+    expect(md.startsWith("# FabCAD — guide for AI agents\n\n> ")).toBe(true);
+    for (const title of ["Screen layout", "Entering exact values", "Recipes", "Keyboard shortcuts", "Tool reference"]) {
+      expect(md).toContain(`## ${title}`);
+    }
+  });
+
+  it("lists every tool of the in-app help, with its shortcut", () => {
+    for (const e of Object.values(HELP)) {
+      expect(md).toContain(`${e.title}${e.shortcut ? ` (${e.shortcut})` : ""}`);
+      expect(md).toContain(e.summary);
+    }
+    expect(md).toContain("| E | Extrude |");
+  });
+
+  it("is a complete HTML page with the same content, escaped", () => {
+    expect(html.startsWith("<!doctype html>")).toBe(true);
+    expect(html).toContain("<title>FabCAD Agent Guide</title>");
+    expect(html).toContain("<code>@length&lt;angle</code>");
+    expect(html).not.toContain("<angle");
+  });
+});

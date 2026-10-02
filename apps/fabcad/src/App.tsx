@@ -10,6 +10,7 @@ import {
   exportSheets,
   useFabrication,
 } from "./fabrication";
+import { noPartsMessage } from "./fabrication/pipeline";
 import { HelpMenu } from "./help/HelpMenu";
 import { HelpOverlay } from "./help/HelpOverlay";
 import { BrowserTree } from "./panels/BrowserTree";
@@ -47,7 +48,7 @@ function FabricationExportBridge({
         toast(
           status === "loading"
             ? "The parts are still being computed. Try again in a moment."
-            : "There are no parts to export. Design a body first.",
+            : noPartsMessage(output),
           "warning",
         );
         return;

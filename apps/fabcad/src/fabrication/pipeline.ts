@@ -57,6 +57,24 @@ export interface FabricationOutput {
   geometry: SheetGeometry;
 }
 
+/**
+ * Why there is nothing to export: the bodies that could not be made into parts, with the
+ * reason the strategy gave ("Body001: Unsupported — 5 mm thick, the material is 5.5 mm"), or
+ * that there is no body at all.
+ */
+export function noPartsMessage(output: Pick<FabricationOutput, "detections" | "warnings"> | null): string {
+  const refused = (output?.detections ?? []).filter((d) => !d.supported);
+  if (refused.length > 0) {
+    const why = refused
+      .map((d) => `${d.bodyName}: ${d.label}${d.reason ? ` — ${d.reason}` : ""}`)
+      .join("; ");
+    return `There are no parts to export. ${why}`;
+  }
+  const error = output?.warnings.find((w) => w.severity === "error");
+  if (error) return `There are no parts to export. ${error.message}`;
+  return "There are no parts to export. Design a body first.";
+}
+
 let sharedRegistry: StrategyRegistry | null = null;
 
 /** Strategies of all manufacturing workspaces. New processes register themselves here. */

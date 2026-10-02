@@ -378,6 +378,17 @@ table.grid td input { padding: 2px 5px; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; margin: 0 auto 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner.small { width: 11px; height: 11px; border-width: 2px; margin: 0; display: inline-block; flex: none; }
+.point-entry {
+  position: absolute; z-index: 9; left: 50%; bottom: 44px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px;
+  box-shadow: 0 6px 20px rgba(29, 43, 56, 0.14);
+}
+.point-entry label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 650; color: var(--ink-soft); }
+.point-entry input { width: 220px; font-family: var(--mono); font-size: 12.5px; }
+.point-entry input[aria-invalid="true"] { border-color: var(--danger); }
+.point-entry-hint { font-size: 10.5px; color: var(--ink-faint); }
+.point-entry-hint.error { color: var(--danger); }
 .computing-badge {
   position: absolute; z-index: 7; left: 50%; bottom: 12px; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px; pointer-events: none;

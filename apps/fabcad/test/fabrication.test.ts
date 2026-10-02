@@ -10,6 +10,7 @@ import {
   buildSheetFiles,
   compileFabrication,
   fabricationStats,
+  noPartsMessage,
   usedSheets,
 } from "../src/fabrication/pipeline";
 import {
@@ -255,6 +256,18 @@ describe("compileFabrication", () => {
     expect(out.connections).toHaveLength(0);
     expect(usedSheets(out)).toHaveLength(1);
     expect(out.layout.placements).toHaveLength(1);
+  });
+
+  it("says why there is nothing to export", () => {
+    // A 5 mm plate when the material is 5.5 mm thick.
+    const out = compileFabrication([body("Body001", rectangle(60, 40), 5)], settings());
+    expect(out.parts).toHaveLength(0);
+    const message = noPartsMessage(out);
+    expect(message).toMatch(/^There are no parts to export\. Body001: /);
+    expect(message).not.toContain("Design a body first");
+    expect(noPartsMessage(compileFabrication([], settings()))).toBe(
+      "There are no parts to export. Design a body first.",
+    );
   });
 
   it("stops at a body that board cannot be made into, with the reason", () => {
