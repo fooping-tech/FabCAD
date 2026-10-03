@@ -17,6 +17,9 @@ import {
   deserializeDocument,
   duplicateInstances,
   listInstances,
+  moveToComponent,
+  type MoveFeature,
+  type MovedToComponent,
   removeComponents,
   removeInstances,
   renameComponent,
@@ -110,6 +113,46 @@ describe("components", () => {
       [[0, 0, 0], true],
       [[0, 100, 0], false],
     ]);
+  });
+
+  it("moves a body into an existing component and keeps it where it was seen", () => {
+    const store = new DocumentStore(createDocument());
+    const frame: CreatedComponent = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    box(store, 0, frame.id);
+    store.execute(
+      setInstanceTransform(frame.instanceId!, { position: [100, 0, 0], rotation: quaternionFromAngles(0, 0, 90) }),
+    );
+    const loose = box(store, 20);
+    const out: MovedToComponent = {};
+    expect(store.execute(moveToComponent({ bodyIds: [loose.bodyId] }, frame.id!, out))).toBe(true);
+    const doc = store.document;
+    expect(doc.bodies[loose.bodyId]!.componentId).toBe(frame.id);
+    expect(doc.features[loose.sketchId]!.componentId).toBe(frame.id);
+    // The root is at the origin, Frame at (100, 0, 0) turned by 90°: a Move takes the body back.
+    const move = doc.features[out.moveId!] as MoveFeature;
+    expect(move.componentId).toBe(frame.id);
+    expect(move.bodyIds).toEqual([loose.bodyId]);
+    expect(move.transform).toMatchObject({ type: "free", x: "0", y: "100", z: "0", rx: "0", ry: "0", rz: "-90" });
+    expect(doc.timeline.at(-1)).toBe(out.moveId);
+    store.undo();
+    expect(store.document.bodies[loose.bodyId]!.componentId).toBe(store.document.assembly.rootComponentId);
+  });
+
+  it("adds no Move when both components are placed alike, and moves bodies back to the root", () => {
+    const store = new DocumentStore(createDocument());
+    const frame: CreatedComponent = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    const inside = box(store, 0, frame.id);
+    const loose = box(store, 20);
+    const out: MovedToComponent = {};
+    store.execute(moveToComponent({ bodyIds: [loose.bodyId] }, frame.id!, out));
+    expect(out.moveId).toBeUndefined();
+    const root = store.document.assembly.rootComponentId;
+    store.execute(moveToComponent({ bodyIds: [inside.bodyId] }, root));
+    expect(store.document.bodies[inside.bodyId]!.componentId).toBe(root);
+    // Into the component it already belongs to: nothing to do.
+    expect(store.execute(moveToComponent({ bodyIds: [inside.bodyId] }, root))).toBe(false);
   });
 
   it("takes along bodies that a Combine ties together", () => {

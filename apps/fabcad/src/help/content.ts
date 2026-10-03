@@ -800,6 +800,7 @@ export const HELP: Record<string, HelpEntry> = {
       "The model stays where it is. Bodies of the root get one instance at the origin; bodies taken out of a component get an instance at every placement of that component, shown or hidden as it was.",
       "Without a selection the component starts empty and is activated: the sketches and features you make now belong to it.",
       "The Browser lists the definitions under Components (with their Sketches, Features and Bodies) and the placed instances under Instances.",
+      "To give bodies to a component that already exists, drag them in the Browser onto that component (or its Bodies folder); drop them on the document to give them back to the root. Selected bodies are dragged together. The steps they cannot be separated from go along. When the two components are placed differently, a Move step is added at the end of the moved history so that the bodies stay where they are seen; with several instances, the first one counts.",
     ],
     when: [
       "For parts that occur more than once (a spacer, a bracket), or to keep the parts of an assembly apart.",
@@ -807,6 +808,7 @@ export const HELP: Record<string, HelpEntry> = {
     requires: ["Nothing, or bodies and features of one component."],
     limitations: [
       "Components are not nested: every component is made at the root.",
+      "Dragging in the Browser needs a mouse (or a pen); on a touch screen, Create Component in the context menu of a body makes a new component.",
       "Instances have no parameters of their own: they all show the definition as it is.",
     ],
     examples: [

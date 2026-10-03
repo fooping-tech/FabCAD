@@ -3,9 +3,13 @@ import {
   IDENTITY_INSTANCE_TRANSFORM,
   type InstanceTransform,
   ROOT_INSTANCE_ID,
+  anglesFromQuaternion,
+  composeInstanceTransforms,
+  invertInstanceTransform,
+  isIdentityTransform,
   normalizeQuaternion,
 } from "@fabcad/assembly";
-import { type CadDocument, allocateId } from "./document";
+import { type CadDocument, allocateId, consumedBodies } from "./document";
 import {
   type Feature,
   featureConsumedBodies,
@@ -17,7 +21,7 @@ import {
   featureOutputBodies,
   parseDynamicBodyId,
 } from "./features";
-import { removeFeatures } from "./commands";
+import { addMove, removeFeatures } from "./commands";
 import { type Command, command } from "./store";
 
 /**
@@ -203,17 +207,8 @@ export function createComponent(
   out: CreatedComponent = {},
 ): Command {
   return command("New component", (doc) => {
-    const owners = new Set<string>();
-    for (const id of input.featureIds ?? []) {
-      const c = doc.features[id]?.componentId;
-      if (c) owners.add(c);
-    }
-    for (const id of input.bodyIds ?? []) {
-      const c = doc.bodies[id]?.componentId;
-      if (c) owners.add(c);
-    }
-    if (owners.size > 1) return doc;
-    const source = [...owners][0];
+    const source = sourceOf(doc, input);
+    if (source === null) return doc;
     const moved = source
       ? entangledFeatures(doc, source, input)
       : { featureIds: [] as string[], bodyIds: [] as string[] };
@@ -259,6 +254,111 @@ export function createComponent(
     out.sourceComponentId = source;
     out.featureIds = moved.featureIds;
     out.bodyIds = moved.bodyIds;
+    return d;
+  });
+}
+
+/** The one component that selected bodies and features belong to; null when they span several. */
+function sourceOf(
+  doc: CadDocument,
+  input: { featureIds?: readonly string[]; bodyIds?: readonly string[] },
+): string | null | undefined {
+  const owners = new Set<string>();
+  for (const id of input.featureIds ?? []) {
+    const c = doc.features[id]?.componentId;
+    if (c) owners.add(c);
+  }
+  for (const id of input.bodyIds ?? []) {
+    const c = doc.bodies[id]?.componentId;
+    if (c) owners.add(c);
+  }
+  if (owners.size > 1) return null;
+  return [...owners][0];
+}
+
+/** Where a component is seen: the origin for the root, its first instance otherwise. */
+function placementOf(doc: CadDocument, componentId: string): InstanceTransform | null {
+  if (componentId === doc.assembly.rootComponentId) return IDENTITY_INSTANCE_TRANSFORM;
+  return listInstances(doc, componentId)[0]?.transform ?? null;
+}
+
+const round = (v: number): string => String(Math.round(v * 1e6) / 1e6 + 0);
+
+export interface MovedToComponent {
+  featureIds?: string[];
+  bodyIds?: string[];
+  /** The Move step added to keep the bodies where they were seen; absent when none was needed. */
+  moveId?: string;
+}
+
+/**
+ * Give bodies (and features) to another existing component, together with everything they
+ * cannot be separated from (`entangledFeatures`).
+ *
+ * The geometry lies in the coordinates of its definition. When the two components are placed
+ * differently (the root at the origin, a component at its first instance), a free Move is
+ * added at the end of the moved history that takes the bodies from the one placement to the
+ * other, so that they stay where they were seen. It is an ordinary step of the timeline: it
+ * can be edited or deleted like any other.
+ */
+export function moveToComponent(
+  input: { featureIds?: readonly string[]; bodyIds?: readonly string[] },
+  targetId: string,
+  out: MovedToComponent = {},
+): Command {
+  return command("Move to component", (doc) => {
+    const source = sourceOf(doc, input);
+    if (!source || source === targetId || !doc.assembly.components[targetId]) return doc;
+    const moved = entangledFeatures(doc, source, input);
+    if (moved.featureIds.length === 0) return doc;
+    const features = { ...doc.features };
+    for (const f of moved.featureIds) features[f] = { ...features[f]!, componentId: targetId };
+    const bodies = { ...doc.bodies };
+    for (const b of moved.bodyIds) bodies[b] = { ...bodies[b]!, componentId: targetId };
+    let d: CadDocument = { ...doc, features, bodies };
+    out.featureIds = moved.featureIds;
+    out.bodyIds = moved.bodyIds;
+
+    const from = placementOf(doc, source);
+    const to = placementOf(doc, targetId);
+    if (!from || !to) return d;
+    const change = composeInstanceTransforms(invertInstanceTransform(to), from);
+    if (isIdentityTransform(change, 1e-9)) return d;
+    const consumed = consumedBodies(d);
+    const alive = moved.bodyIds.filter((b) => !consumed.has(b));
+    if (alive.length === 0) return d;
+    const [rx, ry, rz] = anglesFromQuaternion(change.rotation);
+    const [x, y, z] = change.position;
+    const ref: { id?: string } = {};
+    d = addMove(
+      {
+        bodyIds: alive,
+        transform: {
+          type: "free",
+          x: round(x),
+          y: round(y),
+          z: round(z),
+          rx: round(rx),
+          ry: round(ry),
+          rz: round(rz),
+          pivot: { x: 0, y: 0, z: 0 },
+        },
+      },
+      ref,
+    ).apply(d);
+    if (!ref.id) return d;
+    // Right after the last moved step, wherever the history marker is: the Move needs the
+    // bodies as that history leaves them.
+    const last = Math.max(...moved.featureIds.map((f) => doc.timeline.indexOf(f)));
+    const timeline = doc.timeline.slice();
+    timeline.splice(last + 1, 0, ref.id);
+    const cursor = doc.timelineCursor;
+    d = {
+      ...d,
+      timeline,
+      timelineCursor: cursor === null ? null : cursor + (last + 1 <= cursor ? 1 : 0),
+    };
+    out.moveId = ref.id;
     return d;
   });
 }

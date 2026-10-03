@@ -17,7 +17,12 @@ import {
 import type { OriginPlaneName } from "@fabcad/geometry";
 import { Fragment, type ReactElement, type ReactNode, useEffect, useState } from "react";
 import { editFeature, enterSketch, featureIcon, pickInDialog, pickSketchPlane } from "../app/actions";
-import { activateComponent, openInstanceMove, useActiveComponentId } from "../app/components";
+import {
+  activateComponent,
+  moveBodiesToComponent,
+  openInstanceMove,
+  useActiveComponentId,
+} from "../app/components";
 import {
   type Selection,
   appState,
@@ -30,6 +35,9 @@ import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 import { Icon } from "../ui/Icon";
+
+/** Bodies being dragged in the Browser (the drag data cannot be read while dragging over). */
+let dragged: string[] | null = null;
 
 function Row({
   depth,
@@ -50,9 +58,15 @@ function Row({
   onMenu,
   title,
   renameRequest,
+  dragBodies,
+  dropBodies,
 }: {
   /** Start renaming now (asked for by the context menu). */
   renameRequest?: boolean;
+  /** The row can be dragged; returns the bodies it carries. */
+  dragBodies?: () => string[];
+  /** The row takes dropped bodies: `accepts` tells whether these can go there. */
+  dropBodies?: { accepts: (bodyIds: string[]) => boolean; drop: (bodyIds: string[]) => void };
   onMenu?: (e: React.MouseEvent) => void;
   depth: number;
   icon: string;
@@ -73,6 +87,7 @@ function Row({
 }): ReactElement {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
+  const [over, setOver] = useState(false);
   const dim = visible === false;
   useEffect(() => {
     if (!renameRequest) return;
@@ -82,7 +97,40 @@ function Row({
   }, [renameRequest]);
   return (
     <div
-      className={`tree-row${selected ? " selected" : ""}${active ? " active" : ""}${dim ? " dim" : ""}${error ? " error" : ""}`}
+      className={`tree-row${selected ? " selected" : ""}${active ? " active" : ""}${dim ? " dim" : ""}${error ? " error" : ""}${over ? " drop-target" : ""}`}
+      draggable={dragBodies !== undefined && !editing}
+      onDragStart={
+        dragBodies
+          ? (e) => {
+              dragged = dragBodies();
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", name);
+            }
+          : undefined
+      }
+      onDragEnd={dragBodies ? () => (dragged = null) : undefined}
+      onDragOver={
+        dropBodies
+          ? (e) => {
+              if (!dragged || !dropBodies.accepts(dragged)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (!over) setOver(true);
+            }
+          : undefined
+      }
+      onDragLeave={dropBodies ? () => setOver(false) : undefined}
+      onDrop={
+        dropBodies
+          ? (e) => {
+              e.preventDefault();
+              setOver(false);
+              const ids = dragged;
+              dragged = null;
+              if (ids && dropBodies.accepts(ids)) dropBodies.drop(ids);
+            }
+          : undefined
+      }
       style={{ paddingLeft: 4 + depth * 14 }}
       role="treeitem"
       aria-selected={selected}
@@ -224,6 +272,18 @@ export function BrowserTree(): ReactElement {
 
   const root = doc.assembly.rootComponentId;
   const components = listComponents(doc);
+  /** A dragged body takes the other selected bodies along. */
+  const dragOf = (bodyId: string) => (): string[] => {
+    const selected = appState
+      .get()
+      .selection.flatMap((x) => (x.kind === "body" ? [x.bodyId] : []));
+    return selected.includes(bodyId) ? selected : [bodyId];
+  };
+  /** Drop target for bodies: the component they go to. */
+  const dropInto = (componentId: string) => ({
+    accepts: (ids: string[]) => ids.some((id) => doc.bodies[id] && doc.bodies[id].componentId !== componentId),
+    drop: (ids: string[]) => moveBodiesToComponent(ids, componentId),
+  });
   const instances = listInstances(doc);
 
   /** Planes, sketches, features and bodies of one component, as folders under `depth`. */
@@ -240,6 +300,7 @@ export function BrowserTree(): ReactElement {
       componentId === root ? [] : owned.filter((f) => f.type !== "sketch" && f.type !== "offset-plane");
     const folder = (key: string, name: string, count: number, fallback = true): ReactElement => (
       <Row
+        dropBodies={key === "bodies" ? dropInto(componentId) : undefined}
         depth={depth}
         icon="folder"
         name={name}
@@ -348,6 +409,7 @@ export function BrowserTree(): ReactElement {
                 onClick={(e) => pick(sel, e)}
                 onMenu={menuFor(sel)}
                 onRename={(name) => run(renameBody(b.id, name))}
+                dragBodies={dragOf(b.id)}
               />
             );
           })}
@@ -373,6 +435,7 @@ export function BrowserTree(): ReactElement {
           onToggle={() => toggle("root")}
           onClick={() => toggle("root")}
           onDoubleClick={active === root ? undefined : () => activateComponent(null)}
+          dropBodies={dropInto(root)}
         />
         {open.root && (
           <>
@@ -460,6 +523,7 @@ export function BrowserTree(): ReactElement {
                         onMenu={menuFor(sel)}
                         onRename={(name) => run(renameComponent(c.id, name))}
                         renameRequest={renaming === selectionKey(sel)}
+                        dropBodies={dropInto(c.id)}
                       />
                       {isOpen(key, isActive) && contents(c.id, 3, `${c.id}:`)}
                     </Fragment>
