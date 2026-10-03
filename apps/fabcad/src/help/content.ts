@@ -526,8 +526,13 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     requires: ["A closed profile of a sketch, a text, or a flat face."],
     parameters: [
+      { name: "Extent", text: "Distance: by the value below. To: up to a plane, a flat face or a point." },
       { name: "Distance", text: "How far the profile is moved. A negative value goes the other way." },
       { name: "Direction", text: "One Side, Flipped, or Symmetric (half the distance to either side)." },
+      {
+        name: "To",
+        text: "Click a plane, a flat face (parallel to the sketch) or a vertex or sketch point. The length is measured again whenever the target moves; Length shows what it comes to. Dragging the arrow goes back to a distance.",
+      },
       OPERATION,
     ],
     limitations: ["Profiles of one sketch per feature.", "Open curves are not profiles."],

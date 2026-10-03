@@ -26,6 +26,7 @@ import {
 } from "@fabcad/geometry";
 import { type Sketch, resolveProfileRefs, sketchBounds } from "@fabcad/sketch";
 import type { Dialog, SourcePick } from "./appState";
+import { extrudeTargetReach } from "./extrudeTarget";
 import { bodiesCenter, formatValue, resolveMoveAxis } from "./moveTransform";
 import type { BodyModel } from "./session";
 import { sketchView } from "./session";
@@ -371,6 +372,22 @@ function extrudeHandle(dialog: Extract<Dialog, { type: "extrude" }>, ctx: Handle
   const plane = resolveSketchPlane(sketch.plane);
   // The largest profile carries the arrow.
   const main = picked.reduce((a, b) => (b.area > a.area ? b : a));
+  if (dialog.extent === "to") {
+    // Up to a target the arrow shows the reach; dragging it extrudes by a distance again.
+    const found = extrudeTargetReach(dialog, ctx);
+    if (!found || !("reach" in found)) return [];
+    return [
+      {
+        kind: "linear",
+        key: "distance",
+        origin: planeToWorld(plane, main.interiorPoint),
+        direction: plane.normal,
+        factor: 1,
+        value: found.reach,
+        patch: (v) => ({ extent: "distance", distance: formatValue(v), direction: "positive" }),
+      },
+    ];
+  }
   const factor = dialog.direction === "symmetric" ? 0.5 : dialog.direction === "negative" ? -1 : 1;
   return [
     {

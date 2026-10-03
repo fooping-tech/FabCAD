@@ -810,6 +810,25 @@ function OffsetPlaneFields({ dialog }: { dialog: OffsetPlaneDialog }): ReactElem
   );
 }
 
+/** How a plane, face or point the dialogs refer to is named in a pick box. */
+export function referenceText(doc: CadDocument, ref: PlaneReference | Point3Ref): string {
+  const fmt = (v: number): string => String(Math.round(v * 1000) / 1000);
+  switch (ref.type) {
+    case "origin-plane":
+      return `${ref.plane} plane`;
+    case "plane":
+      return doc.features[ref.featureId]?.name ?? "Missing plane";
+    case "face":
+      return `Face · ${bodyName(doc, ref.bodyId)}`;
+    case "vertex":
+      return `Vertex · ${bodyName(doc, ref.bodyId)}`;
+    case "sketch-point":
+      return `Point · ${featureName(doc, ref.sketchId)}`;
+    case "fixed":
+      return `${fmt(ref.point.x)}, ${fmt(ref.point.y)}, ${fmt(ref.point.z)}`;
+  }
+}
+
 export function SolidDialogBody({ dialog }: { dialog: SolidDialog }): ReactElement {
   switch (dialog.type) {
     case "hole":

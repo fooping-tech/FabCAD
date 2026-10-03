@@ -494,8 +494,13 @@ export const HELP_JA: Record<string, HelpEntry> = {
     ],
     requires: ["スケッチの閉じた Profile、テキスト、または平らな面。"],
     parameters: [
+      { name: "Extent", text: "Distance：下の値の距離だけ押し出します。To：平面、平らな面、点まで押し出します。" },
       { name: "Distance", text: "Profile を動かす距離。負の値は反対向きです。" },
       { name: "Direction", text: "One Side（片側）、Flipped（反転）、Symmetric（両側に半分ずつ）。" },
+      {
+        name: "To",
+        text: "平面、（スケッチと平行な）平らな面、頂点、スケッチの点をクリックします。押し出し先が動くたびに長さを測り直します。Length に求めた長さが出ます。矢印をドラッグすると Distance に戻ります。",
+      },
       OPERATION,
     ],
     limitations: ["1 つの Feature で使える Profile は、1 つのスケッチのものです。", "閉じていない曲線は Profile になりません。"],

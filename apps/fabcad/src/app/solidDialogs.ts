@@ -17,6 +17,7 @@ import {
   type OffsetPlaneFeature,
   type PatternAxis,
   type PatternSource,
+  type ExtrudeTarget,
   type PlaneReference,
   type Point3Ref,
   type RectangularPatternFeature,
@@ -259,6 +260,18 @@ const DIRECTION: PickWants = { edges: "linear", sketchLines: true };
 const AXIS: PickWants = { edges: "axis", sketchLines: true };
 const PLANE: PickWants = { faces: "planar", originPlanes: true };
 const POINT: PickWants = { vertices: true, sketchPoints: true };
+
+/** What Extrude can go up to: a plane, a flat face, a vertex or a sketch point. */
+export const EXTRUDE_TO_WANTS: PickWants = { ...PLANE, ...POINT };
+
+/** The target of an extrusion from a pick; null for anything else. */
+export function pickExtrudeTarget(
+  picked: Picked,
+  ctx: PickContext,
+  dialog: { editing: string | null },
+): ExtrudeTarget | null {
+  return pickPlane(picked, ctx, dialog) ?? pickPoint(picked, ctx);
+}
 
 export function dialogWants(dialog: SolidDialog): PickWants {
   switch (dialog.type) {

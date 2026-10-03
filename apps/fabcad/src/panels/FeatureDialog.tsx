@@ -8,13 +8,14 @@ import {
   patchDialog,
 } from "../app/actions";
 import { type Dialog, appState, lastViewportPoint } from "../app/appState";
-import { useDocument } from "../app/session";
+import { extrudeTargetReach } from "../app/extrudeTarget";
+import { currentScope, modelState, useDocument } from "../app/session";
 import { isSolidDialog } from "../app/solidDialogs";
 import { useStore } from "../app/tinyStore";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Field, OperationFields, PickBox } from "./dialogFields";
 import { ExpressionInput } from "./ExpressionInput";
-import { SolidDialogBody } from "./SolidDialogFields";
+import { SolidDialogBody, referenceText } from "./SolidDialogFields";
 
 function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
   const doc = useDocument();
@@ -29,45 +30,37 @@ function Body({ dialog }: { dialog: Dialog }): ReactElement | null {
         <>
           <Field label="Profile">
             <PickBox
-              active
+              active={dialog.picking !== "to"}
               text={
                 dialog.profiles.length === 0
                   ? "Click a closed profile"
                   : `${dialog.profiles.length} selected · ${sketchName(dialog.sketchId)}`
               }
+              onActivate={() => patchDialog({ picking: "profile" })}
               onClear={dialog.profiles.length > 0 ? () => patchDialog({ profiles: [] }) : undefined}
             />
           </Field>
-          <Field label="Distance">
-            <ExpressionInput
-              label="Distance"
-              kind="length"
-              live
-              autoFocus
-              value={dialog.distance}
-              onChange={(distance) => patchDialog({ distance })}
-              onEnter={commitDialog}
-            />
-          </Field>
-          <Field label="Direction" secondary>
+          <Field label="Extent" secondary>
             <div className="segmented">
               {(
                 [
-                  ["positive", "One Side"],
-                  ["negative", "Flipped"],
-                  ["symmetric", "Symmetric"],
+                  ["distance", "Distance"],
+                  ["to", "To"],
                 ] as const
               ).map(([id, label]) => (
                 <button
                   key={id}
-                  className={dialog.direction === id ? "on" : ""}
-                  onClick={() => patchDialog({ direction: id })}
+                  className={(dialog.extent ?? "distance") === id ? "on" : ""}
+                  onClick={() =>
+                    patchDialog({ extent: id, picking: id === "to" && !dialog.to ? "to" : "profile" })
+                  }
                 >
                   {label}
                 </button>
               ))}
             </div>
           </Field>
+          {dialog.extent === "to" ? <ExtrudeToFields dialog={dialog} /> : <ExtrudeDistanceFields dialog={dialog} />}
           <OperationFields dialog={dialog} />
         </>
       );
@@ -321,5 +314,77 @@ export function FeatureDialog(): ReactElement | null {
         </div>
       </div>
     </FloatingPanel>
+  );
+}
+
+type ExtrudeDialog = Extract<Dialog, { type: "extrude" }>;
+
+/** Extrude by a distance: the length and the side of the sketch. */
+function ExtrudeDistanceFields({ dialog }: { dialog: ExtrudeDialog }): ReactElement {
+  return (
+    <>
+      <Field label="Distance">
+        <ExpressionInput
+          label="Distance"
+          kind="length"
+          live
+          autoFocus
+          value={dialog.distance}
+          onChange={(distance) => patchDialog({ distance })}
+          onEnter={commitDialog}
+        />
+      </Field>
+      <Field label="Direction" secondary>
+        <div className="segmented">
+          {(
+            [
+              ["positive", "One Side"],
+              ["negative", "Flipped"],
+              ["symmetric", "Symmetric"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              className={dialog.direction === id ? "on" : ""}
+              onClick={() => patchDialog({ direction: id })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </Field>
+    </>
+  );
+}
+
+/** Extrude up to a plane, a flat face or a point; the length it comes to is shown. */
+function ExtrudeToFields({ dialog }: { dialog: ExtrudeDialog }): ReactElement {
+  const doc = useDocument();
+  const model = useStore(modelState);
+  const found = extrudeTargetReach(dialog, {
+    doc,
+    bodies: model.bodies,
+    planes: model.planes,
+    scope: currentScope(doc),
+  });
+  const round = (v: number): string => String(Math.round(v * 1000) / 1000);
+  return (
+    <>
+      <Field label="To">
+        <PickBox
+          active={dialog.picking === "to"}
+          text={dialog.to ? referenceText(doc, dialog.to) : "Click a plane, a flat face or a point"}
+          onActivate={() => patchDialog({ picking: "to" })}
+          onClear={dialog.to ? () => patchDialog({ to: null, picking: "to" }) : undefined}
+        />
+      </Field>
+      {found && (
+        <Field label="Length" secondary>
+          <span style={"error" in found ? { color: "var(--danger)", fontSize: 12 } : { fontSize: 12 }}>
+            {"error" in found ? found.error : `${round(found.reach)} mm`}
+          </span>
+        </Field>
+      )}
+    </>
   );
 }

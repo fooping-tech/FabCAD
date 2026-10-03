@@ -4,6 +4,7 @@ import {
   type BodyOperation,
   type CircularPatternFeature,
   type CreatedRef,
+  type ExtrudeFeature,
   DocumentStore,
   type HoleFeature,
   type MoveFeature,
@@ -19,6 +20,7 @@ import {
   addLoft,
   addMirror,
   addMove,
+  addOffsetPlane,
   addParameter,
   addRectangularPattern,
   addSketch,
@@ -29,6 +31,7 @@ import {
   createDocument,
   deserializeDocument,
   dynamicBodyId,
+  featureExpressions,
   serializeDocument,
   syncBodyRecords,
   updateFeature,
@@ -277,6 +280,76 @@ describe("sketch on a face with its outline projected", () => {
     const union = geometry(ctx, e1.bodyId!).volume;
     expect(union).toBeGreaterThanOrEqual(Math.max(below, upper) - 1e-6);
     expect(union).toBeCloseTo(below + upper, 0);
+  });
+});
+
+// ------------------------------------------------------------- extrude up to
+
+describe("extrude up to", () => {
+  const extrudeTo = (ctx: Ctx, from: Vec2, to: Vec2, target: ExtrudeFeature["to"]): Made => {
+    const s = sketch(ctx, XY, (b) => createRectangle2Point(b, from, to).entities);
+    const e: CreatedRef = {};
+    ctx.store.execute(
+      addExtrude(
+        { sketchId: s.id, profiles: [profileAt(ctx, s.id, { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 })], distance: "1", to: target },
+        e,
+      ),
+    );
+    return { sketchId: s.id, featureId: e.id!, bodyId: e.bodyId!, lines: s.made };
+  };
+
+  it("goes up to a construction plane and follows it", async () => {
+    const ctx = context();
+    const plane: CreatedRef = {};
+    ctx.store.execute(addOffsetPlane({ base: { type: "origin-plane", plane: "XY" }, offset: "35" }, plane));
+    const e = extrudeTo(ctx, { x: 0, y: 0 }, { x: 10, y: 10 }, { type: "plane", featureId: plane.id! });
+    await compute(ctx);
+    expect(geometry(ctx, e.bodyId).bounds.max.z).toBeCloseTo(35, 6);
+    // The plane moves: the extrusion follows it, also to the other side.
+    run(ctx, updateFeature(plane.id!, { offset: "-12" }));
+    await compute(ctx);
+    const g = geometry(ctx, e.bodyId);
+    expect(g.bounds.min.z).toBeCloseTo(-12, 6);
+    expect(g.bounds.max.z).toBeCloseTo(0, 6);
+  });
+
+  it("goes up to a flat face of another body, and to a vertex", async () => {
+    const ctx = context();
+    const base = block(ctx, { x: 0, y: 0 }, { x: 40, y: 30 }, "20");
+    await compute(ctx);
+    const top = faceAt(geometry(ctx, base.bodyId), { x: 20, y: 15, z: 20 });
+    const ref = makeFaceRef(body(ctx, base.bodyId), top)!;
+    const e = extrudeTo(ctx, { x: 50, y: 0 }, { x: 60, y: 10 }, { type: "face", bodyId: base.bodyId, ref });
+    await compute(ctx);
+    expect(geometry(ctx, e.bodyId).bounds.max.z).toBeCloseTo(20, 6);
+    expect(geometry(ctx, e.bodyId).volume).toBeCloseTo(10 * 10 * 20, 3);
+
+    const g = geometry(ctx, base.bodyId);
+    const vertex = g.vertices.length / 3;
+    let index = -1;
+    for (let i = 0; i < vertex; i++) {
+      if (Math.abs(g.vertices[i * 3 + 2]! - 20) < 1e-6) index = i;
+    }
+    const v = makeVertexRef(body(ctx, base.bodyId), base.bodyId, index)!;
+    const f = extrudeTo(ctx, { x: 70, y: 0 }, { x: 80, y: 10 }, v);
+    await compute(ctx);
+    expect(geometry(ctx, f.bodyId).bounds.max.z).toBeCloseTo(20, 6);
+    // The base grows: both follow.
+    run(ctx, updateFeature(base.featureId, { distance: "25" }));
+    await compute(ctx);
+    expect(geometry(ctx, e.bodyId).bounds.max.z).toBeCloseTo(25, 6);
+    expect(geometry(ctx, f.bodyId).bounds.max.z).toBeCloseTo(25, 6);
+    // The distance is not a value of the feature while it goes up to something.
+    expect(featureExpressions(ctx.store.document.features[e.featureId]!)).toEqual([]);
+  });
+
+  it("refuses a plane that is not parallel to the sketch, and one on the sketch plane", async () => {
+    const ctx = context();
+    const a = extrudeTo(ctx, { x: 0, y: 0 }, { x: 10, y: 10 }, { type: "origin-plane", plane: "XZ" });
+    const b = extrudeTo(ctx, { x: 20, y: 0 }, { x: 30, y: 10 }, { type: "origin-plane", plane: "XY" });
+    const result = await compute(ctx, false);
+    expect(result.features[a.featureId]).toMatchObject({ state: "error", message: "The plane to extrude to is not parallel to the sketch." });
+    expect(result.features[b.featureId]).toMatchObject({ state: "error", message: "What to extrude to lies on the sketch plane." });
   });
 });
 

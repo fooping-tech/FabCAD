@@ -30,7 +30,14 @@ import {
   toast,
 } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
-import { dialogReferences, dialogWants, isPathCurve, isSolidDialog } from "../app/solidDialogs";
+import {
+  EXTRUDE_TO_WANTS,
+  type PickWants,
+  dialogReferences,
+  dialogWants,
+  isPathCurve,
+  isSolidDialog,
+} from "../app/solidDialogs";
 import {
   edgeIndexOf,
   edgeRefOf,
@@ -68,6 +75,7 @@ import {
   turnAngles,
 } from "../app/moveTransform";
 import { type DialogHandle, dialogHandles, referencePatch } from "../app/dialogHandles";
+import { extrudeTargetReach } from "../app/extrudeTarget";
 import { angleOnRing, arrowScreen, drawHandle, handleAt, handlePoint } from "./dialogHandleView";
 import {
   type GizmoPart,
@@ -168,6 +176,18 @@ function dialogHighlights(dialog: Dialog | null, scene: ViewportScene): Highligh
   return out;
 }
 
+/** How far the Extrude dialog reaches when it goes up to a target; null otherwise. */
+function extrudeReachOf(dialog: Extract<Dialog, { type: "extrude" }>): number | null {
+  const model = modelState.get();
+  const found = extrudeTargetReach(dialog, {
+    doc: documentStore.document,
+    bodies: model.bodies,
+    planes: model.planes,
+    scope: currentScope(),
+  });
+  return found && "reach" in found ? found.reach : null;
+}
+
 /** The plane that the Offset Plane dialog would make, for the preview. */
 function offsetPlanePreview(dialog: Dialog | null): PlanePatch | null {
   if (dialog?.type !== "offset-plane" || !dialog.base) return null;
@@ -235,8 +255,7 @@ export function Viewport(): ReactElement {
     let down: { x: number; y: number; button: number; time: number } | null = null;
 
     /** What the active input of a feature dialog would take from under the pointer. */
-    const hoverForDialog = (dialog: SolidDialog, x: number, y: number): void => {
-      const wants = dialogWants(dialog);
+    const hoverForDialog = (wants: PickWants, x: number, y: number): void => {
       let hover: Selection | null = null;
       let profile: HoverProfile | null = null;
       const entity = (e: { sketchId: string; entityId: string } | null): Selection | null =>
@@ -298,7 +317,12 @@ export function Viewport(): ReactElement {
       const state = appState.get();
       const dialog = state.dialog;
       if (isSolidDialog(dialog)) {
-        hoverForDialog(dialog, x, y);
+        hoverForDialog(dialogWants(dialog), x, y);
+        return;
+      }
+      if (dialog?.type === "extrude" && dialog.picking === "to") {
+        controller.setHoverProfile(null);
+        hoverForDialog(EXTRUDE_TO_WANTS, x, y);
         return;
       }
       if (dialog && (dialog.type === "extrude" || dialog.type === "revolve")) {
@@ -400,6 +424,10 @@ export function Viewport(): ReactElement {
           const pick = scene.pick(x, y, { faces: true, edges: false, vertices: false });
           if (pick?.kind === "face" && !pick.planar) toast("Select a flat face.", "warning");
         }
+        return;
+      }
+      if (dialog?.type === "extrude" && dialog.picking === "to") {
+        if (hover) pickInDialog(hover);
         return;
       }
       if (dialog && (dialog.type === "extrude" || dialog.type === "revolve")) {
@@ -1212,7 +1240,7 @@ export function Viewport(): ReactElement {
     const dialog = app.dialog;
     const m =
       dialog?.type === "extrude" && !app.activeSketchId && app.workspace === "design"
-        ? extrudeManipulator(doc, dialog)
+        ? extrudeManipulator(doc, dialog, extrudeReachOf(dialog))
         : null;
     scene.setExtrudePreview(
       m && m.distance !== null
@@ -1220,7 +1248,7 @@ export function Viewport(): ReactElement {
         : null,
     );
     controllerRef.current?.requestDraw();
-  }, [app.dialog, app.activeSketchId, app.workspace, doc, ready]);
+  }, [app.dialog, app.activeSketchId, app.workspace, doc, model.bodies, model.planes, ready]);
 
   // ------------------------------------------------------- move preview
   useEffect(() => {

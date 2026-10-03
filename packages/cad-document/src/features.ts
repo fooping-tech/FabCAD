@@ -34,12 +34,22 @@ export interface ExtrudeFeature extends FeatureBase {
   /** Length expression. */
   distance: string;
   direction: ExtrudeDirection;
+  /**
+   * Extrude up to this instead of by `distance`: a plane parallel to the sketch (origin plane,
+   * construction plane, flat face) or a point. The length is measured again at every recompute,
+   * so the extrusion follows the target; it goes to whichever side the target is on, and
+   * `distance` and `direction` are not used.
+   */
+  to?: ExtrudeTarget;
   operation: BodyOperation;
   /** Bodies modified by join / cut / intersect. */
   targetBodyIds: string[];
   /** Body created when `operation` is "new". */
   bodyId: string;
 }
+
+/** What an extrusion can go up to. The `type`s of the two do not overlap. */
+export type ExtrudeTarget = PlaneReference | Point3Ref;
 
 export type RevolveAxis =
   | { type: "sketch-line"; entityId: string }
@@ -491,7 +501,8 @@ export function featureExpressions(feature: Feature): FeatureExpression[] {
     case "offset-plane":
       return [{ key: "offset", expression: feature.offset, kind: "length" }];
     case "extrude":
-      return [{ key: "distance", expression: feature.distance, kind: "length" }];
+      // Up to a target, the distance is not used.
+      return feature.to ? [] : [{ key: "distance", expression: feature.distance, kind: "length" }];
     case "revolve":
       return [{ key: "angle", expression: feature.angle, kind: "angle" }];
     case "fillet":
@@ -633,6 +644,8 @@ function featureReferences(
   feature: Feature,
 ): { type: string; bodyId?: string; sketchId?: string; featureId?: string }[] {
   switch (feature.type) {
+    case "extrude":
+      return feature.to ? [feature.to] : [];
     case "offset-plane":
       return [feature.base];
     case "rectangular-pattern":
@@ -713,6 +726,7 @@ export function featureInputBodies(feature: Feature, lookup?: FeatureLookup): st
   const references = featureReferences(feature).flatMap(bodyOf);
   switch (feature.type) {
     case "extrude":
+      return unique([...(feature.operation === "new" ? [] : feature.targetBodyIds), ...references]);
     case "revolve":
     case "sweep":
       return feature.operation === "new" ? [] : feature.targetBodyIds.slice();
@@ -840,6 +854,7 @@ export function featureInputSketches(feature: Feature): string[] {
   const references = featureReferences(feature).flatMap(sketchOf);
   switch (feature.type) {
     case "extrude":
+      return unique([feature.sketchId, ...references]);
     case "revolve":
     case "hole":
       return [feature.sketchId];

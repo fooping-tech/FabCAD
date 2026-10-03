@@ -215,7 +215,7 @@ export function resolveMoveAxis(
   return null;
 }
 
-function resolvePoint(ref: Point3Ref, ctx: MoveContext): Vec3 | null {
+export function resolvePoint(ref: Point3Ref, ctx: MoveContext): Vec3 | null {
   if (ref.type === "fixed") return ref.point;
   if (ref.type === "sketch-point") {
     const f = ctx.doc.features[ref.sketchId];

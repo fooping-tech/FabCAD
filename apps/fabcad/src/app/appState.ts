@@ -3,6 +3,7 @@ import type {
   BodyOperation,
   EdgeRef,
   ExtrudeDirection,
+  ExtrudeTarget,
   FaceRef,
   HoleExtent,
   HoleType,
@@ -240,6 +241,11 @@ export type Dialog =
       direction: ExtrudeDirection;
       /** Set once the user picked a direction: the operation no longer changes it. */
       directionChosen?: boolean;
+      /** "to": up to `to` (a plane, a flat face or a point) instead of by `distance`. */
+      extent?: "distance" | "to";
+      to?: ExtrudeTarget | null;
+      /** Which input the next viewport click fills. */
+      picking?: "profile" | "to";
       operation: BodyOperation;
       targetBodyIds: string[];
     }
