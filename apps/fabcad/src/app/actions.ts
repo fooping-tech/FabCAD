@@ -73,6 +73,7 @@ import {
   run,
   sketchView,
 } from "./session";
+import { bodiesCenter } from "./moveTransform";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
@@ -503,10 +504,14 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
           editing: null,
           bodyIds: [],
           copy: false,
-          mode: "translate",
+          mode: "free",
           x: "0",
           y: "0",
           z: "0",
+          rx: "0",
+          ry: "0",
+          rz: "0",
+          pivot: null,
           axis: null,
           angle: "90",
           from: null,
@@ -1020,8 +1025,12 @@ function consumingSketch(cmd: Command, ...sketchIds: string[]): Command {
 
 export function commitDialog(): boolean {
   if (appState.get().dialog?.type === "text") return commitText();
-  const dialog = appState.get().dialog;
+  let dialog = appState.get().dialog;
   if (!dialog) return false;
+  if (dialog.type === "move" && dialog.mode === "free" && !dialog.pivot) {
+    // The bodies turn about the point where the manipulator stands: store it with the move.
+    dialog = { ...dialog, pivot: bodiesCenter(modelState.get().bodies, dialog.bodyIds) };
+  }
   const problem = dialogProblem(dialog);
   if (problem) {
     toast(problem, "warning");

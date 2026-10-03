@@ -357,6 +357,50 @@ export class ViewportScene {
     }
   }
 
+  private moveRoot = new THREE.Group();
+
+  /**
+   * Translucent copies of bodies where a Move puts them. `matrix` (column-major) is applied to
+   * each body as it is shown now. The meshes of the bodies are shared, not copied.
+   */
+  setMovePreview(preview: { bodyIds: string[]; matrix: number[] } | null): void {
+    if (!this.moveRoot.parent) this.scene.add(this.moveRoot);
+    for (const child of [...this.moveRoot.children]) {
+      this.moveRoot.remove(child);
+      ((child as THREE.Mesh | THREE.LineSegments).material as THREE.Material).dispose();
+    }
+    this.invalidate();
+    if (!preview) return;
+    const matrix = new THREE.Matrix4().fromArray(preview.matrix);
+    for (const id of preview.bodyIds) {
+      const body = this.bodies.get(id);
+      if (!body) continue;
+      const mesh = new THREE.Mesh(
+        body.mesh.geometry,
+        new THREE.MeshBasicMaterial({
+          color: COLORS.selected,
+          transparent: true,
+          opacity: 0.3,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      const edges = new THREE.LineSegments(
+        body.edges.geometry,
+        new THREE.LineBasicMaterial({ color: COLORS.selected, transparent: true, opacity: 0.9 }),
+      );
+      for (const obj of [mesh, edges]) {
+        obj.matrixAutoUpdate = false;
+        obj.matrix.copy(matrix);
+        obj.renderOrder = 3;
+        // Picking goes to the bodies, not to their preview.
+        obj.raycast = () => {};
+      }
+      edges.renderOrder = 4;
+      this.moveRoot.add(mesh, edges);
+    }
+  }
+
   private currentDistance(): number {
     if (this.camera === this.orthographic) {
       const halfH = this.orthographic.top / this.orthographic.zoom;

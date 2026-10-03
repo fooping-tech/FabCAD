@@ -1,4 +1,4 @@
-import { planeToWorld, type Vec3 } from "@fabcad/geometry";
+import { type Plane3, planeToWorld, type Vec3 } from "@fabcad/geometry";
 import {
   type PlanePatch,
   facePlanePatch,
@@ -70,6 +70,24 @@ import {
   manipulatorScreen,
 } from "./extrudeManipulator";
 import { type Highlight, type Pick3D, type ViewName, ViewportScene } from "./scene";
+import {
+  IDENTITY,
+  type MoveContext,
+  formatValue,
+  moveGizmo,
+  movePreview,
+  turnAngles,
+} from "../app/moveTransform";
+import {
+  type GizmoPart,
+  drawMoveGizmo,
+  gizmoPartAt,
+  gizmoPartPoint,
+  partDirection,
+  ringAngle,
+  ringPlane,
+  samePart,
+} from "./moveManipulator";
 
 const VIEWS: { id: ViewName; label: string }[] = [
   { id: "top", label: "Top" },
@@ -532,9 +550,126 @@ export function Viewport(): ReactElement {
       return Math.hypot(s.handle.x - x, s.handle.y - y) <= reach ? m : null;
     };
 
+    // --------------------------------------------------- move manipulator
+    let moveDrag: {
+      pointerId: number;
+      part: GizmoPart;
+      center: Vec3;
+      direction: Vec3;
+      /** Arrows: the axis parameter where it was grabbed. Rings: the angle it was grabbed at. */
+      grab: number;
+      plane: Plane3;
+      /** Rings: the angle seen last and the turn so far (it may go past a full turn). */
+      last: number;
+      turned: number;
+      start: { x: number; y: number; z: number; rx: number; ry: number; rz: number; angle: number };
+    } | null = null;
+    let moveHover: GizmoPart | null = null;
+    let moveLabel: string | null = null;
+
+    const moveContext = (): MoveContext => ({
+      doc: documentStore.document,
+      bodies: modelState.get().bodies,
+      scope: currentScope(),
+    });
+
+    const currentGizmo = (): ReturnType<typeof moveGizmo> => {
+      const state = appState.get();
+      if (state.activeSketchId || state.workspace !== "design") return null;
+      return state.dialog?.type === "move" ? moveGizmo(state.dialog, moveContext()) : null;
+    };
+
+    const startMoveDrag = (pointerId: number, part: GizmoPart, x: number, y: number): boolean => {
+      const gizmo = currentGizmo();
+      const dialog = appState.get().dialog;
+      if (!gizmo || dialog?.type !== "move") return false;
+      const direction = partDirection(gizmo, part);
+      const plane = ringPlane(gizmo.center, direction);
+      const grab =
+        part.kind === "arrow"
+          ? scene.axisParameter(x, y, gizmo.center, direction)
+          : ringAngle(scene, plane, x, y);
+      if (grab === null) return false;
+      const scope = currentScope();
+      const value = (e: string, kind: "length" | "angle"): number => {
+        try {
+          const v = evaluateAs(e, kind, scope);
+          return Number.isFinite(v) ? v : 0;
+        } catch {
+          return 0;
+        }
+      };
+      moveDrag = {
+        pointerId,
+        part,
+        center: gizmo.center,
+        direction,
+        grab,
+        plane,
+        last: grab,
+        turned: 0,
+        start: {
+          x: value(dialog.x, "length"),
+          y: value(dialog.y, "length"),
+          z: value(dialog.z, "length"),
+          rx: value(dialog.rx, "angle"),
+          ry: value(dialog.ry, "angle"),
+          rz: value(dialog.rz, "angle"),
+          angle: value(dialog.angle, "angle"),
+        },
+      };
+      return true;
+    };
+
+    const dragMove = (x: number, y: number, fine: boolean): void => {
+      const drag = moveDrag;
+      if (!drag) return;
+      const part = drag.part;
+      if (part.kind === "arrow") {
+        const t = scene.axisParameter(x, y, drag.center, drag.direction);
+        if (t === null) return;
+        const key = (["x", "y", "z"] as const)[part.axis]!;
+        const step = fine ? 0.001 : dragStep(scene.pixelSize(drag.center));
+        const value = Math.round((drag.start[key] + t - drag.grab) / step) * step;
+        moveLabel = `${key.toUpperCase()} ${formatValue(value)} mm`;
+        patchDialog({ [key]: formatValue(value) });
+        return;
+      }
+      const a = ringAngle(scene, drag.plane, x, y);
+      if (a === null) return;
+      // Unwrap, so that a drag can go round more than once.
+      let d = a - drag.last;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      drag.last = a;
+      drag.turned += d;
+      const step = fine ? 0.1 : 1;
+      const delta = Math.round(drag.turned / step) * step;
+      if (part.kind === "axis-ring") {
+        const angle = drag.start.angle + delta;
+        moveLabel = `${formatValue(angle)}°`;
+        patchDialog({ angle: formatValue(angle) });
+        return;
+      }
+      const s = drag.start;
+      const angles = turnAngles({ x: s.rx, y: s.ry, z: s.rz }, part.axis, delta);
+      moveLabel = `${"XYZ"[part.axis]} ${formatValue(delta)}°`;
+      patchDialog({ rx: formatValue(angles.x), ry: formatValue(angles.y), rz: formatValue(angles.z) });
+    };
+
+    const endMoveDrag = (pointerId: number): void => {
+      moveDrag = null;
+      moveLabel = null;
+      scene.setControlsEnabled(true);
+      if (webgl.hasPointerCapture(pointerId)) webgl.releasePointerCapture(pointerId);
+      controller.requestDraw();
+    };
+
     controller.overlayPainter = (ctx) => {
       const m = currentManipulator();
       if (m) drawManipulator(ctx, scene, m, manipulator ? "drag" : manipulatorHover ? "hover" : "idle");
+      const gizmo = currentGizmo();
+      if (gizmo) drawMoveGizmo(ctx, scene, gizmo, moveHover, moveDrag?.part ?? null, moveLabel);
     };
 
     // ------------------------------------------------------ project tool
@@ -600,6 +735,19 @@ export function Viewport(): ReactElement {
         return;
       }
 
+      const gizmo = currentGizmo();
+      const part = gizmo ? gizmoPartAt(scene, gizmo, p.x, p.y, touch ? 22 : 8) : null;
+      if (part && startMoveDrag(e.pointerId, part, p.x, p.y)) {
+        // The manipulator owns this gesture: keep the camera controls and selection out of it.
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        webgl.setPointerCapture(e.pointerId);
+        scene.setControlsEnabled(false);
+        down = null;
+        controller.requestDraw();
+        return;
+      }
+
       const hit = overManipulator(p.x, p.y, touch ? 34 : 18);
       if (hit) {
         const t = scene.axisParameter(p.x, p.y, hit.base, hit.normal);
@@ -657,6 +805,10 @@ export function Viewport(): ReactElement {
 
     const onPointerMove = (e: PointerEvent): void => {
       const p = info(e);
+      if (moveDrag) {
+        if (e.pointerId === moveDrag.pointerId) dragMove(p.x, p.y, e.altKey);
+        return;
+      }
       if (manipulator) {
         if (e.pointerId !== manipulator.pointerId) return;
         const t = scene.axisParameter(p.x, p.y, manipulator.base, manipulator.normal);
@@ -683,6 +835,18 @@ export function Viewport(): ReactElement {
       }
       if (e.buttons !== 0) return;
       if (appState.get().workspace !== "design") return;
+      const gizmo = currentGizmo();
+      const part = gizmo ? gizmoPartAt(scene, gizmo, p.x, p.y, 8) : null;
+      if (!samePart(part, moveHover) && (part || moveHover)) {
+        moveHover = part;
+        webgl.style.cursor = part ? "grab" : "";
+        controller.requestDraw();
+      }
+      if (part) {
+        controller.setHoverProfile(null);
+        if (appState.get().hover) appState.set({ hover: null });
+        return;
+      }
       const over = overManipulator(p.x, p.y, 18) !== null;
       if (over !== manipulatorHover) {
         manipulatorHover = over;
@@ -751,7 +915,7 @@ export function Viewport(): ReactElement {
 
     /** True when the lifted finger was the second tap of a double tap and the menu opened. */
     const handleDoubleTap = (e: PointerEvent, start: NonNullable<typeof down>): boolean => {
-      if (!doubleTapOpensMenu() || manipulator || touches.size > 0) {
+      if (!doubleTapOpensMenu() || manipulator || moveDrag || touches.size > 0) {
         doubleTap.reset();
         return false;
       }
@@ -773,13 +937,17 @@ export function Viewport(): ReactElement {
     const onPointerUp = (e: PointerEvent): void => {
       const touch = e.pointerType === "touch";
       if (touch) touches.delete(e.pointerId);
-      if (e.button === 2 && !manipulator) {
+      if (e.button === 2 && !manipulator && !moveDrag) {
         const start = down;
         down = null;
         // A right-drag orbits; only a click without movement opens the menu.
         if (start?.button === 2 && Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 4) {
           if (e.target === webgl) contextAt(e, info(e));
         }
+        return;
+      }
+      if (moveDrag) {
+        if (e.pointerId === moveDrag.pointerId) endMoveDrag(e.pointerId);
         return;
       }
       if (manipulator) {
@@ -832,6 +1000,7 @@ export function Viewport(): ReactElement {
         manipulator = null;
         scene.setControlsEnabled(true);
       }
+      if (moveDrag?.pointerId === e.pointerId) endMoveDrag(e.pointerId);
       controller.cancelDrag();
       down = null;
     };
@@ -902,6 +1071,14 @@ export function Viewport(): ReactElement {
             handle: { x: h.handle.x + r.left, y: h.handle.y + r.top },
             direction: h.direction,
           };
+        },
+        /** Screen point of a part of the Move manipulator, e.g. { kind: "arrow", axis: 0 }. */
+        moveGizmoPoint: (part: GizmoPart) => {
+          const gizmo = currentGizmo();
+          const point = gizmo ? gizmoPartPoint(scene, gizmo, part) : null;
+          if (!point) return null;
+          const r = webgl.getBoundingClientRect();
+          return { x: point.x + r.left, y: point.y + r.top };
         },
         worldToScreen: (x: number, y: number, z: number) => {
           const r = webgl.getBoundingClientRect();
@@ -1030,6 +1207,23 @@ export function Viewport(): ReactElement {
     );
     controllerRef.current?.requestDraw();
   }, [app.dialog, app.activeSketchId, app.workspace, doc, ready]);
+
+  // ------------------------------------------------------- move preview
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const dialog = app.dialog;
+    const showing = dialog?.type === "move" && !app.activeSketchId && app.workspace === "design";
+    const preview = showing
+      ? movePreview(dialog, { doc, bodies: model.bodies, scope: currentScope(doc) })
+      : null;
+    // Nothing moves yet: the preview would only cover the bodies.
+    const still = !preview || preview.matrix.every((v, i) => Math.abs(v - IDENTITY[i]!) < 1e-9);
+    scene.setMovePreview(
+      !still && dialog?.type === "move" ? { bodyIds: dialog.bodyIds, matrix: preview.matrix } : null,
+    );
+    controllerRef.current?.requestDraw();
+  }, [app.dialog, app.activeSketchId, app.workspace, doc, model.bodies, ready]);
 
   // -------------------------------------------------------- sketch redraws
   useEffect(() => {

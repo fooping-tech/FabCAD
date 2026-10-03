@@ -48,6 +48,14 @@ import type {
   SweepDialog,
 } from "../src/app/appState";
 import {
+  type Mat4,
+  type MoveContext,
+  applyMatrix,
+  bodiesCenter,
+  moveGizmo,
+  movePreview,
+} from "../src/app/moveTransform";
+import {
   type Picked,
   applyPick,
   canRepeatFeature,
@@ -181,6 +189,10 @@ const MOVE: MoveDialog = {
   x: "0",
   y: "0",
   z: "0",
+  rx: "0",
+  ry: "0",
+  rz: "0",
+  pivot: null,
   axis: null,
   angle: "90",
   from: null,
@@ -916,6 +928,55 @@ describe("the command of a dialog", () => {
     expect(await compute(store, engine)).toMatchObject({ [mirrorId]: "ok" });
     expect(engine.bodyGeometry(plate.bodyId)!.volume).toBeCloseTo(80000 - 7 * bore, 2);
     roundTrip(store, mirrorId);
+  });
+
+  it("previews a free move where the engine puts the body, also when it is edited", async () => {
+    const store = new DocumentStore(createDocument());
+    const engine = new FeatureEngine(kernel, solver);
+    const p = block(store, { x: 0, y: 0 }, { x: 10, y: 20 }, "30");
+    await compute(store, engine);
+    const context = (): MoveContext => ({
+      doc: store.document,
+      bodies: {
+        [p.bodyId]: {
+          id: p.bodyId,
+          hash: "",
+          geometry: engine.bodyGeometry(p.bodyId)!,
+          names: engine.bodyNames(p.bodyId)!,
+        },
+      },
+      scope: scopeOf(store.document),
+    });
+    const dialog: MoveDialog = { ...MOVE, mode: "free", bodyIds: [p.bodyId], x: "100", rz: "90" };
+    // Without a pivot the bodies turn about their centre, and the manipulator stands there.
+    expect(moveGizmo(dialog, context())!.center).toEqual({ x: 105, y: 10, z: 15 });
+    const preview = movePreview(dialog, context())!;
+    const corners = (m: Mat4): Vec3[] =>
+      [
+        { x: 0, y: 0, z: 0 },
+        { x: 10, y: 20, z: 30 },
+      ].map((c) => applyMatrix(m, c));
+    const [a, b] = corners(preview.matrix);
+    expect(Math.min(a!.x, b!.x)).toBeCloseTo(95, 9);
+    expect(Math.min(a!.y, b!.y)).toBeCloseTo(5, 9);
+
+    // Committed, the pivot is stored with the feature.
+    const pivot = bodiesCenter(context().bodies, [p.bodyId]);
+    const id = run(store, { ...dialog, pivot });
+    expect(feature(store, id, "move").transform).toMatchObject({ type: "free", rz: "90", pivot: { x: 5, y: 10, z: 15 } });
+    await compute(store, engine);
+    const moved = engine.bodyGeometry(p.bodyId)!.bounds;
+    expect(moved.min.x).toBeCloseTo(95, 6);
+    expect(moved.min.y).toBeCloseTo(5, 6);
+    expect(moved.max.x).toBeCloseTo(115, 6);
+    roundTrip(store, id);
+
+    // Edited, the body is shown where it is now: the preview is the change only.
+    const edit = { ...(dialogFromFeature(store.document.features[id]!) as MoveDialog), x: "50" };
+    const change = movePreview(edit, context())!;
+    expect(applyMatrix(change.matrix, { x: 105, y: 10, z: 15 })).toMatchObject({ x: 55, y: 10, z: 15 });
+    expect(change.matrix[0]).toBeCloseTo(1, 9);
+    expect(moveGizmo(edit, context())!.center).toMatchObject({ x: 55, y: 10, z: 15 });
   });
 
   it("moves, copies, patterns and splits bodies", async () => {

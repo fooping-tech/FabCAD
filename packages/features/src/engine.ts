@@ -99,6 +99,7 @@ import {
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
 import { type PlanePatch, facePlanePatch, offsetPlanePatch, originPlanePatch } from "./planes";
+import { freeMoveSteps } from "./move";
 import { resolveSketchPlane, solveSketchWithParameters } from "./sketchSolve";
 
 /**
@@ -1570,6 +1571,18 @@ export class FeatureEngine {
           const angle = evaluateAs(t.angle, "angle", scope);
           if (!Number.isFinite(angle)) throw new Error("The angle is not a number.");
           steps = [{ type: "rotate", origin: axis.origin, axis: axis.direction, angle }];
+        } else if (t.type === "free") {
+          const length = (e: string): number => evaluateAs(e, "length", scope);
+          const angle = (e: string): number => evaluateAs(e, "angle", scope);
+          const translation = { x: length(t.x), y: length(t.y), z: length(t.z) };
+          const angles = { x: angle(t.rx), y: angle(t.ry), z: angle(t.rz) };
+          if (![translation.x, translation.y, translation.z].every(Number.isFinite)) {
+            throw new Error("The distance is not a number.");
+          }
+          if (![angles.x, angles.y, angles.z].every(Number.isFinite)) {
+            throw new Error("The angle is not a number.");
+          }
+          steps = freeMoveSteps(t.pivot, translation, angles);
         } else {
           const from = this.resolvePoint(t.from, sketches, bodies);
           const to = this.resolvePoint(t.to, sketches, bodies);

@@ -140,10 +140,19 @@ export type MoveDialog = {
   editing: string | null;
   bodyIds: string[];
   copy: boolean;
-  mode: "translate" | "rotate" | "point-to-point";
+  mode: "free" | "translate" | "rotate" | "point-to-point";
   x: string;
   y: string;
   z: string;
+  /** Free move: angles about the world X, Y and Z axes. */
+  rx: string;
+  ry: string;
+  rz: string;
+  /**
+   * Free move: the point the bodies turn about. Null until the move is committed (or the
+   * feature edited): until then it is the centre of the selected bodies.
+   */
+  pivot: Vec3 | null;
   axis: PatternAxis | null;
   angle: string;
   from: Point3Ref | null;
