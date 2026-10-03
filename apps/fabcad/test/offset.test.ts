@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createCircle, createRectangle2Point, createSketch, editSketch } from "@fabcad/sketch";
+import { createCircle, createLine, createRectangle2Point, createSketch, editSketch } from "@fabcad/sketch";
+import { connectedChain } from "../src/sketch/render";
 import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "../src/sketch/offsetGeometry";
 
 /** A 40 × 20 rectangle at the origin; the chain is its four lines. */
@@ -46,5 +47,31 @@ describe("sketch offset", () => {
     const offset = { sketchId: "s", chain, distance: 5, side: outside };
     expect(onOffsetPreview(sketch, offset, { x: 10, y: -5.2 }, 0.5)).toBe(true);
     expect(onOffsetPreview(sketch, offset, { x: 10, y: -2 }, 0.5)).toBe(false);
+  });
+
+  it("finds and offsets a rectangle whose sides have points of their own", () => {
+    // Like a projected face outline: four lines, no shared points.
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 40, y: 40 },
+      { x: 0, y: 40 },
+    ];
+    let lines: string[] = [];
+    const sketch = editSketch(createSketch("s", "Sketch", { type: "origin", plane: "XY" }), (b) => {
+      lines = corners.map((c, i) => createLine(b, c, corners[(i + 1) % 4]!).entities[0]!);
+    });
+    const chain = connectedChain(sketch, lines[2]!);
+    expect(chain.slice().sort()).toEqual(lines.slice().sort());
+    const side = offsetSideAt(sketch, chain, 5, { x: 20, y: -3 })!;
+    const after = offsetSketch(sketch, { chain, distance: 5, side })!;
+    // A square again: four new corners, each shared by two new lines.
+    const fresh = Object.values(after.entities).filter((e) => !sketch.entities[e.id]);
+    const points = fresh.flatMap((e) => (e.type === "point" ? [{ x: e.x, y: e.y }] : []));
+    const newLines = fresh.filter((e) => e.type === "line");
+    expect(newLines).toHaveLength(4);
+    expect(points.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).sort()).toEqual(
+      ["-5,-5", "45,-5", "45,45", "-5,45"].sort(),
+    );
   });
 });

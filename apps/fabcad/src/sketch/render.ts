@@ -646,13 +646,20 @@ export function connectedChain(sketch: Sketch, start: string): string[] {
   const usable = Object.values(sketch.entities).filter(
     (e) => (e.type === "line" || e.type === "arc") && !e.construction === !first.construction,
   );
-  const ends = (id: string): string[] => {
+  // Ends meet where they are at the same place, whether or not they are the same point: the
+  // lines of a projected outline, or lines joined by a coincident constraint, have points of
+  // their own.
+  const ends = (id: string): { x: number; y: number }[] => {
     const e = sketch.entities[id];
     if (!e) return [];
-    if (e.type === "line") return [e.p1, e.p2];
-    if (e.type === "arc") return [e.start, e.end];
-    return entityPointIds(e);
+    const ids = e.type === "line" ? [e.p1, e.p2] : e.type === "arc" ? [e.start, e.end] : entityPointIds(e);
+    return ids.flatMap((p) => {
+      const q = sketch.entities[p];
+      return q?.type === "point" ? [{ x: q.x, y: q.y }] : [];
+    });
   };
+  const meet = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+    Math.hypot(a.x - b.x, a.y - b.y) <= 1e-6;
   const chain = [start];
   const seen = new Set(chain);
   let grew = true;
@@ -661,7 +668,7 @@ export function connectedChain(sketch: Sketch, start: string): string[] {
     for (const e of usable) {
       if (seen.has(e.id)) continue;
       const mine = ends(e.id);
-      if (chain.some((id) => ends(id).some((p) => mine.includes(p)))) {
+      if (chain.some((id) => ends(id).some((p) => mine.some((q) => meet(p, q))))) {
         chain.push(e.id);
         seen.add(e.id);
         grew = true;

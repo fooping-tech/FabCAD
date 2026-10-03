@@ -49,6 +49,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Click to select what is under the pointer. Shift, Ctrl or Cmd adds to the selection or takes away from it.",
       "In a sketch, drag points and curves to move them as far as their constraints allow, and drag over empty space for a window selection: left to right selects what lies inside, right to left what the window touches.",
       "Double-click a dimension to edit it. Double-click sketch geometry in the solid environment to open its sketch.",
+      "In a sketch, double-click a curve to select the whole chain it belongs to (all four sides of a rectangle). Curves whose ends meet count as a chain even when each has points of its own, such as projected edges. With Shift, Ctrl or Cmd the chain is added to the selection.",
     ],
     when: ["Whenever no other command is running: it is the idle state of the editor."],
     examples: [
@@ -375,7 +376,8 @@ export const HELP: Record<string, HelpEntry> = {
     shortcut: "O",
     summary: "A copy of a chain of curves at a constant distance.",
     what: [
-      "Click a curve: the chain it belongs to is previewed offset to the side of the click, and a window opens beside the click.",
+      "Click a curve: the chain it belongs to is previewed offset to the side of the click, and a window opens beside the click. Curves whose ends meet are one chain even when each has points of its own (projected edges), and the corners of the copy stay joined: a square gives a square.",
+      "With several curves selected (a chain double-clicked, or curves picked one by one), clicking one of them offsets all the selected curves together.",
       "Type the distance, or drag the previewed curve to where it should go. Flip moves it to the other side. OK (Enter) adds it; Cancel (Esc) drops it.",
       "Clicking another curve keeps the previewed offset and starts the next one.",
     ],
