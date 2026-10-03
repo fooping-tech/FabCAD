@@ -55,7 +55,9 @@ function NumberField({
           inputMode={integer ? "numeric" : "decimal"}
           enterKeyHint="done"
           value={text}
-          min={min}
+          // The arrows step from `min`: from 0.001 by 0.5 they would give 3.001, 3.501, …
+          // The browser gets the first whole step instead; smaller values can still be typed.
+          min={Math.ceil(min / step - 1e-9) * step}
           step={step}
           aria-invalid={!valid(Number(text))}
           onChange={(e) => {
