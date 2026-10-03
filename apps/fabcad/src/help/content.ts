@@ -534,7 +534,10 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.revolve": {
     title: "Revolve",
     summary: "Turn a profile about an axis.",
-    what: ["Sweeps closed profiles of a sketch around an axis: a line of the same sketch or an origin axis."],
+    what: [
+      "Sweeps closed profiles of a sketch around an axis: a line of the same sketch or an origin axis.",
+      "A ring around the axis shows the angle: drag its knob (or the ring) to set it. Alt (Option) gives finer steps.",
+    ],
     requires: ["A closed profile and an axis that does not cross it."],
     parameters: [{ name: "Angle", text: "360 for a full turn." }, OPERATION],
     limitations: ["The axis must lie in the plane of the sketch."],
@@ -574,6 +577,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Drill holes at sketch points: simple, counterbored or countersunk.",
     what: [
       "One hole at every picked sketch point, at right angles to the sketch plane, into the body.",
+      "With Distance, an arrow from the first point shows the depth in the direction of the hole: drag it to set the depth.",
     ],
     requires: ["Sketch points (tool Point) and a body. A sketch on a face drills into the body of that face."],
     parameters: [
@@ -591,6 +595,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Makes a plane that can carry sketches and be used wherever a plane is asked for: Create Sketch, Mirror, Split Body, another Offset Plane.",
       "The plane is a feature of the timeline. It follows the face or plane it is measured from, and its offset can be changed at any time.",
       "The plane is shown in the view before it is created, and moves while the offset is typed.",
+      "An arrow from the base shows the offset: drag it to set the distance, through the base to the other side if you like.",
     ],
     requires: ["An origin plane, a construction plane or a flat face. One that is selected is used directly."],
     parameters: [
@@ -621,7 +626,10 @@ export const HELP: Record<string, HelpEntry> = {
     title: "Fillet",
     shortcut: "F",
     summary: "Round edges of a body.",
-    what: ["Click the edges to round; clicking one again takes it out. All edges get the same radius."],
+    what: [
+      "Click the edges to round; clicking one again takes it out. All edges get the same radius.",
+      "An arrow on the first edge, pointing into the body, shows the radius: drag it to set it.",
+    ],
     requires: ["Edges of one body. Edges that are selected when the command starts are taken over."],
     parameters: [{ name: "Radius", text: "Radius of the rounding." }],
     limitations: [
@@ -633,7 +641,10 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.chamfer": {
     title: "Chamfer",
     summary: "Bevel edges of a body.",
-    what: ["Click the edges to bevel; clicking one again takes it out."],
+    what: [
+      "Click the edges to bevel; clicking one again takes it out.",
+      "An arrow on the first edge, pointing into the body, shows the distance: drag it to set it.",
+    ],
     requires: ["Edges of one body. Edges that are selected when the command starts are taken over."],
     parameters: [{ name: "Distance", text: "Width of the bevel on both faces." }],
     limitations: ["Equal distances on both sides only."],
@@ -641,10 +652,17 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.shell": {
     title: "Shell",
     summary: "Hollow a body, leaving walls of one thickness.",
-    what: ["Click the faces to remove: they become the openings. The other faces become walls."],
+    what: [
+      "Click the faces to remove: they become the openings. The other faces become walls.",
+      "A flat face with a pocket in it can be opened too: the pocket stays as a cup with walls of the same thickness.",
+      "An arrow on the first face, pointing into the body, shows the thickness: drag it to set it.",
+    ],
     requires: ["A body and at least one face to open."],
     parameters: [{ name: "Thickness", text: "Thickness of the walls, measured inwards." }],
-    limitations: ["Fails when the thickness is more than the body can take, e.g. at tight inner radii."],
+    limitations: [
+      "Fails when the thickness is more than the body can take, e.g. at tight inner radii.",
+      "A curved opened face, or many rounded and free-form faces, can make the offset fail. Shell before Fillet usually works.",
+    ],
   },
   "solid.combine": {
     title: "Combine",
@@ -712,6 +730,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Repeat features or bodies along one or two directions.",
     what: [
       "Features: what the features did is done again at every place. Bodies: every place gets a body of its own.",
+      "An arrow along each direction ends at the last instance: drag it to change the spacing.",
     ],
     requires: [
       "Features (click a face they made, or the timeline) or bodies.",
@@ -728,7 +747,10 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.circular-pattern": {
     title: "Circular Pattern",
     summary: "Repeat features or bodies around an axis.",
-    what: ["Spreads the instances around an axis: evenly over a full turn, or up to the given angle."],
+    what: [
+      "Spreads the instances around an axis: evenly over a full turn, or up to the given angle.",
+      "A ring around the axis shows the angle up to the last instance: drag its knob (or the ring) to set it.",
+    ],
     requires: [
       "Features or bodies.",
       "An axis: an origin axis, a straight edge, a circular edge (its centre line) or a sketch line.",

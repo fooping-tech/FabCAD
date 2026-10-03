@@ -17,10 +17,12 @@ import {
   curveStart,
   dist2,
   dist3,
+  dot3,
   len3,
   makePlane,
   norm3,
   scale3,
+  sub3,
   subCurve,
 } from "@fabcad/geometry";
 import {
@@ -304,6 +306,23 @@ interface OcPipeShell extends OcDeletable {
 interface OcAnalyzer extends OcDeletable {
   IsValid(): boolean;
 }
+interface OcShapeList extends OcDeletable {
+  Append(shape: unknown): void;
+}
+interface OcThickSolid extends OcDeletable {
+  MakeThickSolidByJoin(
+    shape: unknown,
+    closingFaces: OcShapeList,
+    offset: number,
+    tolerance: number,
+    mode: unknown,
+    intersection: boolean,
+    selfInter: boolean,
+    join: unknown,
+    removeIntEdges: boolean,
+  ): void;
+  Shape(): unknown;
+}
 interface OcSubset {
   BRepCheck_Analyzer: new (
     shape: unknown,
@@ -312,6 +331,14 @@ interface OcSubset {
     exact: boolean,
   ) => OcAnalyzer;
   BRep_Tool: { IsClosed(shape: unknown): boolean };
+  BRepOffsetAPI_MakeThickSolid: new () => OcThickSolid;
+  NCollection_List_TopoDS_Shape: new () => OcShapeList;
+  BRepOffset_Mode: { BRepOffset_Skin: unknown };
+  GeomAbs_JoinType: { GeomAbs_Arc: unknown };
+  BRepPrimAPI_MakePrism: new (shape: unknown, v: OcDeletable, copy: boolean, canonize: boolean) => OcDeletable & {
+    Shape(): unknown;
+  };
+  gp_Vec: new (x: number, y: number, z: number) => OcDeletable;
   BRepOffsetAPI_MakePipeShell: new (spine: unknown) => OcPipeShell;
   BRepBuilderAPI_TransitionMode: { BRepBuilderAPI_RightCorner: unknown };
   gp_Dir: new (x: number, y: number, z: number) => OcDeletable;
@@ -527,17 +554,89 @@ class ReplicadKernel implements GeometryKernel {
       const s = unwrap(shape);
       const list = this.findFaces(s, openFaces);
       if (list.length === 0) throw new KernelError("Shell: select at least one face to remove.");
-      const result = s.shell(thickness, (f) => f.inList(list));
-      // OpenCASCADE can give the input back unchanged when the offset fails.
       const before = replicad.measureVolume(s);
-      const after = replicad.measureVolume(result);
-      if (!(after > 1e-9) || after >= before - 1e-9) {
-        throw new KernelError(
-          "Shell failed: the thickness does not fit this shape. Try a smaller value.",
-        );
+      // OpenCASCADE can give the input back unchanged when the offset fails.
+      const shrunk = (r: Shape3D | null): r is Shape3D => {
+        if (!r) return false;
+        const after = replicad.measureVolume(r);
+        return after > 1e-9 && after < before - 1e-9;
+      };
+      let result: Shape3D | null = null;
+      try {
+        result = s.shell(thickness, (f) => f.inList(list));
+      } catch {
+        result = null;
       }
-      return wrap(result);
+      if (shrunk(result)) return wrap(result);
+      // The offset fails, among others, where an opened face has a pocket in it. Hollow the
+      // body without openings and cut the openings out instead.
+      const opened = this.shellByCutting(s, list, thickness);
+      if (shrunk(opened) && this.solidProblem(wrap(opened)) === null) return wrap(opened);
+      throw new KernelError(
+        "Shell failed: OpenCASCADE cannot offset the faces of this body. Try a smaller thickness, " +
+          "Shell before Fillet, or open a flat face.",
+      );
     });
+  }
+
+  /**
+   * A shell made in two steps: the body hollowed with no opening (the body minus its inward
+   * offset), then the lid over the inside cut away under each opened face.
+   * Gives the same body as the offset with openings, which OpenCASCADE does not always manage.
+   * Flat opened faces only: the lid of a curved face is not a straight prism. Null on failure.
+   */
+  private shellByCutting(s: Shape3D, faces: replicad.Face[], thickness: number): Shape3D | null {
+    if (faces.some((f) => f.geomType !== "PLANE")) return null;
+    const oc = openCascade();
+    const owned: OcDeletable[] = [];
+    try {
+      const none = new oc.NCollection_List_TopoDS_Shape();
+      const builder = new oc.BRepOffsetAPI_MakeThickSolid();
+      owned.push(none, builder);
+      builder.MakeThickSolidByJoin(
+        s.wrapped,
+        none,
+        -thickness,
+        1e-3,
+        oc.BRepOffset_Mode.BRepOffset_Skin,
+        false,
+        false,
+        oc.GeomAbs_JoinType.GeomAbs_Arc,
+        false,
+      );
+      // Without openings the result is the offset surface: a closed shell around the inside.
+      const offset = replicad.cast(builder.Shape() as RawShape);
+      const inside =
+        offset instanceof replicad.Shell ? replicad.makeSolid([offset]) : (offset as Shape3D);
+      let result = s.cut(inside);
+      // The opening is the lid over the inside: the faces of the inside that lie under an
+      // opened face, pushed out through it. The walls around it stay whole.
+      const lids: replicad.Face[] = [];
+      for (const face of faces) {
+        const n = vec(face.normalAt());
+        const c = vec(face.center);
+        for (const g of inside.faces) {
+          if (g.geomType !== "PLANE" || lids.includes(g)) continue;
+          const m = vec(g.normalAt());
+          const below = dot3(sub3(vec(g.center), c), n);
+          if (dot3(m, n) > 1 - 1e-6 && Math.abs(below + thickness) < 1e-4) lids.push(g);
+        }
+      }
+      if (lids.length === 0) return null;
+      const depth = thickness * (1 + 1e-3);
+      for (const lid of lids) {
+        const n = vec(lid.normalAt());
+        const v = new oc.gp_Vec(n.x * depth, n.y * depth, n.z * depth);
+        const prism = new oc.BRepPrimAPI_MakePrism(lid.wrapped, v, false, true);
+        owned.push(v, prism);
+        result = result.cut(replicad.cast(prism.Shape() as RawShape) as Shape3D);
+      }
+      return result;
+    } catch {
+      return null;
+    } finally {
+      for (const o of owned) o.delete();
+    }
   }
 
   hole(holes: HoleSpec[]): KernelShape {

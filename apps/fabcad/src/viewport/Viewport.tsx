@@ -1,9 +1,7 @@
 import { type Plane3, planeToWorld, type Vec3 } from "@fabcad/geometry";
 import {
   type PlanePatch,
-  facePlanePatch,
   offsetPlanePatch,
-  originPlanePatch,
   resolveSketchPlane,
 } from "@fabcad/features";
 import { profileRefOf, sketchBounds } from "@fabcad/sketch";
@@ -41,7 +39,7 @@ import {
   facesOfFeatures,
   vertexPointOf,
 } from "../app/topology";
-import { type PlaneReference, type TopologyRef, evaluateAs } from "@fabcad/cad-document";
+import { type TopologyRef, evaluateAs } from "@fabcad/cad-document";
 import {
   currentScope,
   documentStore,
@@ -59,16 +57,7 @@ import { createDoubleTapDetector } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
 import { PointEntry } from "../panels/PointEntry";
-import {
-  type ExtrudeDialog,
-  type ExtrudeManipulator,
-  distanceForOffset,
-  dragStep,
-  drawManipulator,
-  extrudeManipulator,
-  formatDistance,
-  manipulatorScreen,
-} from "./extrudeManipulator";
+import { dragStep, extrudeManipulator } from "./extrudeManipulator";
 import { type Highlight, type Pick3D, type ViewName, ViewportScene } from "./scene";
 import {
   IDENTITY,
@@ -78,6 +67,8 @@ import {
   movePreview,
   turnAngles,
 } from "../app/moveTransform";
+import { type DialogHandle, dialogHandles, referencePatch } from "../app/dialogHandles";
+import { angleOnRing, arrowScreen, drawHandle, handleAt, handlePoint } from "./dialogHandleView";
 import {
   type GizmoPart,
   drawMoveGizmo,
@@ -177,19 +168,16 @@ function dialogHighlights(dialog: Dialog | null, scene: ViewportScene): Highligh
   return out;
 }
 
-/** The patch of a plane reference as the view shows it, or null while it cannot be told. */
-function referencePatch(ref: PlaneReference): PlanePatch | null {
-  if (ref.type === "origin-plane") return originPlanePatch(ref.plane);
-  if (ref.type === "plane") return modelState.get().planes[ref.featureId] ?? null;
-  const geometry = modelState.get().bodies[ref.bodyId]?.geometry;
-  const index = faceIndexOf(ref.bodyId, ref.ref);
-  return geometry && index >= 0 ? facePlanePatch(geometry, index) : null;
-}
-
 /** The plane that the Offset Plane dialog would make, for the preview. */
 function offsetPlanePreview(dialog: Dialog | null): PlanePatch | null {
   if (dialog?.type !== "offset-plane" || !dialog.base) return null;
-  const base = referencePatch(dialog.base);
+  const model = modelState.get();
+  const base = referencePatch(dialog.base, {
+    doc: documentStore.document,
+    bodies: model.bodies,
+    planes: model.planes,
+    scope: currentScope(),
+  });
   if (!base) return null;
   try {
     const offset = evaluateAs(dialog.offset, "length", currentScope());
@@ -524,30 +512,60 @@ export function Viewport(): ReactElement {
       }
     };
 
-    // ------------------------------------------------ extrude manipulator
+    // ------------------------------------------------- dialog handles
+    // Arrows and rings that set a value of the open dialog by dragging (`dialogHandles`).
     let manipulator: {
       pointerId: number;
-      grabT: number;
-      startOffset: number;
-      direction: ExtrudeDialog["direction"];
-      base: ExtrudeManipulator["base"];
-      normal: ExtrudeManipulator["normal"];
+      key: string;
+      start: number;
+      /** Linear: the axis parameter it was grabbed at. Angular: the angle seen last. */
+      grab: number;
+      turned: number;
+      handle: DialogHandle;
     } | null = null;
-    let manipulatorHover = false;
+    let manipulatorHover: string | null = null;
 
-    const currentManipulator = (): ExtrudeManipulator | null => {
+    const currentHandles = (): DialogHandle[] => {
       const state = appState.get();
-      if (state.activeSketchId || state.workspace !== "design") return null;
-      const dialog = state.dialog;
-      if (dialog?.type !== "extrude") return null;
-      return extrudeManipulator(documentStore.document, dialog);
+      if (state.activeSketchId || state.workspace !== "design") return [];
+      const model = modelState.get();
+      return dialogHandles(state.dialog, {
+        doc: documentStore.document,
+        bodies: model.bodies,
+        planes: model.planes,
+        scope: currentScope(),
+      });
     };
 
-    const overManipulator = (x: number, y: number, reach: number): ExtrudeManipulator | null => {
-      const m = currentManipulator();
-      if (!m) return null;
-      const s = manipulatorScreen(scene, m);
-      return Math.hypot(s.handle.x - x, s.handle.y - y) <= reach ? m : null;
+    const overManipulator = (x: number, y: number, reach: number): DialogHandle | null =>
+      handleAt(scene, currentHandles(), x, y, reach);
+
+    const dragHandle = (x: number, y: number, fine: boolean): void => {
+      const drag = manipulator;
+      if (!drag) return;
+      const h = drag.handle;
+      let value: number;
+      let step: number;
+      if (h.kind === "linear") {
+        const t = scene.axisParameter(x, y, h.origin, h.direction);
+        if (t === null) return;
+        value = drag.start + (t - drag.grab) / h.factor;
+        step = fine ? 0.001 : dragStep(scene.pixelSize(h.origin) / Math.abs(h.factor));
+      } else {
+        const a = angleOnRing(scene, h, x, y);
+        if (a === null) return;
+        // Unwrap, so that a drag can go round more than once.
+        let d = a - drag.grab;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        drag.grab = a;
+        drag.turned += d;
+        value = drag.start + drag.turned;
+        step = fine ? 0.1 : 1;
+      }
+      let snapped = Math.round(value / step) * step;
+      if (h.positive) snapped = Math.max(step, snapped);
+      patchDialog(h.patch(snapped));
     };
 
     // --------------------------------------------------- move manipulator
@@ -666,8 +684,10 @@ export function Viewport(): ReactElement {
     };
 
     controller.overlayPainter = (ctx) => {
-      const m = currentManipulator();
-      if (m) drawManipulator(ctx, scene, m, manipulator ? "drag" : manipulatorHover ? "hover" : "idle");
+      for (const h of currentHandles()) {
+        const dragging = manipulator?.key === h.key;
+        drawHandle(ctx, scene, h, dragging ? "drag" : !manipulator && manipulatorHover === h.key ? "hover" : "idle");
+      }
       const gizmo = currentGizmo();
       if (gizmo) drawMoveGizmo(ctx, scene, gizmo, moveHover, moveDrag?.part ?? null, moveLabel);
     };
@@ -750,22 +770,17 @@ export function Viewport(): ReactElement {
 
       const hit = overManipulator(p.x, p.y, touch ? 34 : 18);
       if (hit) {
-        const t = scene.axisParameter(p.x, p.y, hit.base, hit.normal);
-        const dialog = appState.get().dialog;
-        if (t !== null && dialog?.type === "extrude") {
-          // The manipulator owns this gesture: keep the camera controls out of it.
+        const grab =
+          hit.kind === "linear"
+            ? scene.axisParameter(p.x, p.y, hit.origin, hit.direction)
+            : angleOnRing(scene, hit, p.x, p.y);
+        if (grab !== null) {
+          // The handle owns this gesture: keep the camera controls out of it.
           e.stopImmediatePropagation();
           e.preventDefault();
           webgl.setPointerCapture(e.pointerId);
           scene.setControlsEnabled(false);
-          manipulator = {
-            pointerId: e.pointerId,
-            grabT: t,
-            startOffset: hit.offset,
-            direction: dialog.direction,
-            base: hit.base,
-            normal: hit.normal,
-          };
+          manipulator = { pointerId: e.pointerId, key: hit.key, start: hit.value, grab, turned: 0, handle: hit };
           down = null;
           controller.requestDraw();
           return;
@@ -810,15 +825,7 @@ export function Viewport(): ReactElement {
         return;
       }
       if (manipulator) {
-        if (e.pointerId !== manipulator.pointerId) return;
-        const t = scene.axisParameter(p.x, p.y, manipulator.base, manipulator.normal);
-        if (t === null) return;
-        const offset = manipulator.startOffset + (t - manipulator.grabT);
-        const step = e.altKey ? 0.001 : dragStep(scene.pixelSize(manipulator.base));
-        const snapped = Math.round(offset / step) * step;
-        patchDialog({
-          distance: formatDistance(distanceForOffset(manipulator.direction, snapped)),
-        });
+        if (e.pointerId === manipulator.pointerId) dragHandle(p.x, p.y, e.altKey);
         return;
       }
       if (appState.get().activeSketchId) {
@@ -847,9 +854,10 @@ export function Viewport(): ReactElement {
         if (appState.get().hover) appState.set({ hover: null });
         return;
       }
-      const over = overManipulator(p.x, p.y, 18) !== null;
-      if (over !== manipulatorHover) {
-        manipulatorHover = over;
+      const key = overManipulator(p.x, p.y, 18)?.key ?? null;
+      const over = key !== null;
+      if (key !== manipulatorHover) {
+        manipulatorHover = key;
         webgl.style.cursor = over ? "grab" : "";
         controller.requestDraw();
       }
@@ -1062,14 +1070,20 @@ export function Viewport(): ReactElement {
           ...scene.saveView(),
           pixel: scene.pixelSize(scene.saveView().target),
         }),
-        manipulatorHandle: () => {
-          const m = currentManipulator();
-          if (!m) return null;
+        /**
+         * Screen point to grab a handle of the open dialog by (Extrude, Offset Plane, Revolve …);
+         * `key` picks one where there are several (the field it sets). For an arrow,
+         * `direction` is the way it points on screen.
+         */
+        manipulatorHandle: (key?: string) => {
+          const handles = currentHandles();
+          const h = key ? handles.find((x) => x.key === key) : handles[0];
+          if (!h) return null;
           const r = webgl.getBoundingClientRect();
-          const h = manipulatorScreen(scene, m);
+          const at = handlePoint(scene, h);
           return {
-            handle: { x: h.handle.x + r.left, y: h.handle.y + r.top },
-            direction: h.direction,
+            handle: { x: at.x + r.left, y: at.y + r.top },
+            direction: h.kind === "linear" ? arrowScreen(scene, h).direction : null,
           };
         },
         /** Screen point of a part of the Move manipulator, e.g. { kind: "arrow", axis: 0 }. */

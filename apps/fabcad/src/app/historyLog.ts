@@ -51,6 +51,9 @@ export function historyLog(
 
 const round = (v: number): number => Math.round(v * 1000) / 1000;
 
+/** Values longer than this are left out of the steps, so that the steps stay readable. */
+const LONG = 200;
+
 /** The settings of a step, without its large parts (the geometry of a sketch). */
 function describeFeature(f: Feature, doc: CadDocument): string {
   if (f.type === "sketch") {
@@ -83,7 +86,10 @@ function describeFeature(f: Feature, doc: CadDocument): string {
       continue;
     }
     if (value === null || value === undefined) continue;
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    if (typeof value === "string" && value.length > LONG) {
+      // The file of an import: its size is enough here, the project below carries it.
+      out.push(`${key} (${value.length} characters)`);
+    } else if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       out.push(`${key} ${value}`);
     } else if (Array.isArray(value)) {
       out.push(`${key} ×${value.length}`);

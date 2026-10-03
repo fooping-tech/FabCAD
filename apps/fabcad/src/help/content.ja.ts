@@ -502,7 +502,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.revolve": {
     title: "Revolve",
     summary: "Profile を軸のまわりに回転させて立体にします。",
-    what: ["スケッチの閉じた Profile を、軸のまわりに回します。軸は同じスケッチの線、または原点の軸です。"],
+    what: [
+      "スケッチの閉じた Profile を、軸のまわりに回します。軸は同じスケッチの線、または原点の軸です。",
+      "軸のまわりのリングが角度を表します。つまみ（またはリング）をドラッグして角度を決められます。Alt（Option）を押すと細かい刻みになります。",
+    ],
     requires: ["閉じた Profile と、それを横切らない軸。"],
     parameters: [{ name: "Angle", text: "360 で 1 周です。" }, OPERATION],
     limitations: ["軸はスケッチの平面の上にある必要があります。"],
@@ -538,7 +541,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "Hole",
     shortcut: "H",
     summary: "スケッチの点に穴をあけます。Simple、Counterbore、Countersink があります。",
-    what: ["選んだスケッチの点ごとに 1 つ、スケッチ平面に直角に、Body へ穴をあけます。"],
+    what: [
+      "選んだスケッチの点ごとに 1 つ、スケッチ平面に直角に、Body へ穴をあけます。",
+      "Distance のとき、最初の点から穴の方向に矢印が出て、深さを表します。矢印をドラッグして深さを決められます。",
+    ],
     requires: ["スケッチの点（Point ツール）と Body。面の上のスケッチでは、その面の Body に穴をあけます。"],
     parameters: [
       { name: "Type", text: "Simple（単純な穴）、Counterbore（底が平らな広い段）、Countersink（円錐）。" },
@@ -555,6 +561,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "スケッチを描ける平面を作ります。平面を指定する場所ならどこでも使えます。Create Sketch、Mirror、Split Body、別の Offset Plane の基準などです。",
       "平面はタイムラインに残る Feature です。基準にした面や平面に追従し、距離はいつでも変えられます。",
       "確定する前に平面をビューに表示し、距離を入力すると動きます。",
+      "基準から矢印が出て、距離を表します。矢印をドラッグして距離を決められます。基準を越えて反対側にも動かせます。",
     ],
     requires: ["原点平面、構成平面、または平らな面。すでに選択されていれば、それをそのまま使います。"],
     parameters: [
@@ -581,7 +588,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "Fillet",
     shortcut: "F",
     summary: "Body の稜線を丸めます。",
-    what: ["丸める稜線をクリックします。もう一度クリックすると外れます。すべての稜線が同じ半径になります。"],
+    what: [
+      "丸める稜線をクリックします。もう一度クリックすると外れます。すべての稜線が同じ半径になります。",
+      "最初の稜線に、Body の内側を向いた矢印が出て、半径を表します。矢印をドラッグして半径を決められます。",
+    ],
     requires: ["1 つの Body の稜線。コマンドを開始したときに選択されていた稜線は、そのまま入ります。"],
     parameters: [{ name: "Radius", text: "丸みの半径。" }],
     limitations: [
@@ -593,7 +603,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.chamfer": {
     title: "Chamfer",
     summary: "Body の稜線を面取りします。",
-    what: ["面取りする稜線をクリックします。もう一度クリックすると外れます。"],
+    what: [
+      "面取りする稜線をクリックします。もう一度クリックすると外れます。",
+      "最初の稜線に、Body の内側を向いた矢印が出て、距離を表します。矢印をドラッグして距離を決められます。",
+    ],
     requires: ["1 つの Body の稜線。コマンドを開始したときに選択されていた稜線は、そのまま入ります。"],
     parameters: [{ name: "Distance", text: "面取りの幅。両方の面で同じです。" }],
     limitations: ["両側で距離が同じ面取りだけです。"],
@@ -601,10 +614,17 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.shell": {
     title: "Shell",
     summary: "Body の中をくり抜き、一定の厚みの壁を残します。",
-    what: ["取り除く面をクリックします。その面が開口になり、ほかの面が壁になります。"],
+    what: [
+      "取り除く面をクリックします。その面が開口になり、ほかの面が壁になります。",
+      "ポケット（凹み）のある平らな面も開口にできます。ポケットは、同じ厚みの壁をもつカップとして残ります。",
+      "最初の面に、Body の内側を向いた矢印が出て、厚みを表します。矢印をドラッグして厚みを決められます。",
+    ],
     requires: ["Body と、開口にする面が 1 つ以上。"],
     parameters: [{ name: "Thickness", text: "壁の厚み。内側に取ります。" }],
-    limitations: ["内側の半径が小さい場所など、Body が受け止められない厚みでは失敗します。"],
+    limitations: [
+      "内側の半径が小さい場所など、Body が受け止められない厚みでは失敗します。",
+      "開口にする面が曲面のときや、丸めた面・自由曲面が多いときは、オフセットに失敗することがあります。Fillet の前に Shell をすると、たいていうまくいきます。",
+    ],
   },
   "solid.combine": {
     title: "Combine",
@@ -667,7 +687,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.rectangular-pattern": {
     title: "Rectangular Pattern",
     summary: "Feature または Body を、1 方向または 2 方向に繰り返します。",
-    what: ["Features では、その Feature がしたことを各位置でもう一度行います。Bodies では、各位置に Body を 1 つずつ作ります。"],
+    what: [
+      "Features では、その Feature がしたことを各位置でもう一度行います。Bodies では、各位置に Body を 1 つずつ作ります。",
+      "各方向の矢印は最後のインスタンスの位置で終わります。矢印をドラッグすると間隔が変わります。",
+    ],
     requires: [
       "Feature（その Feature が作った面、またはタイムラインをクリック）または Body。",
       "方向。原点の軸、直線の稜線、またはスケッチの線。",
@@ -683,7 +706,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.circular-pattern": {
     title: "Circular Pattern",
     summary: "Feature または Body を、軸のまわりに繰り返します。",
-    what: ["軸のまわりに並べます。1 周に等間隔、または指定した角度までです。"],
+    what: [
+      "軸のまわりに並べます。1 周に等間隔、または指定した角度までです。",
+      "軸のまわりのリングが、最後のインスタンスまでの角度を表します。つまみ（またはリング）をドラッグして角度を決められます。",
+    ],
     requires: [
       "Feature または Body。",
       "軸。原点の軸、直線の稜線、円形の稜線（その中心軸）、またはスケッチの線。",
