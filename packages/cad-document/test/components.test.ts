@@ -10,6 +10,7 @@ import {
   addExtrude,
   addFillet,
   addSketch,
+  addSplit,
   componentContents,
   createComponent,
   createDocument,
@@ -214,9 +215,26 @@ describe("components", () => {
     const lid = onFace(store, base.bodyId, 5);
     onFace(store, lid.bodyId, 7, { operation: "join", targetBodyIds: [base.bodyId, lid.bodyId] });
     const problem = separationProblem(store.document, { bodyIds: [lid.bodyId] });
-    expect(problem).toContain('"Body001" would have to move too');
-    expect(problem).toContain('"Extrude003"');
+    const tie = store.document.timeline.at(-1)!;
+    expect(problem?.ties).toEqual([tie]);
+    expect(problem?.bodyIds).toEqual([base.bodyId]);
+    expect(problem?.message).toMatch(/^"Extrude003" also changes "Body001", so it would have to move/);
     expect(separationProblem(store.document, { bodyIds: [lid.bodyId, base.bodyId] })).toBeNull();
+  });
+
+  it("names the step that ties the selection first, and the chain behind it after", () => {
+    const store = new DocumentStore(createDocument());
+    const base = box(store, 0);
+    const split: CreatedRef = {};
+    store.execute(addSplit({ bodyId: base.bodyId, tool: { type: "origin-plane", plane: "YZ" } }, split));
+    const lid = onFace(store, base.bodyId, 5);
+    onFace(store, lid.bodyId, 7, { operation: "join", targetBodyIds: [base.bodyId, lid.bodyId] });
+    const join = store.document.timeline.at(-1)!;
+    const problem = separationProblem(store.document, { bodyIds: [lid.bodyId] })!;
+    expect(problem.ties).toEqual([join]);
+    expect(problem.chain).toEqual([split.id]);
+    expect(problem.bodyIds.sort()).toEqual([base.bodyId, split.bodyId!].sort());
+    expect(problem.message).toContain('Through it, "Body001 (Split Body001)" would follow as well ("Split Body001").');
   });
 
   it("takes along bodies that a Combine ties together", () => {

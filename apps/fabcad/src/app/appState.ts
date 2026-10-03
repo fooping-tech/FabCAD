@@ -326,6 +326,8 @@ export interface Toast {
   id: number;
   kind: "info" | "warning" | "error";
   text: string;
+  /** Buttons under the text, e.g. to show the step a message is about. */
+  actions?: { label: string; title?: string; onSelect: () => void }[];
 }
 
 export interface ToolOptions {
@@ -495,12 +497,19 @@ export const appState = new TinyStore<AppState>({
 
 let toastId = 1;
 
-export function toast(text: string, kind: Toast["kind"] = "info", ms = 4000): void {
+export function toast(
+  text: string,
+  kind: Toast["kind"] = "info",
+  ms = 4000,
+  actions?: Toast["actions"],
+): void {
   const id = toastId++;
-  appState.set((s) => ({ toasts: [...s.toasts, { id, kind, text }] }));
-  setTimeout(() => {
-    appState.set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
-  }, ms);
+  appState.set((s) => ({ toasts: [...s.toasts, { id, kind, text, ...(actions ? { actions } : {}) }] }));
+  setTimeout(() => dismissToast(id), ms);
+}
+
+export function dismissToast(id: number): void {
+  appState.set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
 }
 
 export function setSelection(selection: Selection[]): void {

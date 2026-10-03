@@ -11,6 +11,7 @@ import {
   moveToComponent,
   removeComponents,
   removeInstances,
+  type SeparationProblem,
   separationProblem,
   validComponentId,
 } from "@fabcad/cad-document";
@@ -88,7 +89,7 @@ export function newComponent(): void {
   // Nothing more than the selection moves without being asked for.
   const problem = fromSelection ? separationProblem(doc, { bodyIds, featureIds }) : null;
   if (problem) {
-    toast(problem, "warning", 9000);
+    explainSeparation(problem);
     return;
   }
   const out: CreatedComponent = {};
@@ -133,7 +134,7 @@ export function moveBodiesToComponent(bodyIds: readonly string[], targetId: stri
   if (owners.has(targetId)) return;
   const problem = separationProblem(doc, { bodyIds });
   if (problem) {
-    toast(problem, "warning", 9000);
+    explainSeparation(problem);
     return;
   }
   const out: MovedToComponent = {};
@@ -163,6 +164,40 @@ export function moveBodiesToComponent(bodyIds: readonly string[], targetId: stri
       ? (out.bodyIds ?? []).filter((id) => after.bodies[id]).map((bodyId) => ({ kind: "body" as const, bodyId }))
       : [{ kind: "component", componentId: targetId }],
   );
+}
+
+/**
+ * Say why the selection cannot move on its own, with a button for every step it names: the
+ * button selects the step and shows it in the timeline, where a double-click edits it.
+ */
+function explainSeparation(problem: SeparationProblem): void {
+  const doc = documentStore.document;
+  const steps = [...problem.ties, ...problem.chain].filter((id) => doc.features[id]);
+  toast(
+    problem.message,
+    "warning",
+    30000,
+    steps.map((id) => ({
+      label: `Show ${doc.features[id]!.name}`,
+      title: "Select the step and show it in the timeline. Double-click it there to edit it.",
+      onSelect: () => revealFeature(id),
+    })),
+  );
+}
+
+/** Select a step and bring it into view in the timeline, where it flashes. */
+export function revealFeature(featureId: string): void {
+  if (!documentStore.document.features[featureId]) return;
+  setSelection([{ kind: "feature", featureId }]);
+  requestAnimationFrame(() => {
+    const item = document.querySelector<HTMLElement>(`.timeline-item[data-feature-id="${CSS.escape(featureId)}"]`);
+    if (!item) return;
+    item.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    item.classList.remove("flash");
+    void item.offsetWidth;
+    item.classList.add("flash");
+    setTimeout(() => item.classList.remove("flash"), 1600);
+  });
 }
 
 /** Another instance of a definition, selected and ready to be moved. */
