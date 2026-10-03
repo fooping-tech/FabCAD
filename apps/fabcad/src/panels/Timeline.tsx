@@ -93,6 +93,7 @@ export function Timeline(): ReactElement {
             i === cursor && cursor < features.length ? marker : null,
             <button
               key={f.id}
+              data-feature-id={f.id}
               className={`timeline-item ${state}${selected ? " selected" : ""}${activeSketchId === f.id ? " editing" : ""}${other ? " other-component" : ""}`}
               title={title}
               onClick={(e) => {

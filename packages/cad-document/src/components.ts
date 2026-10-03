@@ -215,33 +215,69 @@ export function entangledFeatures(
   };
 }
 
+export interface SeparationProblem {
+  /** What to tell the user. */
+  message: string;
+  /** Features that change a selected body and another one: what ties the selection. */
+  ties: string[];
+  /** Further features through which more bodies come along. */
+  chain: string[];
+  /** Bodies that are not selected but would have to move. */
+  bodyIds: string[];
+}
+
 /**
  * Why the selection cannot be taken out of its component on its own: a body that is not
- * selected (and not used up) would have to come along, because a feature changes both. Null
- * when nothing else would move.
+ * selected (and not used up) would have to come along, because a feature changes both. The
+ * features that tie a selected body to another one come first (`ties`); the ones through which
+ * more bodies follow after (`chain`). Null when nothing else would move.
  */
 export function separationProblem(
   doc: CadDocument,
   input: { featureIds?: readonly string[]; bodyIds?: readonly string[] },
-): string | null {
+): SeparationProblem | null {
   const source = sourceOf(doc, input);
-  if (source === null) return "The selection belongs to different components.";
+  if (source === null) {
+    return { message: "The selection belongs to different components.", ties: [], chain: [], bodyIds: [] };
+  }
   if (source === undefined) return null;
   const moved = entangledFeatures(doc, source, input);
   const selected = new Set(input.bodyIds ?? []);
   const consumed = consumedBodies(doc);
   const extra = moved.bodyIds.filter((b) => !selected.has(b) && !consumed.has(b));
   if (extra.length === 0) return null;
-  const names = extra.map((b) => doc.bodies[b]?.name ?? b);
-  const via = [...new Set(extra.map((b) => moved.pulledBy[b]).filter((f): f is string => !!f))].map(
-    (f) => doc.features[f]?.name ?? f,
-  );
-  const list = (xs: string[]): string => xs.map((x) => `"${x}"`).join(", ");
-  return (
-    `${list(names)} would have to move too: ${list(via)} ${via.length === 1 ? "changes" : "change"} ` +
-    `${names.length === 1 ? "it" : "them"} together with the selection. Select ${names.length === 1 ? "it" : "them"} as well, ` +
-    `or edit ${list(via)} so that ${via.length === 1 ? "it changes" : "each changes"} one body only.`
-  );
+  const lookup = (id: string): Feature | undefined => doc.features[id];
+  const changes = (id: string): string[] => {
+    const f = doc.features[id];
+    return f
+      ? [...featureOutputBodies(f, lookup), ...featureCreatedBodies(f), ...featureConsumedBodies(f)]
+      : [];
+  };
+  const inTimeline = (ids: Iterable<string>): string[] => {
+    const set = new Set(ids);
+    return doc.timeline.filter((id) => set.has(id));
+  };
+  const vias = inTimeline(Object.values(moved.pulledBy));
+  const direct = vias.filter((f) => changes(f).some((b) => selected.has(b)));
+  const ties = direct.length > 0 ? direct : vias.slice(0, 1);
+  const chain = vias.filter((f) => !ties.includes(f));
+  const near = extra.filter((b) => ties.some((f) => changes(f).includes(b)));
+  const far = extra.filter((b) => !near.includes(b));
+  const body = (b: string): string => `"${doc.bodies[b]?.name ?? b}"`;
+  const feature = (f: string): string => `"${doc.features[f]?.name ?? f}"`;
+  const and = (xs: string[]): string =>
+    xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  const tied = ties.map(feature);
+  let message =
+    `${and(tied)} also ${ties.length === 1 ? "changes" : "change"} ${and(near.map(body))}, ` +
+    `so ${near.length === 1 ? "it" : "they"} would have to move with the selection.`;
+  if (far.length > 0) {
+    message +=
+      ` Through ${near.length === 1 ? "it" : "them"}, ${and(far.map(body))} would follow as well` +
+      (chain.length > 0 ? ` (${and(chain.map(feature))}).` : ".");
+  }
+  message += ` Edit ${and(tied)} so that ${ties.length === 1 ? "it changes" : "each changes"} one body only, or select those bodies too.`;
+  return { message, ties, chain, bodyIds: extra };
 }
 
 export interface CreatedComponent {

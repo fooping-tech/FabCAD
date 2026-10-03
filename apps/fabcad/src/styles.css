@@ -467,6 +467,14 @@ table.grid td input { padding: 2px 5px; }
 .toast { background: var(--ink-strong); color: #fff; padding: 7px 13px; border-radius: 6px; box-shadow: 0 6px 20px rgba(29, 43, 56, 0.25); max-width: 520px; line-height: 1.4; }
 .toast.warning { background: #8a5a10; }
 .toast.error { background: #a83229; }
+.toast.with-actions { pointer-events: auto; }
+.toast-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; align-items: center; }
+.toast-action { background: rgba(255, 255, 255, 0.16); color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 4px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.toast-action:hover { background: rgba(255, 255, 255, 0.28); }
+.toast-close { margin-left: auto; background: none; border: 0; color: #fff; opacity: 0.75; cursor: pointer; padding: 3px; display: inline-flex; }
+.toast-close:hover { opacity: 1; }
+.timeline-item.flash { animation: timeline-flash 0.5s ease-in-out 3; }
+@keyframes timeline-flash { 50% { box-shadow: 0 0 0 3px #e0a020; } }
 
 /* ------------------------------------------------------------------- dialog */
 .modal-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(29, 43, 56, 0.32); display: grid; place-items: center; }
