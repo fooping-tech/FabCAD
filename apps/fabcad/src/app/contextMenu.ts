@@ -1,10 +1,21 @@
 import { editText, explodeTexts } from "../text/textCommands";
 import {
+  listInstances,
   setBodyVisible,
+  setComponentVisible,
   setFeatureSuppressed,
+  setInstancesVisible,
   setPlaneVisible,
   setSketchVisible,
 } from "@fabcad/cad-document";
+import {
+  activateComponent,
+  activeComponentId,
+  duplicateSelectedInstances,
+  newComponent,
+  newInstance,
+  openInstanceMove,
+} from "./components";
 import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS, createTool } from "../sketch/createTools";
@@ -336,6 +347,57 @@ export function buildContextMenu(): MenuItem[] {
     }
   }
 
+  // ------------------------------------------------------- components
+  if (first?.kind === "component" && selection.length === 1) {
+    const c = doc.assembly.components[first.componentId];
+    if (c) {
+      const isActive = activeComponentId(doc) === c.id;
+      const own = listInstances(doc, c.id);
+      const shown = own.some((i) => i.visible);
+      items.push(
+        isActive
+          ? { label: "Activate Root", icon: "document", onSelect: () => activateComponent(null) }
+          : { label: "Activate Component", icon: "component", onSelect: () => activateComponent(c.id) },
+        { label: "Create Instance", icon: "instance", onSelect: () => newInstance(c.id) },
+        { label: "Rename", icon: "parameters", onSelect: () => appState.set({ renaming: `component:${c.id}` }) },
+      );
+      if (own.length > 0) {
+        items.push({
+          label: shown ? "Hide" : "Show",
+          icon: shown ? "eye-off" : "eye",
+          kbd: "V",
+          onSelect: () => run(setComponentVisible(c.id, !shown)),
+        });
+      }
+      items.push({ label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection });
+      sep();
+    }
+  } else if (every("instance")) {
+    const ids = selection.flatMap((s) => (s.kind === "instance" ? [s.instanceId] : []));
+    const one = ids.length === 1 ? doc.assembly.instances[ids[0]!] : undefined;
+    const shown = ids.some((id) => doc.assembly.instances[id]?.visible);
+    if (one) {
+      items.push(
+        { label: "Move / Rotate", icon: "move-3d", kbd: "M", onSelect: () => openInstanceMove(one.id) },
+        { label: "Activate Component", icon: "component", onSelect: () => activateComponent(one.componentId) },
+      );
+    }
+    items.push(
+      { label: "Duplicate", icon: "copy", onSelect: duplicateSelectedInstances },
+      {
+        label: shown ? "Hide" : "Show",
+        icon: shown ? "eye-off" : "eye",
+        kbd: "V",
+        onSelect: () => run(setInstancesVisible(ids, !shown)),
+      },
+    );
+    if (one) {
+      items.push({ label: "Rename", icon: "parameters", onSelect: () => appState.set({ renaming: `instance:${one.id}` }) });
+    }
+    items.push({ label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection });
+    sep();
+  }
+
   const bodyIds = [...new Set(selection.flatMap((s) => ("bodyId" in s ? [s.bodyId] : [])))];
   if (bodyIds.length > 0) {
     const visible = bodyIds.some((id) => doc.bodies[id]?.visible);
@@ -353,6 +415,9 @@ export function buildContextMenu(): MenuItem[] {
     }
     if (every("body")) {
       items.push(dialogItem("move", "M"));
+      if (activeComponentId(doc) === doc.assembly.rootComponentId) {
+        items.push({ label: "Create Component", icon: "new-component", onSelect: newComponent });
+      }
       if (bodyIds.length === 1) items.push(dialogItem("split"));
       items.push(
         dialogItem("mirror"),
@@ -361,6 +426,14 @@ export function buildContextMenu(): MenuItem[] {
       );
       items.push({ label: "Delete", icon: "trash", kbd: "Del", onSelect: deleteSelection });
     }
+    sep();
+  }
+
+  if (
+    activeComponentId(doc) !== doc.assembly.rootComponentId &&
+    !items.some((i) => "label" in i && i.label === "Activate Root")
+  ) {
+    items.push({ label: "Activate Root", icon: "document", onSelect: () => activateComponent(null) });
     sep();
   }
 

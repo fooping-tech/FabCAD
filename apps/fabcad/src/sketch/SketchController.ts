@@ -1,4 +1,9 @@
-import { applySketchEdit, type CadDocument, type SketchFeature } from "@fabcad/cad-document";
+import {
+  applySketchEdit,
+  type CadDocument,
+  type SketchFeature,
+  validComponentId,
+} from "@fabcad/cad-document";
 import { resolveSketchPlane } from "@fabcad/features";
 import {
   type Vec2,
@@ -1413,6 +1418,14 @@ export class SketchController {
     return isSolidDialog(dialog) ? dialogSketches(dialog) : new Set();
   }
 
+  /**
+   * Whether a sketch belongs to the component being edited. Sketches lie in the coordinates of
+   * their component, so those of other components are neither drawn nor picked.
+   */
+  private inContext(f: SketchFeature): boolean {
+    return f.componentId === validComponentId(this.doc, appState.get().activeComponentId);
+  }
+
   /** Closed profile of any visible sketch under the pointer (for Extrude / Revolve). */
   profileAt(
     x: number,
@@ -1423,6 +1436,7 @@ export class SketchController {
     const used = this.dialogSketches();
     for (const f of Object.values(this.doc.features)) {
       if (f.type !== "sketch" || (!f.visible && !used.has(f.id)) || f.suppressed) continue;
+      if (!this.inContext(f)) continue;
       if (options.onlySketch && f.id !== options.onlySketch) continue;
       const projector = this.projectorFor(f.sketch);
       const at = projector.toSketch(x, y);
@@ -1463,6 +1477,7 @@ export class SketchController {
     const { accept } = options;
     for (const f of Object.values(this.doc.features)) {
       if (f.type !== "sketch" || (!f.visible && !used.has(f.id)) || f.suppressed) continue;
+      if (!this.inContext(f)) continue;
       const projector = this.projectorFor(f.sketch);
       const at = projector.toSketch(x, y);
       if (!at) continue;
@@ -1554,7 +1569,7 @@ export class SketchController {
       const f = doc.features[id];
       if (!f || f.type !== "sketch") continue;
       const active = f.id === state.activeSketchId;
-      const visible = f.visible || used.has(f.id);
+      const visible = (f.visible || used.has(f.id)) && this.inContext(f);
       if (!active && (!visible || state.workspace !== "design")) continue;
       if (state.activeSketchId && !active && !f.visible) continue;
 

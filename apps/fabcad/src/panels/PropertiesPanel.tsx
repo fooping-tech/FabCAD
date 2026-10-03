@@ -5,6 +5,8 @@ import {
   formatQuantity,
   setFeatureSuppressed,
   updateFeature,
+  componentContents,
+  listInstances,
 } from "@fabcad/cad-document";
 import { dist2 } from "@fabcad/geometry";
 import {
@@ -33,6 +35,13 @@ import {
   useDocument,
 } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { anglesFromQuaternion } from "@fabcad/assembly";
+import {
+  activateComponent,
+  newInstance,
+  openInstanceMove,
+  useActiveComponentId,
+} from "../app/components";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import { ExpressionInput } from "./ExpressionInput";
@@ -384,9 +393,67 @@ function FeatureProperties({ feature }: { feature: Feature }): ReactElement {
   );
 }
 
+/** A component definition or one of its instances. */
+function ComponentSelection({
+  selection,
+}: {
+  selection: Extract<Selection, { kind: "component" | "instance" }>;
+}): ReactElement {
+  const doc = useDocument();
+  const active = useActiveComponentId();
+  const instance =
+    selection.kind === "instance" ? doc.assembly.instances[selection.instanceId] : undefined;
+  const componentId = selection.kind === "component" ? selection.componentId : instance?.componentId;
+  const component = componentId ? doc.assembly.components[componentId] : undefined;
+  if (!component) return <p className="empty">Nothing to show.</p>;
+  const contents = componentContents(doc, component.id);
+  const rows: [string, ReactNode][] =
+    selection.kind === "component"
+      ? [
+          ["Component", component.name],
+          ["Instances", listInstances(doc, component.id).length],
+          ["Sketches", contents.sketchIds.length],
+          ["Features", contents.featureIds.length - contents.sketchIds.length],
+          ["Bodies", contents.bodyIds.length],
+        ]
+      : [
+          ["Instance", instance!.name],
+          ["Component", component.name],
+          ["Position", `${instance!.transform.position.map((v) => n(v, 2)).join(", ")} mm`],
+          ["Rotation", `${anglesFromQuaternion(instance!.transform.rotation).map((v) => n(v, 2)).join(", ")} deg`],
+        ];
+  return (
+    <>
+      <KV rows={rows} />
+      <div className="form-actions" style={{ flexWrap: "wrap" }}>
+        {selection.kind === "instance" && (
+          <button className="btn small" onClick={() => openInstanceMove(selection.instanceId)}>
+            Move / Rotate
+          </button>
+        )}
+        <button className="btn small" onClick={() => newInstance(component.id)}>
+          Create Instance
+        </button>
+        {active === component.id ? (
+          <button className="btn small accent" onClick={() => activateComponent(null)}>
+            Activate Root
+          </button>
+        ) : (
+          <button className="btn small accent" onClick={() => activateComponent(component.id)}>
+            Activate
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
 function ModelSelection({ selection }: { selection: Selection }): ReactElement {
   const doc = useDocument();
   const bodies = useStore(modelState, (s) => s.bodies);
+  if (selection.kind === "component" || selection.kind === "instance") {
+    return <ComponentSelection selection={selection} />;
+  }
   if (selection.kind === "feature" || selection.kind === "plane") {
     const f = doc.features[selection.featureId];
     return f ? <FeatureProperties feature={f} /> : <p className="empty">Nothing to show.</p>;

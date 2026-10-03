@@ -6,6 +6,7 @@ import { useHelpTrigger } from "../help/useHelpTrigger";
 import { openContextMenu } from "../app/contextMenu";
 import { documentStore, modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
+import { useActiveComponentId } from "../app/components";
 import { Icon } from "../ui/Icon";
 
 function CopyLogButton(): ReactElement {
@@ -30,6 +31,7 @@ export function Timeline(): ReactElement {
   const statuses = useStore(modelState, (s) => s.features);
   const selection = useStore(appState, (s) => s.selection);
   const activeSketchId = useStore(appState, (s) => s.activeSketchId);
+  const activeComponent = useActiveComponentId();
   const features = listFeatures(doc);
   const cursor = doc.timelineCursor ?? features.length;
 
@@ -75,8 +77,12 @@ export function Timeline(): ReactElement {
                 ? "error"
                 : "";
           const selected = isSelected(selection, { kind: "feature", featureId: f.id });
+          // One timeline for all components; the steps of the others step back.
+          const other = f.componentId !== activeComponent;
+          const owner = doc.assembly.components[f.componentId];
           const title = [
             f.name,
+            f.componentId !== doc.assembly.rootComponentId && owner ? `Component: ${owner.name}` : "",
             status?.message,
             f.suppressed ? "Suppressed" : "",
             "Double-click to edit · Alt-click to suppress",
@@ -87,7 +93,7 @@ export function Timeline(): ReactElement {
             i === cursor && cursor < features.length ? marker : null,
             <button
               key={f.id}
-              className={`timeline-item ${state}${selected ? " selected" : ""}${activeSketchId === f.id ? " editing" : ""}`}
+              className={`timeline-item ${state}${selected ? " selected" : ""}${activeSketchId === f.id ? " editing" : ""}${other ? " other-component" : ""}`}
               title={title}
               onClick={(e) => {
                 if (e.altKey) {

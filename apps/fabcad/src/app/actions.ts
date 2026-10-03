@@ -1,4 +1,5 @@
 import {
+  CROSS_COMPONENT_MESSAGE,
   type Command,
   type CreatedRef,
   type Feature,
@@ -78,6 +79,7 @@ import {
 import { bodiesCenter } from "./moveTransform";
 import type { HandleContext } from "./dialogHandles";
 import { extrudeTargetReach, reachSpan } from "./extrudeTarget";
+import { activeComponentId, deleteSelectedComponents } from "./components";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
@@ -204,7 +206,7 @@ export function pickSketchPlane(item: Selection): boolean {
 
 export function startSketch(plane: SketchPlaneRef, prepare?: (sketch: Sketch) => Sketch): void {
   const out: CreatedRef = {};
-  const create = addSketch(plane, out);
+  const create = addSketch(plane, out, activeComponentId());
   // Whatever the sketch starts with belongs to the same undo step as its creation.
   const cmd = prepare
     ? command(create.label, (doc) => {
@@ -288,6 +290,8 @@ export function faceAsProfile(
   const create = addSketch(
     { type: "face", bodyId, hint: point, plane, ref: faceRefOf(bodyId, faceIndex, point, normal) },
     out,
+    // The sketch of a face goes with the body it was taken from.
+    documentStore.document.bodies[bodyId]?.componentId,
   );
   const ok = run(
     command(FACE_PROFILE, (doc) => {
@@ -367,8 +371,9 @@ function selectedProfiles(): { sketchId: string | null; profiles: Extract<Select
   return { sketchId, profiles: profiles.filter((p) => p.sketchId === sketchId) };
 }
 
+/** Visible bodies of the active component: the others cannot be joined or cut. */
 function defaultTargets(): string[] {
-  return Object.values(documentStore.document.bodies)
+  return listBodies(documentStore.document, activeComponentId())
     .filter((b) => b.visible)
     .map((b) => b.id);
 }
@@ -402,7 +407,7 @@ const selectedBodies = (selection: Selection[]): string[] => [
 function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): SolidDialog {
   const doc = documentStore.document;
   const operation = {
-    operation: listBodies(doc).length > 0 ? ("join" as const) : ("new" as const),
+    operation: listBodies(doc, activeComponentId(doc)).length > 0 ? ("join" as const) : ("new" as const),
     targetBodyIds: defaultTargets(),
   };
   const bodies = selection.some((s) => s.kind === "body");
@@ -545,7 +550,7 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
       );
     }
     case "split": {
-      const live = listBodies(doc);
+      const live = listBodies(doc, activeComponentId(doc));
       const only = live.length === 1 ? live[0]!.id : null;
       const body = selection.find((s) => s.kind === "body");
       return preselect<Extract<SolidDialog, { type: "split" }>>(
@@ -643,7 +648,7 @@ export function openDialog(type: Dialog["type"]): void {
           if (regions.length === 1) refs = [profileRefOf(regions[0]!)];
         }
       }
-      const hasBodies = listBodies(doc).length > 0;
+      const hasBodies = listBodies(doc, activeComponentId(doc)).length > 0;
       // A selected planar face is extruded as it is.
       let autoSketch: string | null = null;
       let faceBody: string | null = null;
@@ -949,7 +954,7 @@ function operationAfterTurn(from: ExtrudeDialog, to: ExtrudeDialog): Partial<Ext
   const own = to.editing ? doc.features[to.editing] : undefined;
   const ownBody = own && "bodyId" in own ? own.bodyId : "";
   const into = Object.values(doc.bodies)
-    .filter((b) => b.visible && b.id !== ownBody)
+    .filter((b) => b.visible && b.id !== ownBody && b.componentId === f.componentId)
     .filter((b) => {
       const g = computed[b.id]?.geometry;
       return g ? samples.some((p) => pointInBody(g, p)) : false;
@@ -967,7 +972,7 @@ function defaultDirection(from: ExtrudeDialog, to: ExtrudeDialog): ExtrudeDialog
     to.targetBodyIds.length > 0
       ? to.targetBodyIds
       : Object.values(doc.bodies)
-          .filter((b) => b.visible)
+          .filter((b) => b.visible && b.componentId === f.componentId)
           .map((b) => b.id);
   const boxes = ids.flatMap((id) => (computed[id] ? [computed[id].geometry.bounds] : []));
   return directionForOperation(
@@ -1017,7 +1022,34 @@ export function pickInDialog(item: Selection, additive = false): boolean {
 }
 
 /** Reason why the dialog cannot be applied yet, or null when it is complete. */
+/**
+ * Bodies and sketch of a dialog that belong to different components. Features stay inside one
+ * component: a Combine (or a join, a move, a pattern …) across components would have to change
+ * who owns the result, and that is never done silently.
+ */
+function crossComponentProblem(dialog: Dialog): string | null {
+  const doc = documentStore.document;
+  const d = dialog as unknown as Record<string, unknown>;
+  const ids = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? [v] : [];
+  const bodies = [
+    ...ids(d.toolBodyIds),
+    ...ids(d.targetBodyId),
+    ...ids(d.bodyId),
+    ...(d.operation !== "new" ? ids(d.targetBodyIds) : []),
+    ...(d.sourceKind === "features" ? [] : ids(d.bodyIds)),
+  ];
+  const owners = new Set(bodies.flatMap((b) => (doc.bodies[b] ? [doc.bodies[b].componentId] : [])));
+  for (const s of [...ids(d.sketchId), ...ids(d.pathSketchId)]) {
+    const f = doc.features[s];
+    if (f) owners.add(f.componentId);
+  }
+  return owners.size > 1 ? CROSS_COMPONENT_MESSAGE : null;
+}
+
 export function dialogProblem(dialog: Dialog): string | null {
+  const crossing = crossComponentProblem(dialog);
+  if (crossing) return crossing;
   if (isSolidDialog(dialog)) {
     return solidDialogProblem(dialog, documentStore.document, currentScope());
   }
@@ -1077,7 +1109,7 @@ export function commitDialog(): boolean {
   const out: CreatedRef = {};
   let ok = false;
   if (isSolidDialog(dialog)) {
-    const cmd = solidDialogCommand(dialog, out);
+    const cmd = solidDialogCommand(dialog, out, activeComponentId());
     if (!cmd) return false;
     ok = run(dialog.editing ? cmd : consumingSketch(cmd, ...consumedSketches(dialog)));
     if (!ok && !dialog.editing) {
@@ -1172,6 +1204,7 @@ export function commitDialog(): boolean {
 export function deleteSelection(): void {
   const { selection, activeSketchId } = appState.get();
   if (selection.length === 0) return;
+  if (!activeSketchId && deleteSelectedComponents()) return;
   if (activeSketchId) {
     const entities = selection.flatMap((s) =>
       s.kind === "entity" && s.sketchId === activeSketchId ? [s.entityId] : [],
@@ -1243,7 +1276,7 @@ export async function importStep(): Promise<void> {
   if (!file) return;
   try {
     const data = await fileToBase64(file);
-    run(addImport({ fileName: file.name, data, format: "step" }));
+    run(addImport({ fileName: file.name, data, format: "step" }, {}, activeComponentId()));
     toast(`Imported ${file.name}.`);
   } catch (err) {
     toast(err instanceof Error ? err.message : String(err), "error");

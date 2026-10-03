@@ -25,6 +25,7 @@ import { ShapeDimensionsPanel } from "./panels/ShapeDimensionsPanel";
 import { SketchTransformPanel } from "./panels/SketchTransformPanel";
 import { Header, openProject } from "./panels/Header";
 import { ImportDxfDialog } from "./panels/ImportDxfDialog";
+import { InstanceMovePanel } from "./panels/InstanceMovePanel";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
 import { PropertiesPanel } from "./panels/PropertiesPanel";
 import { Ribbon } from "./panels/Ribbon";
@@ -145,6 +146,7 @@ export function App(): ReactElement {
         {!fabrication && <SketchTransformPanel />}
 
         {!fabrication && <MeasurePanel />}
+        {!fabrication && <InstanceMovePanel />}
         {!fabrication && <TextDialog />}
         {fabrication && !printing && (
           <>

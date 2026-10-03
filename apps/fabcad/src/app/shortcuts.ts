@@ -15,7 +15,15 @@ import {
   stopMeasure,
 } from "./actions";
 import { appState, setSelection } from "./appState";
-import { setBodyVisible, setPlaneVisible, setSketchVisible } from "@fabcad/cad-document";
+import {
+  listInstances,
+  setBodyVisible,
+  setComponentVisible,
+  setInstancesVisible,
+  setPlaneVisible,
+  setSketchVisible,
+} from "@fabcad/cad-document";
+import { cancelInstanceMove, commitInstanceMove, openInstanceMove } from "./components";
 import { documentStore, redo, run, saveProject, undo } from "./session";
 
 export interface ShortcutHooks {
@@ -50,6 +58,10 @@ export function pressEscape(): void {
     closeDialog();
     return;
   }
+  if (state.instanceMove) {
+    cancelInstanceMove();
+    return;
+  }
   if (state.measuring) {
     stopMeasure();
     return;
@@ -70,6 +82,10 @@ export function pressEnter(): boolean {
     commitDialog();
     return true;
   }
+  if (state.instanceMove) {
+    commitInstanceMove();
+    return true;
+  }
   if (state.activeSketchId) return viewportApi()?.confirm() ?? false;
   return false;
 }
@@ -87,7 +103,7 @@ function pressPull(): void {
   openDialog(edges ? "fillet" : "extrude");
 }
 
-/** V: show or hide the selected bodies, sketches and construction planes. */
+/** V: show or hide the selected bodies, sketches, construction planes and instances. */
 function toggleVisibility(): boolean {
   const { selection } = appState.get();
   const doc = documentStore.document;
@@ -105,6 +121,14 @@ function toggleVisibility(): boolean {
       if (f?.type === "sketch") done = run(setSketchVisible(id, !f.visible)) || done;
       if (f?.type === "offset-plane") done = run(setPlaneVisible(id, !f.visible)) || done;
       for (const b of Object.values(doc.bodies)) if (b.createdBy === id) bodies.add(b.id);
+    }
+    if (s.kind === "instance") {
+      const i = doc.assembly.instances[s.instanceId];
+      if (i) done = run(setInstancesVisible([i.id], !i.visible)) || done;
+    }
+    if (s.kind === "component") {
+      const shown = listInstances(doc, s.componentId).some((i) => i.visible);
+      done = run(setComponentVisible(s.componentId, !shown)) || done;
     }
   }
   for (const id of bodies) {
@@ -294,6 +318,13 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       return;
     }
     if (key === "m") {
+      // M on one instance places it; Move/Copy works on bodies.
+      const only = appState.get().selection;
+      if (only.length === 1 && only[0]!.kind === "instance") {
+        openInstanceMove(only[0]!.instanceId);
+        e.preventDefault();
+        return;
+      }
       openDialog("move");
       return;
     }

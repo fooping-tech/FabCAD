@@ -646,6 +646,9 @@ export const HELP_JA: Record<string, HelpEntry> = {
       { name: "Operation", text: "Join（結合）、Cut（切り取り）、Intersect（共通部分）。" },
       { name: "Keep tools", text: "Tool の Body を消さずに残します。" },
     ],
+    limitations: [
+      "Body は 1 つのコンポーネントに属している必要があります。異なるコンポーネントの Body と、コンポーネントのインスタンスは受け付けません。Combine で Body が別のコンポーネントに移ることはありません。",
+    ],
   },
   "solid.move": {
     title: "Move/Copy",
@@ -742,6 +745,63 @@ export const HELP_JA: Record<string, HelpEntry> = {
     summary: "STEP ファイル（.step、.stp）の立体を取り込みます。",
     what: ["ファイルはプロジェクトの中に保存するので、プロジェクトだけで完結します。取り込んだ Body は、ほかの Feature で加工できます。"],
     limitations: ["取り込んだ Body には履歴がなく、Body そのものは編集できません。"],
+  },
+  "component.new": {
+    title: "New Component",
+    summary: "コンポーネントを作ります。何度でも配置できる部品の定義です。",
+    what: [
+      "コンポーネントは定義です。1 つの部品のスケッチ、Feature、Body をまとめます。配置はインスタンスで行います。どのインスタンスも同じ形をそれぞれの位置に表示し、定義を変えるとすべてのインスタンスに反映されます。",
+      "（ルートで）Body を選択しているときは、その Body と、それを作った操作が新しいコンポーネントに移ります。切り離せない操作と Body（2 つの Body を結合した Combine、その面に描いたスケッチなど）も一緒に移り、そのことをメッセージで知らせます。モデルの位置は変わりません。最初のインスタンスは原点に置かれます。",
+      "何も選択していないときは空のコンポーネントを作り、アクティブにします。このあと作るスケッチや Feature は、そのコンポーネントに属します。",
+      "Browser では、定義を Components の下（Sketches、Features、Bodies つき）に、配置したインスタンスを Instances の下に表示します。",
+    ],
+    when: [
+      "何度も使う部品（スペーサー、ブラケットなど）や、アセンブリの部品を分けておきたいときに。",
+    ],
+    requires: ["何も選択しないか、ルートがアクティブな状態で、1 つのコンポーネントの Body と Feature を選択します。"],
+    limitations: [
+      "コンポーネントは入れ子にできません。どのコンポーネントもルートに作ります。",
+      "インスタンスごとのパラメータはありません。どのインスタンスも定義のとおりに表示されます。",
+    ],
+    examples: [
+      "何も選択せずに New Component、続けて Create Sketch と Extrude。できた Body は新しいコンポーネントに属します。Activate Root のあと Create Instance で、新しいインスタンスを横に動かします。",
+    ],
+  },
+  "component.instance": {
+    title: "Create Instance",
+    summary: "選択したコンポーネントをもう 1 つ配置します。同じ定義を参照します。",
+    what: [
+      "Browser で選択したコンポーネント（またはインスタンスのコンポーネント、アクティブなコンポーネント）のインスタンスを追加し、Move / Rotate を開きます。",
+      "インスタンスは定義を参照するだけで、何もコピーしません。定義を編集すると、すべてのインスタンスが変わります。インスタンスのコンテキストメニューの Duplicate は、そのインスタンスと同じ位置に同じことをします。",
+      "インスタンスを削除しても、定義は Components に残ります。インスタンスが 1 つもなくなっても残り、Create Instance でもう一度配置できます。",
+    ],
+    requires: ["コンポーネントかインスタンスを選択しているか、コンポーネントがアクティブであること。"],
+  },
+  "component.activate": {
+    title: "Activate Component",
+    summary: "コンポーネントを編集します。そのスケッチ、Feature、Body だけを定義の座標で表示します。",
+    what: [
+      "Browser でコンポーネントをダブルクリックするか、コンテキストメニュー（またはそのインスタンスのコンテキストメニュー）の Activate Component を選びます。ビューにはそのコンポーネントだけが定義の位置に表示され、作ったものはそのコンポーネントに属します。",
+      "Activate Root（リボンのボタン、コンテキストメニュー、または Browser のドキュメントのダブルクリック）でモデル全体に戻ります。ルートの Body と、すべてのインスタンスがそれぞれの位置に表示されます。",
+      "ルートがアクティブなとき、インスタンスは全体として選択されます。その面や稜線はコマンドで選べません。変えるときはコンポーネントをアクティブにします。",
+    ],
+    limitations: [
+      "Feature は 1 つのコンポーネントの中で働きます。Combine、Join / Cut の対象、Move/Copy、パターンは、異なるコンポーネントの Body を受け付けません。ダイアログにそう表示され、OK は押せません。",
+    ],
+  },
+  "component.move-instance": {
+    title: "Move / Rotate Instance",
+    shortcut: "M",
+    summary: "インスタンスを配置します。原点の位置と向きを決めます。",
+    what: [
+      "インスタンスのコンテキストメニュー、Browser でのダブルクリック、またはインスタンスを 1 つ選択して M で開きます。値を入力するとインスタンスが追従します。OK で 1 つの操作として確定し、Cancel で元に戻します。",
+      "動くのはそのインスタンスだけです。定義とほかのインスタンスは動きません。",
+    ],
+    requires: ["インスタンスが 1 つ。"],
+    parameters: [
+      { name: "X, Y, Z", text: "コンポーネントの原点を置く位置（ワールド座標）。" },
+      { name: "Rotate X, Rotate Y, Rotate Z", text: "コンポーネントの原点を通るワールド座標の X、Y、Z 軸のまわりの角度。度で、反時計回り。この順に回転します。" },
+    ],
   },
   "solid.parameters": {
     title: "Parameters",

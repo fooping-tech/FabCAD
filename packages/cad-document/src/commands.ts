@@ -10,6 +10,7 @@ import {
   type BodyRecord,
   type CadDocument,
   allocateId,
+  commonComponent,
   nextBodyName,
   nextFeatureName,
   pruneBodies,
@@ -87,6 +88,20 @@ function withFeature(doc: CadDocument, feature: Feature, bodies: BodyRecord[] = 
     for (const b of bodies) next.bodies[b.id] = b;
   }
   return next;
+}
+
+/** Whether modifying `targetBodyIds` keeps a feature of `componentId` inside its component. */
+function targetsInComponent(
+  doc: CadDocument,
+  componentId: string,
+  operation: BodyOperation,
+  targetBodyIds: readonly string[] | undefined,
+): boolean {
+  if (operation === "new") return true;
+  return (targetBodyIds ?? []).every((id) => {
+    const b = doc.bodies[id];
+    return !b || b.componentId === componentId;
+  });
 }
 
 function newBody(doc: CadDocument, featureId: string, componentId: string): [BodyRecord, CadDocument] {
@@ -224,7 +239,10 @@ export function addSketch(plane: SketchPlaneRef, out: CreatedRef = {}, component
       id,
       type: "sketch",
       name,
-      componentId: componentId ?? doc.assembly.rootComponentId,
+      componentId:
+        componentId && doc.assembly.components[componentId]
+          ? componentId
+          : doc.assembly.rootComponentId,
       suppressed: false,
       visible: true,
       // Every sketch starts with its origin: a fixed point that geometry can be tied to.
@@ -280,6 +298,8 @@ function validPlaneBase(doc: CadDocument, base: PlaneReference, self?: string): 
 export function addOffsetPlane(
   input: { base: PlaneReference; offset: string },
   out: CreatedRef = {},
+  /** Owner when the base does not tell (an origin plane): the active component. */
+  componentId?: string,
 ): Command {
   return command("Offset plane", (doc) => {
     if (!validPlaneBase(doc, input.base)) return doc;
@@ -294,7 +314,7 @@ export function addOffsetPlane(
       id,
       type: "offset-plane",
       name: nextFeatureName(doc, "offset-plane"),
-      componentId: owner ?? doc.assembly.rootComponentId,
+      componentId: owner ?? componentId ?? doc.assembly.rootComponentId,
       suppressed: false,
       base: input.base,
       offset: input.offset,
@@ -330,10 +350,11 @@ export function addExtrude(input: ExtrudeInput, out: CreatedRef = {}): Command {
   return command("Extrude", (doc) => {
     const sketch = doc.features[input.sketchId];
     if (!sketch || sketch.type !== "sketch") return doc;
+    const operation = input.operation ?? "new";
+    if (!targetsInComponent(doc, sketch.componentId, operation, input.targetBodyIds)) return doc;
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "extrude");
-    const operation = input.operation ?? "new";
     const bodies: BodyRecord[] = [];
     let bodyId = "";
     if (operation === "new") {
@@ -376,10 +397,11 @@ export function addRevolve(input: RevolveInput, out: CreatedRef = {}): Command {
   return command("Revolve", (doc) => {
     const sketch = doc.features[input.sketchId];
     if (!sketch || sketch.type !== "sketch") return doc;
+    const operation = input.operation ?? "new";
+    if (!targetsInComponent(doc, sketch.componentId, operation, input.targetBodyIds)) return doc;
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "revolve");
-    const operation = input.operation ?? "new";
     const bodies: BodyRecord[] = [];
     let bodyId = "";
     if (operation === "new") {
@@ -421,6 +443,8 @@ export function addBoolean(
     const target = doc.bodies[input.targetBodyId];
     const tools = input.toolBodyIds.filter((t) => t !== input.targetBodyId && doc.bodies[t]);
     if (!target || tools.length === 0) return doc;
+    // Bodies of different components are not combined: that would change who owns what.
+    if (commonComponent(doc, [target.id, ...tools]) === null) return doc;
     const [id, d] = allocateId(doc, "boolean");
     const feature: BooleanFeature = {
       id,
@@ -510,19 +534,22 @@ export function addShell(
 export function addImport(
   input: { fileName: string; data: string; format: "step" },
   out: CreatedRef = {},
+  componentId?: string,
 ): Command {
   return command(`Import ${input.fileName}`, (doc) => {
+    const owner =
+      componentId && doc.assembly.components[componentId] ? componentId : doc.assembly.rootComponentId;
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "import");
     let body: BodyRecord;
-    [body, d] = newBody(d, id, doc.assembly.rootComponentId);
+    [body, d] = newBody(d, id, owner);
     body = { ...body, name: input.fileName.replace(/\.[^.]+$/, "") || body.name };
     const feature: ImportFeature = {
       id,
       type: "import",
       name: nextFeatureName(doc, "import"),
-      componentId: doc.assembly.rootComponentId,
+      componentId: owner,
       suppressed: false,
       format: input.format,
       fileName: input.fileName,
@@ -576,6 +603,12 @@ function validSource(doc: CadDocument, source: PatternSource): PatternSource | n
   // In timeline order: that is the order in which their effect is applied again.
   featureIds.sort((a, b) => doc.timeline.indexOf(a) - doc.timeline.indexOf(b));
   return featureIds.length > 0 ? { kind: "features", featureIds } : null;
+}
+
+/** Whether everything a pattern or mirror repeats belongs to one component. */
+function sourceInOneComponent(doc: CadDocument, source: PatternSource): boolean {
+  if (source.kind === "bodies") return commonComponent(doc, source.bodyIds) !== null;
+  return new Set(source.featureIds.map((id) => doc.features[id]?.componentId)).size <= 1;
 }
 
 /** Component of the first thing a pattern repeats. */
@@ -652,7 +685,7 @@ export interface RectangularPatternInput {
 export function addRectangularPattern(input: RectangularPatternInput, out: CreatedRef = {}): Command {
   return command("Rectangular pattern", (doc) => {
     const source = validSource(doc, input.source);
-    if (!source) return doc;
+    if (!source || !sourceInOneComponent(doc, source)) return doc;
     const [id, d] = allocateId(doc, "pattern");
     const feature: RectangularPatternFeature = {
       id,
@@ -689,7 +722,7 @@ export interface CircularPatternInput {
 export function addCircularPattern(input: CircularPatternInput, out: CreatedRef = {}): Command {
   return command("Circular pattern", (doc) => {
     const source = validSource(doc, input.source);
-    if (!source) return doc;
+    if (!source || !sourceInOneComponent(doc, source)) return doc;
     const [id, d] = allocateId(doc, "pattern");
     const feature: CircularPatternFeature = {
       id,
@@ -714,7 +747,7 @@ export function addMirror(
 ): Command {
   return command("Mirror", (doc) => {
     const source = validSource(doc, input.source);
-    if (!source) return doc;
+    if (!source || !sourceInOneComponent(doc, source)) return doc;
     const [id, d] = allocateId(doc, "mirror");
     const feature: MirrorFeature = {
       id,
@@ -739,7 +772,7 @@ export function addMove(
   return command(input.copy ? "Copy" : "Move", (doc) => {
     const bodyIds = [...new Set(input.bodyIds)].filter((b) => doc.bodies[b]);
     const first = doc.bodies[bodyIds[0] ?? ""];
-    if (!first) return doc;
+    if (!first || commonComponent(doc, bodyIds) === null) return doc;
     const [id, d] = allocateId(doc, "move");
     const feature: MoveFeature = {
       id,
@@ -834,10 +867,11 @@ export function addSweep(input: SweepInput, out: CreatedRef = {}): Command {
     const path = doc.features[input.path.sketchId];
     if (!sketch || sketch.type !== "sketch" || !path || path.type !== "sketch") return doc;
     if (input.profiles.length === 0 || input.path.entityIds.length === 0) return doc;
+    const operation = input.operation ?? "new";
+    if (!targetsInComponent(doc, sketch.componentId, operation, input.targetBodyIds)) return doc;
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "sweep");
-    const operation = input.operation ?? "new";
     const bodies: BodyRecord[] = [];
     let bodyId = "";
     if (operation === "new") {
@@ -886,10 +920,11 @@ export function addLoft(input: LoftInput, out: CreatedRef = {}): Command {
         return doc;
       }
     }
+    const operation = input.operation ?? "new";
+    if (!targetsInComponent(doc, componentId, operation, input.targetBodyIds)) return doc;
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "loft");
-    const operation = input.operation ?? "new";
     const bodies: BodyRecord[] = [];
     let bodyId = "";
     if (operation === "new") {

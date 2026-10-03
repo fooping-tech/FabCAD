@@ -1,4 +1,13 @@
-import { createAssembly } from "@fabcad/assembly";
+import {
+  type AssemblyModel,
+  type ComponentInstance,
+  IDENTITY_INSTANCE_TRANSFORM,
+  type InstanceTransform,
+  ROOT_INSTANCE_ID,
+  createAssembly,
+  instanceTransformFromMatrix,
+  normalizeQuaternion,
+} from "@fabcad/assembly";
 import {
   type CadDocument,
   DOCUMENT_SCHEMA,
@@ -100,10 +109,21 @@ export function normalizeDocument(input: unknown): CadDocument {
   // Features missing from the timeline would never be evaluated; append them.
   for (const id of Object.keys(features)) if (!timeline.includes(id)) timeline.push(id);
 
-  const assembly =
-    isRecord(input.assembly) && isRecord(input.assembly.components)
-      ? (input.assembly as unknown as CadDocument["assembly"])
-      : createAssembly(base.name);
+  const assembly = normalizeAssembly(input.assembly, base.name);
+  // Whatever names a component that is not there belongs to the root.
+  for (const [id, f] of Object.entries(features)) {
+    if (!assembly.components[f.componentId]) {
+      features[id] = { ...f, componentId: assembly.rootComponentId };
+    }
+  }
+  const bodies: CadDocument["bodies"] = isRecord(input.bodies)
+    ? { ...(input.bodies as CadDocument["bodies"]) }
+    : {};
+  for (const [id, b] of Object.entries(bodies)) {
+    if (!assembly.components[b.componentId]) {
+      bodies[id] = { ...b, componentId: assembly.rootComponentId };
+    }
+  }
 
   const doc: CadDocument = {
     ...base,
@@ -127,7 +147,7 @@ export function normalizeDocument(input: unknown): CadDocument {
       typeof input.timelineCursor === "number"
         ? Math.max(0, Math.min(timeline.length, input.timelineCursor))
         : null,
-    bodies: isRecord(input.bodies) ? (input.bodies as CadDocument["bodies"]) : {},
+    bodies,
     origin:
       isRecord(input.origin) && Array.isArray(input.origin.hidden)
         ? {
@@ -139,4 +159,70 @@ export function normalizeDocument(input: unknown): CadDocument {
     nextId: typeof input.nextId === "number" ? input.nextId : 100000,
   };
   return doc;
+}
+
+const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/**
+ * Instance placements were stored as row-major 4×4 matrices before they became a position and
+ * a quaternion; both forms are read.
+ */
+function normalizeTransform(input: unknown): InstanceTransform {
+  if (Array.isArray(input) && input.length === 16 && input.every(finite)) {
+    return instanceTransformFromMatrix(input);
+  }
+  if (
+    isRecord(input) &&
+    Array.isArray(input.position) &&
+    input.position.length === 3 &&
+    input.position.every(finite) &&
+    Array.isArray(input.rotation) &&
+    input.rotation.length === 4 &&
+    input.rotation.every(finite)
+  ) {
+    return {
+      position: input.position as [number, number, number],
+      rotation: normalizeQuaternion(input.rotation as number[]),
+    };
+  }
+  return IDENTITY_INSTANCE_TRANSFORM;
+}
+
+function normalizeAssembly(input: unknown, name: string): AssemblyModel {
+  const base = createAssembly(name);
+  if (!isRecord(input) || !isRecord(input.components)) return base;
+  const rootComponentId =
+    typeof input.rootComponentId === "string" && isRecord(input.components[input.rootComponentId])
+      ? input.rootComponentId
+      : base.rootComponentId;
+  const components: AssemblyModel["components"] = { ...base.components };
+  if (rootComponentId !== base.rootComponentId) delete components[base.rootComponentId];
+  for (const [id, c] of Object.entries(input.components)) {
+    if (!isRecord(c)) continue;
+    components[id] = { id, name: typeof c.name === "string" ? c.name : id };
+  }
+  const instances: Record<string, ComponentInstance> = {};
+  if (isRecord(input.instances)) {
+    for (const [id, i] of Object.entries(input.instances)) {
+      if (!isRecord(i) || typeof i.componentId !== "string" || !components[i.componentId]) continue;
+      instances[id] = {
+        id,
+        name: typeof i.name === "string" ? i.name : id,
+        componentId: i.componentId,
+        parentInstanceId: typeof i.parentInstanceId === "string" ? i.parentInstanceId : null,
+        transform: normalizeTransform(i.transform),
+        visible: i.visible !== false,
+      };
+    }
+  }
+  if (!instances[ROOT_INSTANCE_ID]) {
+    instances[ROOT_INSTANCE_ID] = { ...base.instances[ROOT_INSTANCE_ID]!, componentId: rootComponentId };
+  }
+  return {
+    rootComponentId,
+    components,
+    instances,
+    joints: isRecord(input.joints) ? (input.joints as AssemblyModel["joints"]) : {},
+    rigidGroups: isRecord(input.rigidGroups) ? (input.rigidGroups as AssemblyModel["rigidGroups"]) : {},
+  };
 }

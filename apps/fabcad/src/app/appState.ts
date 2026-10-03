@@ -39,7 +39,11 @@ export type Selection =
   | { kind: "feature"; featureId: string }
   | { kind: "origin-plane"; plane: OriginPlaneName }
   /** A construction plane, by the feature that defines it. */
-  | { kind: "plane"; featureId: string };
+  | { kind: "plane"; featureId: string }
+  /** A component definition (browser). */
+  | { kind: "component"; componentId: string }
+  /** A placed instance of a component (browser or viewport). */
+  | { kind: "instance"; instanceId: string };
 
 export const selectionKey = (s: Selection): string => {
   switch (s.kind) {
@@ -67,6 +71,10 @@ export const selectionKey = (s: Selection): string => {
       return `origin-plane:${s.plane}`;
     case "plane":
       return `plane:${s.featureId}`;
+    case "component":
+      return `component:${s.componentId}`;
+    case "instance":
+      return `instance:${s.instanceId}`;
   }
 };
 
@@ -359,6 +367,15 @@ export interface AppState {
   fabricationTab: FabricationTab;
   /** Sketch feature being edited, or null in the solid environment. */
   activeSketchId: string | null;
+  /**
+   * Component definition being edited; null for the root. What is created belongs to it, and
+   * the view shows only its sketches, planes and bodies (see `app/components.ts`).
+   */
+  activeComponentId: string | null;
+  /** Browser row (selection key) asked to start renaming, e.g. from the context menu. */
+  renaming: string | null;
+  /** The Move / Rotate window of an instance, with the click it opens beside. */
+  instanceMove: { instanceId: string; anchor: { x: number; y: number } | null } | null;
   /** Active command. "select" is the idle state. */
   tool: string;
   toolOptions: ToolOptions;
@@ -431,6 +448,9 @@ export const appState = new TinyStore<AppState>({
   fabricationProcess: "laser",
   fabricationTab: "model",
   activeSketchId: null,
+  activeComponentId: null,
+  renaming: null,
+  instanceMove: null,
   tool: "select",
   toolOptions: {
     polygonSides: 6,
@@ -512,7 +532,16 @@ export function isAdditiveClick(e: { shiftKey: boolean; metaKey: boolean; ctrlKe
 export function select(item: Selection | null, additive: boolean): void {
   const { selection, measuring } = appState.get();
   if (measuring) {
-    if (!item || item.kind === "constraint" || item.kind === "dimension" || item.kind === "feature") return;
+    if (
+      !item ||
+      item.kind === "constraint" ||
+      item.kind === "dimension" ||
+      item.kind === "feature" ||
+      item.kind === "component" ||
+      item.kind === "instance"
+    ) {
+      return;
+    }
     const picked = selectionKey(item);
     // A third pick starts the next measurement.
     if (selection.some((s) => selectionKey(s) === picked)) {

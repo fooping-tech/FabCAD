@@ -46,7 +46,14 @@ import {
   facesOfFeatures,
   vertexPointOf,
 } from "../app/topology";
-import { type TopologyRef, evaluateAs } from "@fabcad/cad-document";
+import {
+  type TopologyRef,
+  evaluateAs,
+  listBodies,
+  listInstances,
+  validComponentId,
+} from "@fabcad/cad-document";
+import { instanceWorldTransform } from "@fabcad/assembly";
 import {
   currentScope,
   documentStore,
@@ -109,6 +116,8 @@ function pickToSelection(pick: Pick3D): Selection {
       return { kind: "origin-plane", plane: pick.plane };
     case "plane":
       return { kind: "plane", featureId: pick.featureId };
+    case "instance":
+      return { kind: "instance", instanceId: pick.instanceId };
   }
 }
 
@@ -126,10 +135,15 @@ function selectionToHighlight(s: Selection): Highlight | null {
       return { kind: "origin-plane", plane: s.plane };
     case "plane":
       return { kind: "plane", featureId: s.featureId };
+    case "instance":
+      return { kind: "instance", instanceId: s.instanceId };
     default:
       return null;
   }
 }
+
+const INSTANCE_PICK_MESSAGE =
+  "A component instance cannot be used in a command. Activate the component to edit it.";
 
 const near = (a: Vec3, b: Vec3, tol = 1e-4): boolean =>
   Math.abs(a.x - b.x) < tol && Math.abs(a.y - b.y) < tol && Math.abs(a.z - b.z) < tol;
@@ -218,6 +232,7 @@ export function Viewport(): ReactElement {
   const doc = useDocument();
   const app = useStore(appState);
   const model = useStore(modelState);
+  const activeComponent = app.activeComponentId;
 
   // ------------------------------------------------------------------ set-up
   useEffect(() => {
@@ -357,7 +372,9 @@ export function Viewport(): ReactElement {
       let hover: Selection | null = null;
       if (filter === "body") {
         const id = scene.pickBody(x, y);
+        const instance = id ? null : scene.pickInstance(x, y);
         if (id) hover = { kind: "body", bodyId: id };
+        else if (instance) hover = { kind: "instance", instanceId: instance };
       } else {
         const pick = scene.pick(x, y, {
           faces: filter === "auto" || filter === "face",
@@ -395,6 +412,13 @@ export function Viewport(): ReactElement {
       hover3d(x, y);
       const hover = appState.get().hover;
       const profile = controller.hoveredProfile;
+
+      // Commands work on the geometry of the active component; an instance shows a definition
+      // somewhere else, so nothing of it can be picked.
+      if (dialog && !profile && (hover === null || hover.kind === "instance") && scene.pickInstance(x, y)) {
+        toast(INSTANCE_PICK_MESSAGE, "warning");
+        return;
+      }
 
       if (dialog?.type === "pick-sketch-plane") {
         if (hover?.kind === "origin-plane") startSketchOnOrigin(hover.plane);
@@ -1169,7 +1193,26 @@ export function Viewport(): ReactElement {
     scene.retainBodies(ids);
     const hadBodies = scene.hasBodies();
     for (const b of Object.values(model.bodies)) scene.setBody(b.id, b.hash, b.geometry);
-    for (const b of Object.values(doc.bodies)) scene.setBodyVisible(b.id, b.visible);
+    // The bodies of the active component are shown where they are; with the root active, the
+    // other components are shown through their instances.
+    const active = validComponentId(doc, activeComponent);
+    for (const b of Object.values(doc.bodies)) {
+      scene.setBodyVisible(b.id, b.visible && b.componentId === active);
+    }
+    const rootActive = active === doc.assembly.rootComponentId;
+    scene.setInstances(
+      rootActive
+        ? listInstances(doc)
+            .filter((i) => i.visible)
+            .map((i) => ({
+              id: i.id,
+              matrix: instanceWorldTransform(doc.assembly, i.id),
+              bodyIds: listBodies(doc, i.componentId)
+                .filter((b) => b.visible && model.bodies[b.id])
+                .map((b) => b.id),
+            }))
+        : [],
+    );
     scene.setOriginVisibility(doc.origin.visible, doc.origin.hidden);
     // Frame the model when the first body appears, and whenever it leaves the view.
     if (scene.hasBodies() && !appState.get().activeSketchId) {
@@ -1180,7 +1223,16 @@ export function Viewport(): ReactElement {
     if (!scene.hasBodies()) firstBodies.current = true;
     scene.setBodiesTransparent(appState.get().activeSketchId !== null);
     scene.invalidate();
-  }, [model.bodies, doc.bodies, doc.origin, ready]);
+  }, [model.bodies, doc.bodies, doc.origin, doc.assembly, activeComponent, ready]);
+
+  // Switching components frames what is shown now.
+  const shownComponent = useRef(activeComponent);
+  useEffect(() => {
+    if (shownComponent.current === activeComponent) return;
+    shownComponent.current = activeComponent;
+    const scene = sceneRef.current;
+    if (scene) setTimeout(() => scene.fitAll(sketchExtents()), 0);
+  }, [activeComponent]);
 
   // ------------------------------------------------- construction planes
   useEffect(() => {
@@ -1192,10 +1244,11 @@ export function Viewport(): ReactElement {
         const f = doc.features[p.id];
         if (f?.type !== "offset-plane") return [];
         // Like the origin planes, construction planes step back while sketching.
-        return [{ id: p.id, patch: p, visible: f.visible && !sketching }];
+        const shown = f.visible && !sketching && f.componentId === validComponentId(doc, activeComponent);
+        return [{ id: p.id, patch: p, visible: shown }];
       }),
     );
-  }, [model.planes, doc.features, app.activeSketchId, ready]);
+  }, [model.planes, doc.features, doc.assembly, app.activeSketchId, activeComponent, ready]);
 
   // ------------------------------------------------------------- highlights
   useEffect(() => {
@@ -1208,6 +1261,11 @@ export function Viewport(): ReactElement {
       if (h) items.push({ highlight: h, mode: "selected" });
       if (s.kind === "feature" && doc.features[s.featureId]?.type === "offset-plane") {
         items.push({ highlight: { kind: "plane", featureId: s.featureId }, mode: "selected" });
+      }
+      if (s.kind === "component") {
+        for (const i of listInstances(doc, s.componentId)) {
+          items.push({ highlight: { kind: "instance", instanceId: i.id }, mode: "selected" });
+        }
       }
       if (s.kind === "feature") {
         for (const b of Object.values(doc.bodies)) {
@@ -1223,7 +1281,7 @@ export function Viewport(): ReactElement {
     }
     scene.setHighlights(items);
     controllerRef.current?.requestDraw();
-  }, [app.selection, app.hover, app.dialog, model.bodies, model.planes, doc.bodies, ready]);
+  }, [app.selection, app.hover, app.dialog, model.bodies, model.planes, doc.bodies, doc.assembly, activeComponent, ready]);
 
   useEffect(() => {
     const scene = sceneRef.current;
@@ -1363,8 +1421,10 @@ export function Viewport(): ReactElement {
 
   function sketchExtents(): Vec3[] {
     const out: Vec3[] = [];
-    for (const f of Object.values(documentStore.document.features)) {
-      if (f.type !== "sketch" || !f.visible) continue;
+    const doc = documentStore.document;
+    const active = validComponentId(doc, appState.get().activeComponentId);
+    for (const f of Object.values(doc.features)) {
+      if (f.type !== "sketch" || !f.visible || f.componentId !== active) continue;
       const b = sketchBounds(f.sketch);
       if (!b) continue;
       const plane = resolveSketchPlane(f.sketch.plane);

@@ -237,3 +237,22 @@ export function syncBodyRecords(
     return bodies === doc.bodies ? doc : { ...doc, bodies };
   };
 }
+
+/**
+ * The single component that all these bodies belong to, or null when they belong to more than
+ * one (or there are none). Features may only combine bodies of one component.
+ */
+export function commonComponent(doc: CadDocument, bodyIds: readonly string[]): string | null {
+  let found: string | null = null;
+  for (const id of bodyIds) {
+    const c = doc.bodies[id]?.componentId;
+    if (c === undefined) continue;
+    if (found !== null && c !== found) return null;
+    found = c;
+  }
+  return found;
+}
+
+export const CROSS_COMPONENT_MESSAGE =
+  "These bodies belong to different components. Combine and the other body operations work " +
+  "on the bodies of one component only.";

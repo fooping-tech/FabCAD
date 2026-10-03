@@ -1,22 +1,30 @@
 import {
   listBodies,
+  listComponents,
+  listInstances,
   listSketchFeatures,
   renameBody,
+  renameComponent,
   renameFeature,
+  renameInstance,
   setBodyVisible,
+  setComponentVisible,
+  setInstancesVisible,
   setOriginVisible,
   setPlaneVisible,
   setSketchVisible,
 } from "@fabcad/cad-document";
 import type { OriginPlaneName } from "@fabcad/geometry";
-import { type ReactElement, type ReactNode, useState } from "react";
-import { editFeature, enterSketch, pickInDialog, pickSketchPlane } from "../app/actions";
+import { Fragment, type ReactElement, type ReactNode, useEffect, useState } from "react";
+import { editFeature, enterSketch, featureIcon, pickInDialog, pickSketchPlane } from "../app/actions";
+import { activateComponent, openInstanceMove, useActiveComponentId } from "../app/components";
 import {
   type Selection,
   appState,
   isAdditiveClick,
   isSelected,
   select,
+  selectionKey,
 } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
 import { modelState, run, useDocument } from "../app/session";
@@ -41,7 +49,10 @@ function Row({
   onRename,
   onMenu,
   title,
+  renameRequest,
 }: {
+  /** Start renaming now (asked for by the context menu). */
+  renameRequest?: boolean;
   onMenu?: (e: React.MouseEvent) => void;
   depth: number;
   icon: string;
@@ -63,6 +74,12 @@ function Row({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
   const dim = visible === false;
+  useEffect(() => {
+    if (!renameRequest) return;
+    setDraft(name);
+    setEditing(true);
+    appState.set({ renaming: null });
+  }, [renameRequest]);
   return (
     <div
       className={`tree-row${selected ? " selected" : ""}${active ? " active" : ""}${dim ? " dim" : ""}${error ? " error" : ""}`}
@@ -180,14 +197,20 @@ export function BrowserTree(): ReactElement {
   const activeSketchId = useStore(appState, (s) => s.activeSketchId);
   const statuses = useStore(modelState, (s) => s.features);
   const computed = useStore(modelState, (s) => s.bodies);
+  const active = useActiveComponentId();
+  const renaming = useStore(appState, (s) => s.renaming);
   const [open, setOpen] = useState<Record<string, boolean>>({
     root: true,
     origin: false,
     sketches: true,
     bodies: true,
-    components: false,
+    components: true,
+    instances: true,
   });
-  const toggle = (key: string): void => setOpen((o) => ({ ...o, [key]: !o[key] }));
+  /** Folders are open unless closed; `fallback` is the state before the first click. */
+  const isOpen = (key: string, fallback = true): boolean => open[key] ?? fallback;
+  const toggle = (key: string, fallback = true): void =>
+    setOpen((o) => ({ ...o, [key]: !(o[key] ?? fallback) }));
   const additive = (e: React.MouseEvent): boolean => isAdditiveClick(e);
   /** A click on a row: a pick for the open feature dialog, otherwise a selection. */
   const pick = (sel: Selection, e: React.MouseEvent): void => {
@@ -200,13 +223,139 @@ export function BrowserTree(): ReactElement {
   };
 
   const root = doc.assembly.rootComponentId;
-  const sketches = listSketchFeatures(doc, root);
-  const bodies = listBodies(doc, root);
-  const planes = doc.timeline.flatMap((id) => {
-    const f = doc.features[id];
-    return f?.type === "offset-plane" && f.componentId === root ? [f] : [];
-  });
-  const children = Object.values(doc.assembly.components).filter((c) => c.id !== root);
+  const components = listComponents(doc);
+  const instances = listInstances(doc);
+
+  /** Planes, sketches, features and bodies of one component, as folders under `depth`. */
+  const contents = (componentId: string, depth: number, prefix: string): ReactElement => {
+    const sketches = listSketchFeatures(doc, componentId);
+    const bodies = listBodies(doc, componentId);
+    const owned = doc.timeline.flatMap((id) => {
+      const f = doc.features[id];
+      return f?.componentId === componentId ? [f] : [];
+    });
+    const planes = owned.flatMap((f) => (f.type === "offset-plane" ? [f] : []));
+    // The root has the timeline for its steps; a component lists its own.
+    const steps =
+      componentId === root ? [] : owned.filter((f) => f.type !== "sketch" && f.type !== "offset-plane");
+    const folder = (key: string, name: string, count: number, fallback = true): ReactElement => (
+      <Row
+        depth={depth}
+        icon="folder"
+        name={name}
+        caret
+        open={isOpen(`${prefix}${key}`, fallback)}
+        onToggle={() => toggle(`${prefix}${key}`, fallback)}
+        onClick={() => toggle(`${prefix}${key}`, fallback)}
+        badge={<span className="tree-badge">{count}</span>}
+      />
+    );
+    return (
+      <>
+        {planes.length > 0 && folder("planes", "Planes", planes.length)}
+        {planes.length > 0 &&
+          isOpen(`${prefix}planes`) &&
+          planes.map((f) => {
+            const sel: Selection = { kind: "plane", featureId: f.id };
+            return (
+              <Row
+                key={f.id}
+                depth={depth + 1}
+                icon="plane"
+                name={f.name}
+                visible={f.visible}
+                onVisible={(v) => run(setPlaneVisible(f.id, v))}
+                selected={isSelected(selection, sel)}
+                error={statuses[f.id]?.state === "error"}
+                title={statuses[f.id]?.message ?? "Double-click to edit the plane"}
+                onClick={(e) => pick(sel, e)}
+                onDoubleClick={() => editFeature(f.id)}
+                onMenu={menuFor(sel)}
+                onRename={(name) => run(renameFeature(f.id, name))}
+              />
+            );
+          })}
+
+        {folder("sketches", "Sketches", sketches.length)}
+        {isOpen(`${prefix}sketches`) &&
+          sketches.map((f) => {
+            const sel: Selection = { kind: "feature", featureId: f.id };
+            return (
+              <Row
+                key={f.id}
+                depth={depth + 1}
+                icon="sketch"
+                name={f.name}
+                visible={f.visible}
+                onVisible={(v) => run(setSketchVisible(f.id, v))}
+                selected={isSelected(selection, sel)}
+                active={activeSketchId === f.id}
+                error={statuses[f.id]?.state === "error"}
+                title={statuses[f.id]?.message ?? "Double-click to edit the sketch"}
+                onClick={(e) => pick(sel, e)}
+                onDoubleClick={() => {
+                  if (componentId !== active) activateComponent(componentId);
+                  enterSketch(f.id);
+                }}
+                onMenu={menuFor(sel)}
+                onRename={(name) => run(renameFeature(f.id, name))}
+              />
+            );
+          })}
+
+        {componentId !== root && folder("features", "Features", steps.length, false)}
+        {componentId !== root &&
+          isOpen(`${prefix}features`, false) &&
+          steps.map((f) => {
+            const sel: Selection = { kind: "feature", featureId: f.id };
+            return (
+              <Row
+                key={f.id}
+                depth={depth + 1}
+                icon={featureIcon(f)}
+                name={f.name}
+                visible={!f.suppressed}
+                selected={isSelected(selection, sel)}
+                error={statuses[f.id]?.state === "error"}
+                title={statuses[f.id]?.message ?? "Double-click to edit the feature"}
+                onClick={(e) => pick(sel, e)}
+                onDoubleClick={() => {
+                  if (componentId !== active) activateComponent(componentId);
+                  editFeature(f.id);
+                }}
+                onMenu={menuFor(sel)}
+                onRename={(name) => run(renameFeature(f.id, name))}
+              />
+            );
+          })}
+
+        {folder("bodies", "Bodies", bodies.length)}
+        {isOpen(`${prefix}bodies`) &&
+          bodies.map((b) => {
+            const sel: Selection = { kind: "body", bodyId: b.id };
+            const missing = !computed[b.id];
+            return (
+              <Row
+                key={b.id}
+                depth={depth + 1}
+                icon="body"
+                name={b.name}
+                visible={b.visible}
+                onVisible={(v) => run(setBodyVisible(b.id, v))}
+                selected={isSelected(selection, sel)}
+                error={missing && statuses[b.createdBy]?.state === "error"}
+                title={missing ? "This body has no geometry at the current history position" : undefined}
+                onClick={(e) => pick(sel, e)}
+                onMenu={menuFor(sel)}
+                onRename={(name) => run(renameBody(b.id, name))}
+              />
+            );
+          })}
+      </>
+    );
+  };
+
+  const activeBadge = <span className="tree-badge tree-active">Active</span>;
 
   return (
     <div className="panel grow">
@@ -218,8 +367,12 @@ export function BrowserTree(): ReactElement {
           name={doc.name}
           caret
           open={open.root}
+          active={active === root && components.length > 0}
+          badge={active === root && components.length > 0 ? activeBadge : undefined}
+          title={active === root ? undefined : "Double-click to activate the root"}
           onToggle={() => toggle("root")}
           onClick={() => toggle("root")}
+          onDoubleClick={active === root ? undefined : () => activateComponent(null)}
         />
         {open.root && (
           <>
@@ -254,123 +407,99 @@ export function BrowserTree(): ReactElement {
                 );
               })}
 
-            {planes.length > 0 && (
-              <Row
-                depth={1}
-                icon="folder"
-                name="Planes"
-                caret
-                open={open.planes ?? true}
-                onToggle={() => setOpen((o) => ({ ...o, planes: !(o.planes ?? true) }))}
-                onClick={() => setOpen((o) => ({ ...o, planes: !(o.planes ?? true) }))}
-                badge={<span className="tree-badge">{planes.length}</span>}
-              />
-            )}
-            {(open.planes ?? true) &&
-              planes.map((f) => {
-                const sel: Selection = { kind: "plane", featureId: f.id };
-                return (
-                  <Row
-                    key={f.id}
-                    depth={2}
-                    icon="plane"
-                    name={f.name}
-                    visible={f.visible}
-                    onVisible={(v) => run(setPlaneVisible(f.id, v))}
-                    selected={isSelected(selection, sel)}
-                    error={statuses[f.id]?.state === "error"}
-                    title={statuses[f.id]?.message ?? "Double-click to edit the plane"}
-                    onClick={(e) => pick(sel, e)}
-                    onDoubleClick={() => editFeature(f.id)}
-                    onMenu={menuFor(sel)}
-                    onRename={(name) => run(renameFeature(f.id, name))}
-                  />
-                );
-              })}
-
-            <Row
-              depth={1}
-              icon="folder"
-              name="Sketches"
-              caret
-              open={open.sketches}
-              onToggle={() => toggle("sketches")}
-              onClick={() => toggle("sketches")}
-              badge={<span className="tree-badge">{sketches.length}</span>}
-            />
-            {open.sketches &&
-              sketches.map((f) => {
-                const sel: Selection = { kind: "feature", featureId: f.id };
-                return (
-                  <Row
-                    key={f.id}
-                    depth={2}
-                    icon="sketch"
-                    name={f.name}
-                    visible={f.visible}
-                    onVisible={(v) => run(setSketchVisible(f.id, v))}
-                    selected={isSelected(selection, sel)}
-                    active={activeSketchId === f.id}
-                    error={statuses[f.id]?.state === "error"}
-                    title={statuses[f.id]?.message ?? "Double-click to edit the sketch"}
-                    onClick={(e) => pick(sel, e)}
-                    onDoubleClick={() => enterSketch(f.id)}
-                    onMenu={menuFor(sel)}
-                    onRename={(name) => run(renameFeature(f.id, name))}
-                  />
-                );
-              })}
-
-            <Row
-              depth={1}
-              icon="folder"
-              name="Bodies"
-              caret
-              open={open.bodies}
-              onToggle={() => toggle("bodies")}
-              onClick={() => toggle("bodies")}
-              badge={<span className="tree-badge">{bodies.length}</span>}
-            />
-            {open.bodies &&
-              bodies.map((b) => {
-                const sel: Selection = { kind: "body", bodyId: b.id };
-                const missing = !computed[b.id];
-                return (
-                  <Row
-                    key={b.id}
-                    depth={2}
-                    icon="body"
-                    name={b.name}
-                    visible={b.visible}
-                    onVisible={(v) => run(setBodyVisible(b.id, v))}
-                    selected={isSelected(selection, sel)}
-                    error={missing && statuses[b.createdBy]?.state === "error"}
-                    title={missing ? "This body has no geometry at the current history position" : undefined}
-                    onClick={(e) => pick(sel, e)}
-                    onMenu={menuFor(sel)}
-                    onRename={(name) => run(renameBody(b.id, name))}
-                  />
-                );
-              })}
+            {contents(root, 1, "")}
 
             <Row
               depth={1}
               icon="folder"
               name="Components"
               caret
-              open={open.components}
+              open={isOpen("components")}
               onToggle={() => toggle("components")}
               onClick={() => toggle("components")}
-              badge={<span className="tree-badge">{children.length}</span>}
+              badge={<span className="tree-badge">{components.length}</span>}
             />
-            {open.components &&
-              (children.length === 0 ? (
+            {isOpen("components") &&
+              (components.length === 0 ? (
                 <div className="empty" style={{ paddingLeft: 46, paddingTop: 2, paddingBottom: 2 }}>
                   No components
                 </div>
               ) : (
-                children.map((c) => <Row key={c.id} depth={2} icon="component" name={c.name} />)
+                components.map((c) => {
+                  const sel: Selection = { kind: "component", componentId: c.id };
+                  const own = listInstances(doc, c.id);
+                  const key = `component:${c.id}`;
+                  const isActive = active === c.id;
+                  return (
+                    <Fragment key={c.id}>
+                      <Row
+                        depth={2}
+                        icon="component"
+                        name={c.name}
+                        caret
+                        open={isOpen(key, isActive)}
+                        onToggle={() => toggle(key, isActive)}
+                        visible={own.length === 0 ? undefined : own.some((i) => i.visible)}
+                        onVisible={
+                          own.length === 0 ? undefined : (v) => run(setComponentVisible(c.id, v))
+                        }
+                        selected={isSelected(selection, sel)}
+                        active={isActive}
+                        badge={
+                          isActive ? (
+                            activeBadge
+                          ) : (
+                            <span className="tree-badge" title="Instances">
+                              ×{own.length}
+                            </span>
+                          )
+                        }
+                        title="Component definition. Double-click to activate it and edit it."
+                        onClick={(e) => pick(sel, e)}
+                        onDoubleClick={() => activateComponent(isActive ? null : c.id)}
+                        onMenu={menuFor(sel)}
+                        onRename={(name) => run(renameComponent(c.id, name))}
+                        renameRequest={renaming === selectionKey(sel)}
+                      />
+                      {isOpen(key, isActive) && contents(c.id, 3, `${c.id}:`)}
+                    </Fragment>
+                  );
+                })
               ))}
+
+            {instances.length > 0 && (
+              <Row
+                depth={1}
+                icon="folder"
+                name="Instances"
+                caret
+                open={isOpen("instances")}
+                onToggle={() => toggle("instances")}
+                onClick={() => toggle("instances")}
+                badge={<span className="tree-badge">{instances.length}</span>}
+              />
+            )}
+            {isOpen("instances") &&
+              instances.map((i) => {
+                const sel: Selection = { kind: "instance", instanceId: i.id };
+                return (
+                  <Row
+                    key={i.id}
+                    depth={2}
+                    icon="instance"
+                    name={i.name}
+                    visible={i.visible}
+                    onVisible={(v) => run(setInstancesVisible([i.id], v))}
+                    selected={isSelected(selection, sel)}
+                    title={`Instance of ${doc.assembly.components[i.componentId]?.name ?? "a component"}. Double-click to move it.`}
+                    onClick={(e) => pick(sel, e)}
+                    onDoubleClick={() => openInstanceMove(i.id)}
+                    onMenu={menuFor(sel)}
+                    onRename={(name) => run(renameInstance(i.id, name))}
+                    renameRequest={renaming === selectionKey(sel)}
+                  />
+                );
+              })}
           </>
         )}
       </div>

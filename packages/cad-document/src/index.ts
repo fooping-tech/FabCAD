@@ -5,4 +5,5 @@ export * from "./document";
 export * from "./graph";
 export * from "./store";
 export * from "./commands";
+export * from "./components";
 export * from "./serialize";

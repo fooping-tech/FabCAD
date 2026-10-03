@@ -23,7 +23,9 @@ export type Pick3D =
   | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
   | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
   | { kind: "origin-plane"; plane: OriginPlaneName }
-  | { kind: "plane"; featureId: string };
+  | { kind: "plane"; featureId: string }
+  /** An instance of a component, as a whole: its faces and edges are not picked. */
+  | { kind: "instance"; instanceId: string };
 
 export interface PickOptions {
   faces?: boolean;
@@ -31,6 +33,16 @@ export interface PickOptions {
   vertices?: boolean;
   /** Origin planes and construction planes. */
   originPlanes?: boolean;
+  /** Component instances (on by default). They hide what lies behind them either way. */
+  instances?: boolean;
+}
+
+/** A placed component: the bodies of its definition, shown at `matrix`. */
+export interface InstanceView {
+  id: string;
+  /** Row-major 4×4 placement. */
+  matrix: number[];
+  bodyIds: string[];
 }
 
 export type Highlight =
@@ -39,7 +51,16 @@ export type Highlight =
   | { kind: "edge"; bodyId: string; edgeIndex: number }
   | { kind: "vertex"; bodyId: string; point: Vec3 }
   | { kind: "origin-plane"; plane: OriginPlaneName }
-  | { kind: "plane"; featureId: string };
+  | { kind: "plane"; featureId: string }
+  | { kind: "instance"; instanceId: string };
+
+interface InstanceEntry {
+  key: string;
+  group: THREE.Group;
+  meshes: THREE.Mesh[];
+  material: THREE.MeshStandardMaterial;
+  edgeMaterial: THREE.LineBasicMaterial;
+}
 
 interface BodyEntry {
   id: string;
@@ -80,6 +101,9 @@ export class ViewportScene {
 
   private bodies = new Map<string, BodyEntry>();
   private bodyRoot = new THREE.Group();
+  private instanceRoot = new THREE.Group();
+  private instances = new Map<string, InstanceEntry>();
+  private transparent = false;
   private originRoot = new THREE.Group();
   private highlightRoot = new THREE.Group();
   private originPlanes = new Map<OriginPlaneName, THREE.Mesh>();
@@ -142,7 +166,7 @@ export class ViewportScene {
     this.scene.add(hemi, rig);
     this.lightRig = rig;
 
-    this.scene.add(this.originRoot, this.planeRoot, this.bodyRoot, this.highlightRoot);
+    this.scene.add(this.originRoot, this.planeRoot, this.bodyRoot, this.instanceRoot, this.highlightRoot);
     this.buildOrigin();
     this.loop();
   }
@@ -193,6 +217,7 @@ export class ViewportScene {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.controls.dispose();
+    this.setInstances([]);
     for (const id of [...this.bodies.keys()]) this.removeBody(id);
     this.renderer.dispose();
     this.listeners.clear();
@@ -512,6 +537,7 @@ export class ViewportScene {
       box.expandByPoint(toV3(b.geometry.bounds.min));
       box.expandByPoint(toV3(b.geometry.bounds.max));
     }
+    for (const entry of this.instances.values()) box.expandByObject(entry.group);
     for (const p of extra) box.expandByPoint(toV3(p));
     if (box.isEmpty()) return null;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -765,6 +791,8 @@ export class ViewportScene {
   }
 
   setBodiesTransparent(transparent: boolean): void {
+    this.transparent = transparent;
+    for (const i of this.instances.values()) this.applyTransparency(i.material);
     for (const b of this.bodies.values()) {
       b.material.transparent = transparent;
       b.material.opacity = transparent ? 0.45 : 1;
@@ -776,6 +804,76 @@ export class ViewportScene {
 
   hasBodies(): boolean {
     return this.bodies.size > 0;
+  }
+
+  private applyTransparency(material: THREE.MeshStandardMaterial): void {
+    material.transparent = this.transparent;
+    material.opacity = this.transparent ? 0.45 : 1;
+    material.depthWrite = !this.transparent;
+    material.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- instances
+
+  /**
+   * Show exactly these instances. Each shows the meshes of its definition's bodies (shared,
+   * not copied) under its own matrix; a body that is not loaded (yet) is left out.
+   */
+  setInstances(views: InstanceView[]): void {
+    const wanted = new Map(views.map((v) => [v.id, v]));
+    for (const [id, entry] of this.instances) {
+      const view = wanted.get(id);
+      if (view && this.instanceKey(view) === entry.key) continue;
+      this.instanceRoot.remove(entry.group);
+      entry.material.dispose();
+      entry.edgeMaterial.dispose();
+      this.instances.delete(id);
+    }
+    for (const view of views) {
+      if (this.instances.has(view.id)) continue;
+      const material = new THREE.MeshStandardMaterial({
+        color: COLORS.body,
+        metalness: 0.05,
+        roughness: 0.62,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+      this.applyTransparency(material);
+      const edgeMaterial = new THREE.LineBasicMaterial({ color: COLORS.edge });
+      const group = new THREE.Group();
+      group.matrixAutoUpdate = false;
+      group.matrix.set(...(view.matrix as Parameters<THREE.Matrix4["set"]>));
+      const meshes: THREE.Mesh[] = [];
+      for (const bodyId of view.bodyIds) {
+        const body = this.bodies.get(bodyId);
+        if (!body) continue;
+        const mesh = new THREE.Mesh(body.mesh.geometry, material);
+        mesh.userData.instanceId = view.id;
+        const edges = new THREE.LineSegments(body.edges.geometry, edgeMaterial);
+        edges.raycast = () => {};
+        group.add(mesh, edges);
+        meshes.push(mesh);
+      }
+      this.instanceRoot.add(group);
+      this.instances.set(view.id, { key: this.instanceKey(view), group, meshes, material, edgeMaterial });
+    }
+    this.instanceRoot.updateMatrixWorld(true);
+    this.invalidate();
+  }
+
+  private instanceKey(view: InstanceView): string {
+    const bodies = view.bodyIds.map((id) => `${id}@${this.bodies.get(id)?.hash ?? "-"}`);
+    return `${view.matrix.join(",")}|${bodies.join(",")}`;
+  }
+
+  /** Meshes that hide what lies behind them: visible bodies and instances. */
+  private occluders(): THREE.Mesh[] {
+    return [
+      ...[...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh),
+      ...[...this.instances.values()].flatMap((i) => i.meshes),
+    ];
   }
 
   // --------------------------------------------------------------- highlights
@@ -798,9 +896,21 @@ export class ViewportScene {
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(COLORS.constructionPlane);
     }
     for (const b of this.bodies.values()) b.material.color.setHex(COLORS.body);
+    for (const i of this.instances.values()) {
+      i.material.color.setHex(COLORS.body);
+      i.edgeMaterial.color.setHex(COLORS.edge);
+    }
 
     for (const { highlight: h, mode } of items) {
       const color = mode === "selected" ? COLORS.selected : COLORS.highlight;
+      if (h.kind === "instance") {
+        const entry = this.instances.get(h.instanceId);
+        if (entry) {
+          entry.material.color.setHex(mode === "selected" ? 0x9cc3e0 : COLORS.bodyHover);
+          if (mode === "selected") entry.edgeMaterial.color.setHex(COLORS.selected);
+        }
+        continue;
+      }
       if (h.kind === "plane") {
         const mesh = this.planes.get(h.featureId)?.mesh;
         if (mesh) {
@@ -926,8 +1036,7 @@ export class ViewportScene {
     const wantEdges = options.edges ?? true;
     const wantVertices = options.vertices ?? true;
     this.setRay(x, y);
-    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
-    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    const hit = this.raycaster.intersectObjects(this.occluders(), false)[0];
     const hitDistance = hit ? hit.distance : Infinity;
     // Anything more than this far behind the first surface hit is considered hidden.
     const slack = hit ? Math.max(0.05, hitDistance * 0.004) : Infinity;
@@ -993,6 +1102,11 @@ export class ViewportScene {
       if (best) return best;
     }
 
+    const instanceId = hit?.object.userData.instanceId as string | undefined;
+    if (instanceId !== undefined) {
+      return options.instances === false ? null : { kind: "instance", instanceId };
+    }
+
     if (wantFaces && hit && hit.faceIndex !== undefined && hit.faceIndex !== null) {
       const bodyId = hit.object.userData.bodyId as string;
       const body = this.bodies.get(bodyId);
@@ -1036,20 +1150,25 @@ export class ViewportScene {
    */
   isPointVisible(x: number, y: number, point: Vec3): boolean {
     const ray = this.setRay(x, y);
-    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
-    const hit = this.raycaster.intersectObjects(meshes, false)[0];
+    const hit = this.raycaster.intersectObjects(this.occluders(), false)[0];
     if (!hit) return true;
     const depth = toV3(point).sub(ray.origin).dot(ray.direction);
     const hitDepth = hit.point.clone().sub(ray.origin).dot(ray.direction);
     return depth <= hitDepth + Math.max(0.05, Math.abs(hitDepth) * 0.004);
   }
 
-  /** Body under the pixel, ignoring edges and vertices. */
+  /** Body under the pixel, ignoring edges and vertices. Null when an instance is in front. */
   pickBody(x: number, y: number): string | null {
     this.setRay(x, y);
-    const meshes = [...this.bodies.values()].filter((b) => b.group.visible).map((b) => b.mesh);
-    const hit = this.raycaster.intersectObjects(meshes, false)[0];
-    return hit ? (hit.object.userData.bodyId as string) : null;
+    const hit = this.raycaster.intersectObjects(this.occluders(), false)[0];
+    return (hit?.object.userData.bodyId as string | undefined) ?? null;
+  }
+
+  /** Instance under the pixel, when nothing else is in front of it. */
+  pickInstance(x: number, y: number): string | null {
+    this.setRay(x, y);
+    const hit = this.raycaster.intersectObjects(this.occluders(), false)[0];
+    return (hit?.object.userData.instanceId as string | undefined) ?? null;
   }
 
   bodyGeometry(id: string): BodyGeometry | undefined {
