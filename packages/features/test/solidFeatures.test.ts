@@ -1205,6 +1205,36 @@ describe("split", () => {
     ]);
   });
 
+  it("cuts a body with the plane of one of its own faces", async () => {
+    const ctx = context();
+    // An L: a plate with a block on one end. The top of the plate cuts through the block.
+    const plate = block(ctx, { x: 0, y: 0 }, { x: 60, y: 40 }, "10");
+    block(ctx, { x: 0, y: 0 }, { x: 20, y: 40 }, "30", { operation: "join", targets: [plate.bodyId] });
+    await compute(ctx);
+    const step = faceAt(geometry(ctx, plate.bodyId), { x: 40, y: 20, z: 10 });
+    expect(step).toBeGreaterThanOrEqual(0);
+    const ref = makeFaceRef(body(ctx, plate.bodyId), step)!;
+    const split: CreatedRef = {};
+    ctx.store.execute(addSplit({ bodyId: plate.bodyId, tool: { type: "face", bodyId: plate.bodyId, ref } }, split));
+    await compute(ctx);
+    // The face looks up: the body keeps the part above it.
+    expect(geometry(ctx, plate.bodyId).volume).toBeCloseTo(20 * 40 * 20, 3);
+    expect(geometry(ctx, plate.bodyId).bounds.min.z).toBeCloseTo(10, 6);
+    expect(geometry(ctx, dynamicBodyId(split.id!, plate.bodyId, 1)).volume).toBeCloseTo(60 * 40 * 10, 3);
+  });
+
+  it("reports a face of the body that does not cut it", async () => {
+    const ctx = context();
+    const p = block(ctx, { x: 0, y: 0 }, { x: 60, y: 40 }, "10");
+    await compute(ctx);
+    const top = faceAt(geometry(ctx, p.bodyId), { x: 30, y: 20, z: 10 });
+    const ref = makeFaceRef(body(ctx, p.bodyId), top)!;
+    const split: CreatedRef = {};
+    ctx.store.execute(addSplit({ bodyId: p.bodyId, tool: { type: "face", bodyId: p.bodyId, ref } }, split));
+    const result = await compute(ctx, false);
+    expect(result.features[split.id!]).toMatchObject({ state: "error", message: "The plane does not cut the body." });
+  });
+
   it("keeps one side only", async () => {
     const ctx = context();
     const p = block(ctx, { x: -30, y: 0 }, { x: 70, y: 40 }, "10");

@@ -652,8 +652,11 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.split": {
     title: "Split Body",
     summary: "Body を平面で 2 つに分けます。",
-    what: ["原点平面、構成平面、または平らな面の平面で Body を切ります。"],
-    requires: ["Body と平面。面を使う場合は、別の Body の面にします。"],
+    what: [
+      "原点平面、構成平面、または平らな面の平面で Body を切ります。",
+      "面は、分割する Body 自身の面でもかまいません。段差の上面で、その上に立っている部分を切れます。Body の外側の面では Body を切れないので、エラーになります。",
+    ],
+    requires: ["Body と、それを通る平面。"],
     parameters: [
       { name: "Keep", text: "Both（両方）、または平面の Positive（法線側）か Negative（反対側）だけを残します。" },
     ],

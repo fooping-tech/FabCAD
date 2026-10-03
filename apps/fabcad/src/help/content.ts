@@ -692,8 +692,11 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.split": {
     title: "Split Body",
     summary: "Cut a body in two with a plane.",
-    what: ["Cuts the body along an origin plane, a construction plane or the plane of a flat face."],
-    requires: ["A body and a plane. A face must belong to another body."],
+    what: [
+      "Cuts the body along an origin plane, a construction plane or the plane of a flat face.",
+      "The face may belong to the body itself: the top of a step cuts through the part that stands on it. A face on the outside of the body does not cut it, and the split reports an error.",
+    ],
+    requires: ["A body and a plane that runs through it."],
     parameters: [
       {
         name: "Keep",

@@ -30,7 +30,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。Cut / Intersect を選ぶと向きは自動で立体の側に、Join / New Body に戻すと立体の外側に切り替わります。自分で向きを選んだあとは変えません。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Sweep（プロファイルを、線・円弧・スプラインをつないだパスに沿って掃引）、Loft（2 つ以上の断面をつなぐ。断面はスケッチの閉領域または平らな面）、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Hole | `H`。スケッチの点に穴をあけます。1 つの Feature に複数の点を指定できます。Simple / Counterbore / Countersink、Distance / Through All、Flip |
 | Pattern / Mirror | Rectangular Pattern（1 方向または 2 方向）、Circular Pattern、Mirror。対象は Feature（Extrude、Revolve、Hole、Sweep、Loft）または Body。個数・間隔・角度を持つ 1 つの Feature として保存し、コピーの集まりにはしません |
-| Move / Align / Split | Move/Copy（`M`。自由移動（X・Y・Z の移動と回転）、移動、回転、点から点、コピー。移動後の形を半透明でプレビューし、矢印とリングのドラッグで位置と角度を調整）、Align（面と面、点と点）、Split Body（原点平面、構成平面、または他の Body の平らな面で分割。両側 / 片側を残す） |
+| Move / Align / Split | Move/Copy（`M`。自由移動（X・Y・Z の移動と回転）、移動、回転、点から点、コピー。移動後の形を半透明でプレビューし、矢印とリングのドラッグで位置と角度を調整）、Align（面と面、点と点）、Split Body（原点平面、構成平面、または平らな面（分割する Body 自身の面も可）で分割。両側 / 片側を残す） |
 | Offset Plane | 原点平面・平らな面・ほかの構成平面から、指定した距離だけ離れた平行な構成平面を作ります。距離は正負どちらも指定でき、パラメータ式も使えます。確定する前にビューでプレビューします。タイムラインに残る Feature で、あとから距離と基準を変えられます。スケッチ平面、Mirror の平面、Split Body の平面、別の Offset Plane の基準として使えます |
 | 複数選択 | `Shift` / `Ctrl` / `Cmd` + クリックで追加・解除。リボンまたは画面下の **Multi-Select** をオンにすると、修飾キーなしのクリック（タップ）で追加・解除できます。稜線・面・Body・スケッチの要素・ブラウザとタイムラインの項目に共通です |
 | ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details · 詳しく見る** で、用途、必要な選択、パラメータ、制限、使用例を表示します。説明は英語と日本語の併記です。ヘルプを開いても、実行中のコマンドと選択は変わりません |
