@@ -118,20 +118,27 @@ function withInstance(
 }
 
 /**
- * Features that cannot be separated from `seeds`: those that write or read a body they write
- * or read, the sketches and planes they are built on, and the features built on those. Only
- * features of `componentId` are followed. Moving the result into another definition leaves no
- * reference from one definition into the other.
+ * Features that cannot be separated from `seeds`, and the bodies that go with them.
+ *
+ * Bodies are tied by the features that change them: a feature that adds to, cuts, fillets,
+ * moves, uses up or makes a body belongs with it, and every body such a feature changes comes
+ * along (an Extrude that joins into two bodies ties those two). Sketches and construction planes
+ * go with the features that use them: they move when every feature built on them moves, or,
+ * unused, when they lie on a face of a body that moves. Only reading geometry ties nothing: a
+ * sketch on a face of another body, a projection, a plane based on a face, a direction or a
+ * point may refer into another component. Only features of `componentId` are followed.
+ *
+ * `pulledBy` names, for each body that was not a seed, the feature that tied it to the rest.
  */
 export function entangledFeatures(
   doc: CadDocument,
   componentId: string,
   seeds: { featureIds?: readonly string[]; bodyIds?: readonly string[] },
-): { featureIds: string[]; bodyIds: string[] } {
+): { featureIds: string[]; bodyIds: string[]; pulledBy: Record<string, string> } {
   const lookup = (id: string): Feature | undefined => doc.features[id];
   const own = Object.values(doc.features).filter((f) => f.componentId === componentId);
-  const bodiesOf = (f: Feature): string[] => [
-    ...featureInputBodies(f, lookup),
+  const isReference = (f: Feature): boolean => f.type === "sketch" || f.type === "offset-plane";
+  const changes = (f: Feature): string[] => [
     ...featureOutputBodies(f, lookup),
     ...featureCreatedBodies(f),
     ...featureConsumedBodies(f),
@@ -143,6 +150,7 @@ export function entangledFeatures(
   ];
   const features = new Set<string>();
   const bodies = new Set<string>();
+  const pulledBy: Record<string, string> = {};
   const queue: Feature[] = [];
   const addFeature = (id: string): void => {
     const f = doc.features[id];
@@ -150,35 +158,90 @@ export function entangledFeatures(
     features.add(id);
     queue.push(f);
   };
-  const addBody = (id: string): void => {
+  const addBody = (id: string, via?: string): void => {
     const b = doc.bodies[id];
     if (bodies.has(id)) return;
     if (b && b.componentId !== componentId) return;
     bodies.add(id);
+    if (via) pulledBy[id] = via;
     if (b) addFeature(b.createdBy);
     const dynamic = parseDynamicBodyId(id);
     if (dynamic) addFeature(dynamic.featureId);
-    // Every feature of the component that touches the body.
-    for (const f of own) if (bodiesOf(f).includes(id)) addFeature(f.id);
+    for (const f of own) if (!isReference(f) && changes(f).includes(id)) addFeature(f.id);
   };
   for (const id of seeds.featureIds ?? []) addFeature(id);
   for (const id of seeds.bodyIds ?? []) addBody(id);
   while (queue.length > 0) {
     const f = queue.pop()!;
-    for (const b of bodiesOf(f)) addBody(b);
-    for (const r of refsOf(f)) addFeature(r);
-    // Features built on this one (an extrude of a sketch, a sketch on a plane …).
-    for (const g of own) if (refsOf(g).includes(f.id)) addFeature(g.id);
+    if (isReference(f)) {
+      // A selected sketch or plane takes along what is built on it.
+      for (const g of own) if (refsOf(g).includes(f.id)) addFeature(g.id);
+      continue;
+    }
+    for (const b of changes(f)) addBody(b, f.id);
+    // Features whose recorded effect this one applies again (the sources of a pattern).
+    for (const r of featureInputFeatures(f)) addFeature(r);
   }
   // Bodies with a derived id (pattern instances …) go with the feature that makes them.
   for (const b of Object.values(doc.bodies)) {
     const dynamic = parseDynamicBodyId(b.id);
     if (dynamic && features.has(dynamic.featureId) && b.componentId === componentId) bodies.add(b.id);
   }
+  // Sketches and planes follow their users; unused ones the body they lie on.
+  const all = Object.values(doc.features);
+  const references = own.filter(isReference);
+  const liesOnMovedBody = (f: Feature): boolean => {
+    const base =
+      f.type === "sketch" ? f.sketch.plane : f.type === "offset-plane" ? f.base : undefined;
+    return base?.type === "face" && bodies.has(base.bodyId);
+  };
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const p of references) {
+      if (features.has(p.id)) continue;
+      const users = all.filter((g) => refsOf(g).includes(p.id));
+      const follows =
+        users.length > 0 ? users.every((g) => features.has(g.id)) : liesOnMovedBody(p);
+      if (follows) {
+        features.add(p.id);
+        changed = true;
+      }
+    }
+  }
   return {
     featureIds: doc.timeline.filter((id) => features.has(id)),
     bodyIds: [...bodies].filter((id) => doc.bodies[id] !== undefined),
+    pulledBy,
   };
+}
+
+/**
+ * Why the selection cannot be taken out of its component on its own: a body that is not
+ * selected (and not used up) would have to come along, because a feature changes both. Null
+ * when nothing else would move.
+ */
+export function separationProblem(
+  doc: CadDocument,
+  input: { featureIds?: readonly string[]; bodyIds?: readonly string[] },
+): string | null {
+  const source = sourceOf(doc, input);
+  if (source === null) return "The selection belongs to different components.";
+  if (source === undefined) return null;
+  const moved = entangledFeatures(doc, source, input);
+  const selected = new Set(input.bodyIds ?? []);
+  const consumed = consumedBodies(doc);
+  const extra = moved.bodyIds.filter((b) => !selected.has(b) && !consumed.has(b));
+  if (extra.length === 0) return null;
+  const names = extra.map((b) => doc.bodies[b]?.name ?? b);
+  const via = [...new Set(extra.map((b) => moved.pulledBy[b]).filter((f): f is string => !!f))].map(
+    (f) => doc.features[f]?.name ?? f,
+  );
+  const list = (xs: string[]): string => xs.map((x) => `"${x}"`).join(", ");
+  return (
+    `${list(names)} would have to move too: ${list(via)} ${via.length === 1 ? "changes" : "change"} ` +
+    `${names.length === 1 ? "it" : "them"} together with the selection. Select ${names.length === 1 ? "it" : "them"} as well, ` +
+    `or edit ${list(via)} so that ${via.length === 1 ? "it changes" : "each changes"} one body only.`
+  );
 }
 
 export interface CreatedComponent {

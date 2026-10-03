@@ -11,6 +11,7 @@ import {
   moveToComponent,
   removeComponents,
   removeInstances,
+  separationProblem,
   validComponentId,
 } from "@fabcad/cad-document";
 import { appState, lastViewportPoint, setSelection, toast } from "./appState";
@@ -84,6 +85,12 @@ export function newComponent(): void {
     toast("The selection belongs to different components.", "warning");
     return;
   }
+  // Nothing more than the selection moves without being asked for.
+  const problem = fromSelection ? separationProblem(doc, { bodyIds, featureIds }) : null;
+  if (problem) {
+    toast(problem, "warning", 9000);
+    return;
+  }
   const out: CreatedComponent = {};
   if (!run(createComponent({ bodyIds, featureIds }, out)) || !out.id) return;
   if (!fromSelection) {
@@ -104,7 +111,7 @@ export function newComponent(): void {
     `Moved ${bodies} ${bodies === 1 ? "body" : "bodies"} and ${out.featureIds?.length ?? 0} steps` +
       (from ? ` from ${from}` : "") +
       ` into ${name}` +
-      (extra > 0 ? ` (${extra} more ${extra === 1 ? "body was" : "bodies were"} tied to the selection)` : "") +
+      (extra > 0 ? ` (with ${extra} ${extra === 1 ? "body" : "bodies"} that Combine used up)` : "") +
       ((out.instanceIds?.length ?? 0) > 1 ? `, placed at the ${out.instanceIds!.length} instances of ${from}.` : "."),
     "info",
     6000,
@@ -124,6 +131,11 @@ export function moveBodiesToComponent(bodyIds: readonly string[], targetId: stri
     return;
   }
   if (owners.has(targetId)) return;
+  const problem = separationProblem(doc, { bodyIds });
+  if (problem) {
+    toast(problem, "warning", 9000);
+    return;
+  }
   const out: MovedToComponent = {};
   if (!run(moveToComponent({ bodyIds }, targetId, out))) return;
   const after = documentStore.document;
@@ -136,7 +148,7 @@ export function moveBodiesToComponent(bodyIds: readonly string[], targetId: stri
     out.moveId !== undefined && targetId !== root && listInstances(after, targetId).length > 1;
   toast(
     `Moved ${moved} ${moved === 1 ? "body" : "bodies"} and ${out.featureIds?.length ?? 0} steps into ${name}` +
-      (extra > 0 ? ` (${extra} more ${extra === 1 ? "body was" : "bodies were"} tied to them)` : "") +
+      (extra > 0 ? ` (with ${extra} ${extra === 1 ? "body" : "bodies"} that Combine used up)` : "") +
       "." +
       (out.moveId
         ? ` A Move step at the end keeps ${moved === 1 ? "it" : "them"} where ${moved === 1 ? "it was" : "they were"}` +
