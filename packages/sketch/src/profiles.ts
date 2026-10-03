@@ -30,8 +30,12 @@ import { textRegions } from "./text";
  * Sketch Profile Detection: Sketch Geometry → Intersections → Closed Loops → Selectable Profiles.
  *
  * All non-construction curves are split at their mutual intersections, assembled into a planar
- * graph and the minimal bounded faces of that graph become the selectable regions. Nothing here
- * depends on how the curves were created.
+ * graph and the minimal bounded faces of that graph become the selectable regions.
+ *
+ * Projected geometry (the outline of the face a sketch is on, edges brought in with Project) is
+ * a reference: it does not cut a region that the drawn curves enclose. The drawn curves form
+ * their regions on their own; the projected curves add regions only where no drawn region is,
+ * such as the face around a drawn hole, or the halves of a face a drawn line runs across.
  */
 
 export interface SketchRegion {
@@ -133,10 +137,10 @@ const boundsOverlap = (a: Bounds2, b: Bounds2, tol: number): boolean =>
 const inBounds = (p: Vec2, b: Bounds2, tol: number): boolean =>
   p.x >= b.minX - tol && p.x <= b.maxX + tol && p.y >= b.minY - tol && p.y <= b.maxY + tol;
 
-function collectPieces(sketch: Sketch, tol: number): Piece[] {
+function collectPieces(sketch: Sketch, tol: number, skip: Set<EntityId>): Piece[] {
   const pieces: Piece[] = [];
   for (const e of Object.values(sketch.entities)) {
-    if (!isCurve(e) || e.construction) continue;
+    if (!isCurve(e) || e.construction || skip.has(e.id)) continue;
     let curves: Curve2[];
     try {
       curves = entityToCurves(sketch, e);
@@ -478,7 +482,41 @@ function detectCurveProfiles(
 ): SketchRegion[] {
   const tol = options.tolerance ?? 1e-6;
   const flattenTolerance = options.flattenTolerance ?? 0.01;
-  const pieces = collectPieces(sketch, tol);
+  const projected = new Set<EntityId>();
+  for (const r of sketch.projections) for (const id of r.entityIds) projected.add(id);
+  const all = arrangementRegions(collectPieces(sketch, tol, new Set()), tol, flattenTolerance);
+  const drawn =
+    projected.size > 0
+      ? arrangementRegions(collectPieces(sketch, tol, projected), tol, flattenTolerance)
+      : [];
+  // Every face of the whole arrangement lies either inside one drawn region or outside all of
+  // them, since the drawn curves are part of it: keep the ones outside.
+  const regions =
+    drawn.length > 0
+      ? [...drawn, ...all.filter((r) => !drawn.some((d) => containsPoint(d, r.interiorPoint)))]
+      : all;
+
+  const compare = (a: SketchRegion, b: SketchRegion): number =>
+    b.area - a.area ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) ||
+    a.interiorPoint.x - b.interiorPoint.x ||
+    a.interiorPoint.y - b.interiorPoint.y;
+  regions.sort(compare);
+  const used = new Map<string, number>();
+  for (const r of regions) {
+    const n = (used.get(r.id) ?? 0) + 1;
+    used.set(r.id, n);
+    if (n > 1) r.id = `${r.id}~${n}`;
+  }
+  return regions.sort(compare);
+}
+
+/** The faces of the arrangement of `pieces`, with ids not yet told apart. */
+function arrangementRegions(
+  pieces: Piece[],
+  tol: number,
+  flattenTolerance: number,
+): SketchRegion[] {
   if (pieces.length === 0) return [];
   const graph = buildGraph(pieces, tol);
   const { edges, faces } = extractFaces(graph.edges);
@@ -552,20 +590,7 @@ function detectCurveProfiles(
       interiorPoint: interiorPointOf(face.polygon, holePolygons),
     });
   }
-
-  const compare = (a: SketchRegion, b: SketchRegion): number =>
-    b.area - a.area ||
-    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) ||
-    a.interiorPoint.x - b.interiorPoint.x ||
-    a.interiorPoint.y - b.interiorPoint.y;
-  regions.sort(compare);
-  const used = new Map<string, number>();
-  for (const r of regions) {
-    const n = (used.get(r.id) ?? 0) + 1;
-    used.set(r.id, n);
-    if (n > 1) r.id = `${r.id}~${n}`;
-  }
-  return regions.sort(compare);
+  return regions;
 }
 
 const containsPoint = (r: SketchRegion, p: Vec2): boolean =>

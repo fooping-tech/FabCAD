@@ -354,9 +354,19 @@ export function alignPoint(p: Vec2, references: Iterable<Vec2>, tolerance: numbe
   return result;
 }
 
-/** The points of a sketch a position can line up with: its point entities, `exclude` left out. */
+/**
+ * The points of a sketch a position can line up with: its point entities, `exclude` left out.
+ * The centers of projected circles and arcs are not among them: they are not on anything the
+ * user can see, and lining up with one by accident ties new geometry to the projection.
+ */
 export function alignmentReferences(sketch: Sketch, exclude: EntityId[] = []): Vec2[] {
   const skip = new Set(exclude);
+  for (const ref of sketch.projections) {
+    for (const id of ref.entityIds) {
+      const e = sketch.entities[id];
+      if (e?.type === "circle" || e?.type === "arc") skip.add(e.center);
+    }
+  }
   const out: Vec2[] = [];
   for (const e of Object.values(sketch.entities)) {
     if (e.type === "point" && !skip.has(e.id)) out.push({ x: e.x, y: e.y });

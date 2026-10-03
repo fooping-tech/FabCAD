@@ -55,9 +55,9 @@ export function projectInto(
     hint: Vec3,
     index: number,
     count: number,
-    bezier?: Vec3[],
+    edge?: MeshEdgeGroup,
   ): void => {
-    const shape = projectCurve(plane, points, bezier);
+    const shape = projectCurve(plane, points, edge?.bezier, edge);
     if (!shape || shapes.some((s) => sameProjectedShape(s, shape))) return;
     const ref = source === "edge" ? edgeRef(index) : source === "silhouette" ? faceRef(index) : undefined;
     const result = addProjection(current, shape, {
@@ -77,7 +77,7 @@ export function projectInto(
     add([pick.point], "vertex", pick.point, pick.vertexIndex, geometry.vertices.length / 3);
   }
   for (const e of edges) {
-    add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length, e.bezier);
+    add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length, e);
   }
   if (pick.kind === "face") {
     // The outline of a curved face also includes where it turns away from the sketch plane.

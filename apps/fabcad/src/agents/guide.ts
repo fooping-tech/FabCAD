@@ -156,7 +156,7 @@ const SECTIONS: Section[] = [
           "Shortcuts are single letters. They do nothing while a text field has the focus; click the view first if a letter is not taken.",
           "A sketch tool started outside a sketch asks for a plane first (a Browser plane row or a planar face).",
           "Command windows open beside the last click and can be dragged by their title bar if they cover something.",
-          "Projected geometry (purple) follows the body it came from and cannot be dragged.",
+          "Projected geometry (purple) follows the body it came from and cannot be dragged. It does not cut a closed shape drawn across it: that shape stays one profile.",
         ],
       },
     ],
