@@ -845,16 +845,25 @@ export function solidDialogProblem(dialog: SolidDialog, doc: CadDocument, scope:
       return sourceProblem(dialog, doc) ?? (dialog.plane ? null : "Select a mirror plane");
     case "move": {
       if (!dialog.bodyIds.some((b) => doc.bodies[b])) return "Select a body";
-      if (dialog.mode === "translate") {
+      if (dialog.mode === "translate" || dialog.mode === "free") {
+        const free = dialog.mode === "free";
         const problem =
           check("X", dialog.x, "length", scope, "any") ??
           check("Y", dialog.y, "length", scope, "any") ??
-          check("Z", dialog.z, "length", scope, "any");
+          check("Z", dialog.z, "length", scope, "any") ??
+          (free
+            ? (check("X Angle", dialog.rx, "angle", scope, "any") ??
+              check("Y Angle", dialog.ry, "angle", scope, "any") ??
+              check("Z Angle", dialog.rz, "angle", scope, "any"))
+            : null);
         if (problem) return problem;
-        const still = [dialog.x, dialog.y, dialog.z].every(
-          (e) => Math.abs(valueOf(e, "length", scope).value ?? 0) < 1e-9,
-        );
-        return still ? "Enter a distance" : null;
+        const zero = (e: string, kind: "length" | "angle"): boolean =>
+          Math.abs(valueOf(e, kind, scope).value ?? 0) < 1e-9;
+        const still =
+          [dialog.x, dialog.y, dialog.z].every((e) => zero(e, "length")) &&
+          (!free || [dialog.rx, dialog.ry, dialog.rz].every((e) => zero(e, "angle")));
+        if (!still) return null;
+        return free ? "Enter a distance or an angle, or drag the manipulator" : "Enter a distance";
       }
       if (dialog.mode === "rotate") {
         return (
@@ -911,7 +920,7 @@ const sourceOf = (dialog: SourcePick): PatternSource =>
     ? { kind: "bodies", bodyIds: dialog.bodyIds }
     : { kind: "features", featureIds: dialog.featureIds };
 
-const MOVE_DEFAULTS = { x: "0", y: "0", z: "0", angle: "90" };
+const MOVE_DEFAULTS = { x: "0", y: "0", z: "0", rx: "0", ry: "0", rz: "0", angle: "90", pivot: null };
 
 /** The dialog that edits a feature; null for the features that have their own dialogs. */
 export function dialogFromFeature(f: Feature): SolidDialog | null {
@@ -980,6 +989,9 @@ export function dialogFromFeature(f: Feature): SolidDialog | null {
         mode: t.type,
         ...MOVE_DEFAULTS,
         ...(t.type === "translate" ? { x: t.x, y: t.y, z: t.z } : {}),
+        ...(t.type === "free"
+          ? { x: t.x, y: t.y, z: t.z, rx: t.rx, ry: t.ry, rz: t.rz, pivot: t.pivot }
+          : {}),
         axis: t.type === "rotate" ? t.axis : null,
         ...(t.type === "rotate" ? { angle: t.angle } : {}),
         from: t.type === "point-to-point" ? t.from : null,
@@ -1040,6 +1052,11 @@ export function dialogFromFeature(f: Feature): SolidDialog | null {
 function moveTransform(dialog: MoveDialog): MoveTransform | null {
   if (dialog.mode === "translate") {
     return { type: "translate", x: dialog.x, y: dialog.y, z: dialog.z };
+  }
+  if (dialog.mode === "free") {
+    if (!dialog.pivot) return null;
+    const { x, y, z, rx, ry, rz, pivot } = dialog;
+    return { type: "free", x, y, z, rx, ry, rz, pivot };
   }
   if (dialog.mode === "rotate") {
     return dialog.axis ? { type: "rotate", axis: dialog.axis, angle: dialog.angle } : null;

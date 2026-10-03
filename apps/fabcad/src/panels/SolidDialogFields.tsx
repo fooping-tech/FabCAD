@@ -488,6 +488,7 @@ function MoveFields({ dialog }: { dialog: MoveDialog }): ReactElement {
           label="Move type"
           value={dialog.mode}
           options={[
+            ["free", "Free Move"],
             ["translate", "Translate"],
             ["rotate", "Rotate"],
             ["point-to-point", "Point to Point"],
@@ -495,11 +496,18 @@ function MoveFields({ dialog }: { dialog: MoveDialog }): ReactElement {
           onChange={(mode) => patchDialog({ mode, picking: nextPicking({ ...dialog, mode }).picking })}
         />
       </Field>
-      {dialog.mode === "translate" && (
+      {(dialog.mode === "translate" || dialog.mode === "free") && (
         <>
           <Value label="X" kind="length" autoFocus value={dialog.x} onChange={(x) => patchDialog({ x })} />
           <Value label="Y" kind="length" value={dialog.y} onChange={(y) => patchDialog({ y })} />
           <Value label="Z" kind="length" value={dialog.z} onChange={(z) => patchDialog({ z })} />
+        </>
+      )}
+      {dialog.mode === "free" && (
+        <>
+          <Value label="X Angle" kind="angle" value={dialog.rx} onChange={(rx) => patchDialog({ rx })} />
+          <Value label="Y Angle" kind="angle" value={dialog.ry} onChange={(ry) => patchDialog({ ry })} />
+          <Value label="Z Angle" kind="angle" value={dialog.rz} onChange={(rz) => patchDialog({ rz })} />
         </>
       )}
       {dialog.mode === "rotate" && (

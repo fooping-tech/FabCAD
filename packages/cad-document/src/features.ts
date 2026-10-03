@@ -290,7 +290,22 @@ export type MoveTransform =
   /** `angle` is an angle expression in degrees, counter-clockwise about the axis. */
   | { type: "rotate"; axis: PatternAxis; angle: string }
   /** Translation that takes `from` to `to`. */
-  | { type: "point-to-point"; from: Point3Ref; to: Point3Ref };
+  | { type: "point-to-point"; from: Point3Ref; to: Point3Ref }
+  /**
+   * Free move: turned about the world X, then Y, then Z axis through `pivot` (angle expressions
+   * in degrees, counter-clockwise), then moved by the length expressions `x`, `y`, `z`. The
+   * pivot is where the manipulator stood when the move was made: the centre of the bodies.
+   */
+  | {
+      type: "free";
+      x: string;
+      y: string;
+      z: string;
+      rx: string;
+      ry: string;
+      rz: string;
+      pivot: Vec3;
+    };
 
 export interface MoveFeature extends FeatureBase {
   type: "move";
@@ -535,6 +550,16 @@ export function featureExpressions(feature: Feature): FeatureExpression[] {
       }
       if (t.type === "rotate") {
         return [{ key: "transform.angle", expression: t.angle, kind: "angle" }];
+      }
+      if (t.type === "free") {
+        return [
+          { key: "transform.x", expression: t.x, kind: "length" },
+          { key: "transform.y", expression: t.y, kind: "length" },
+          { key: "transform.z", expression: t.z, kind: "length" },
+          { key: "transform.rx", expression: t.rx, kind: "angle" },
+          { key: "transform.ry", expression: t.ry, kind: "angle" },
+          { key: "transform.rz", expression: t.rz, kind: "angle" },
+        ];
       }
       return [];
     }
