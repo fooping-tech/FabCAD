@@ -79,7 +79,7 @@ import {
 import { bodiesCenter } from "./moveTransform";
 import type { HandleContext } from "./dialogHandles";
 import { extrudeTargetReach, reachSpan } from "./extrudeTarget";
-import { activeComponentId, deleteSelectedComponents } from "./components";
+import { activateComponent, activeComponentId, deleteSelectedComponents } from "./components";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
@@ -204,9 +204,14 @@ export function pickSketchPlane(item: Selection): boolean {
   return true;
 }
 
-export function startSketch(plane: SketchPlaneRef, prepare?: (sketch: Sketch) => Sketch): void {
+export function startSketch(
+  plane: SketchPlaneRef,
+  prepare?: (sketch: Sketch) => Sketch,
+  /** Component the sketch belongs to: the active one unless given. */
+  componentId: string = activeComponentId(),
+): void {
   const out: CreatedRef = {};
-  const create = addSketch(plane, out, activeComponentId());
+  const create = addSketch(plane, out, componentId);
   // Whatever the sketch starts with belongs to the same undo step as its creation.
   const cmd = prepare
     ? command(create.label, (doc) => {
@@ -229,7 +234,16 @@ export function startSketchOnPlane(featureId: string): boolean {
     toast("This plane is not available. It may be suppressed or its reference is missing.", "warning");
     return false;
   }
-  startSketch({ type: "plane", featureId, plane });
+  // A plane lies in the coordinates of its component: the sketch goes there, as in Fusion.
+  const owner = documentStore.document.features[featureId]?.componentId;
+  if (owner && owner !== activeComponentId()) {
+    const pending = appState.get().pendingSketchTool;
+    activateComponent(owner);
+    appState.set({ pendingSketchTool: pending });
+    const name = documentStore.document.assembly.components[owner]?.name ?? "the component";
+    toast(`The plane belongs to ${name}: it is active now, and the sketch belongs to it.`);
+  }
+  startSketch({ type: "plane", featureId, plane }, undefined, owner ?? activeComponentId());
   return true;
 }
 

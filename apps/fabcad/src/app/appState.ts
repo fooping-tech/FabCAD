@@ -376,6 +376,12 @@ export interface AppState {
   activeComponentId: string | null;
   /** Browser row (selection key) asked to start renaming, e.g. from the context menu. */
   renaming: string | null;
+  /** The New Component window, with what was selected when it opened. */
+  newComponent: {
+    anchor: { x: number; y: number } | null;
+    bodyIds: string[];
+    featureIds: string[];
+  } | null;
   /** The Move / Rotate window of an instance, with the click it opens beside. */
   instanceMove: { instanceId: string; anchor: { x: number; y: number } | null } | null;
   /** Active command. "select" is the idle state. */
@@ -452,6 +458,7 @@ export const appState = new TinyStore<AppState>({
   activeSketchId: null,
   activeComponentId: null,
   renaming: null,
+  newComponent: null,
   instanceMove: null,
   tool: "select",
   toolOptions: {

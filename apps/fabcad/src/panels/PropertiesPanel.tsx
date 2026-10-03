@@ -6,6 +6,7 @@ import {
   setFeatureSuppressed,
   updateFeature,
   componentContents,
+  listComponents,
   listInstances,
 } from "@fabcad/cad-document";
 import { dist2 } from "@fabcad/geometry";
@@ -40,6 +41,7 @@ import {
   activateComponent,
   newInstance,
   openInstanceMove,
+  openNewComponent,
   useActiveComponentId,
 } from "../app/components";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
@@ -407,6 +409,30 @@ function ComponentSelection({
   const component = componentId ? doc.assembly.components[componentId] : undefined;
   if (!component) return <p className="empty">Nothing to show.</p>;
   const contents = componentContents(doc, component.id);
+  if (component.id === doc.assembly.rootComponentId) {
+    return (
+      <>
+        <KV
+          rows={[
+            ["Component", `${doc.name} (root)`],
+            ["Components", listComponents(doc).length],
+            ["Sketches", contents.sketchIds.length],
+            ["Bodies", contents.bodyIds.length],
+          ]}
+        />
+        <div className="form-actions" style={{ flexWrap: "wrap" }}>
+          <button className="btn small" onClick={openNewComponent}>
+            New Component
+          </button>
+          {active !== component.id && (
+            <button className="btn small accent" onClick={() => activateComponent(null)}>
+              Activate Root
+            </button>
+          )}
+        </div>
+      </>
+    );
+  }
   const rows: [string, ReactNode][] =
     selection.kind === "component"
       ? [

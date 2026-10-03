@@ -23,7 +23,12 @@ import {
   setPlaneVisible,
   setSketchVisible,
 } from "@fabcad/cad-document";
-import { cancelInstanceMove, commitInstanceMove, openInstanceMove } from "./components";
+import {
+  cancelInstanceMove,
+  cancelNewComponent,
+  commitInstanceMove,
+  openInstanceMove,
+} from "./components";
 import { documentStore, redo, run, saveProject, undo } from "./session";
 
 export interface ShortcutHooks {
@@ -60,6 +65,10 @@ export function pressEscape(): void {
   }
   if (state.instanceMove) {
     cancelInstanceMove();
+    return;
+  }
+  if (state.newComponent) {
+    cancelNewComponent();
     return;
   }
   if (state.measuring) {

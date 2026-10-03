@@ -538,6 +538,8 @@ export class ViewportScene {
       box.expandByPoint(toV3(b.geometry.bounds.max));
     }
     for (const entry of this.instances.values()) box.expandByObject(entry.group);
+    // Construction planes too: a plane above the model is something to sketch on.
+    for (const { mesh } of this.planes.values()) if (mesh.visible) box.expandByObject(mesh);
     for (const p of extra) box.expandByPoint(toV3(p));
     if (box.isEmpty()) return null;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
@@ -691,7 +693,15 @@ export class ViewportScene {
   }
 
   /** Show exactly these construction planes. */
-  setPlanes(planes: { id: string; patch: PlanePatch; visible: boolean }[]): void {
+  setPlanes(
+    planes: {
+      id: string;
+      patch: PlanePatch;
+      visible: boolean;
+      /** Feature a pick returns, when `id` is one of several copies (instances) of it. */
+      featureId?: string;
+    }[],
+  ): void {
     const wanted = new Set(planes.map((p) => p.id));
     for (const [id, entry] of this.planes) {
       if (wanted.has(id)) continue;
@@ -704,7 +714,7 @@ export class ViewportScene {
       if (!entry || entry.key !== key) {
         if (entry) this.disposePlaneMesh(entry.mesh);
         const mesh = this.planeMesh(p.patch, COLORS.constructionPlane, 0.12);
-        mesh.userData.planeFeature = p.id;
+        mesh.userData.planeFeature = p.featureId ?? p.id;
         this.planeRoot.add(mesh);
         entry = { key, mesh };
         this.planes.set(p.id, entry);
@@ -912,8 +922,8 @@ export class ViewportScene {
         continue;
       }
       if (h.kind === "plane") {
-        const mesh = this.planes.get(h.featureId)?.mesh;
-        if (mesh) {
+        for (const { mesh } of this.planes.values()) {
+          if (mesh.userData.planeFeature !== h.featureId) continue;
           (mesh.material as THREE.MeshBasicMaterial).opacity = 0.35;
           (mesh.material as THREE.MeshBasicMaterial).color.setHex(color);
         }

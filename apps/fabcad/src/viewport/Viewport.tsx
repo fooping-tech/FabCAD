@@ -142,6 +142,26 @@ function selectionToHighlight(s: Selection): Highlight | null {
   }
 }
 
+/** A plane square placed by a row-major 4×4 matrix. */
+function transformPatch(patch: PlanePatch, m: number[]): PlanePatch {
+  const point = (p: Vec3): Vec3 => ({
+    x: m[0]! * p.x + m[1]! * p.y + m[2]! * p.z + m[3]!,
+    y: m[4]! * p.x + m[5]! * p.y + m[6]! * p.z + m[7]!,
+    z: m[8]! * p.x + m[9]! * p.y + m[10]! * p.z + m[11]!,
+  });
+  const dir = (d: Vec3): Vec3 => ({
+    x: m[0]! * d.x + m[1]! * d.y + m[2]! * d.z,
+    y: m[4]! * d.x + m[5]! * d.y + m[6]! * d.z,
+    z: m[8]! * d.x + m[9]! * d.y + m[10]! * d.z,
+  });
+  const { origin, xDir, yDir, normal } = patch.plane;
+  return {
+    plane: { origin: point(origin), xDir: dir(xDir), yDir: dir(yDir), normal: dir(normal) },
+    center: point(patch.center),
+    size: patch.size,
+  };
+}
+
 const INSTANCE_PICK_MESSAGE =
   "A component instance cannot be used in a command. Activate the component to edit it.";
 
@@ -1231,7 +1251,8 @@ export function Viewport(): ReactElement {
     if (shownComponent.current === activeComponent) return;
     shownComponent.current = activeComponent;
     const scene = sceneRef.current;
-    if (scene) setTimeout(() => scene.fitAll(sketchExtents()), 0);
+    // Not when a sketch was started at once (a plane of the component): it frames itself.
+    if (scene) setTimeout(() => !appState.get().activeSketchId && scene.fitAll(sketchExtents()), 0);
   }, [activeComponent]);
 
   // ------------------------------------------------- construction planes
@@ -1239,13 +1260,26 @@ export function Viewport(): ReactElement {
     const scene = sceneRef.current;
     if (!scene) return;
     const sketching = app.activeSketchId !== null;
+    const active = validComponentId(doc, activeComponent);
+    const rootActive = active === doc.assembly.rootComponentId;
     scene.setPlanes(
-      Object.values(model.planes).flatMap((p) => {
+      Object.values(model.planes).flatMap((p): { id: string; featureId?: string; patch: PlanePatch; visible: boolean }[] => {
         const f = doc.features[p.id];
         if (f?.type !== "offset-plane") return [];
         // Like the origin planes, construction planes step back while sketching.
-        const shown = f.visible && !sketching && f.componentId === validComponentId(doc, activeComponent);
-        return [{ id: p.id, patch: p, visible: shown }];
+        const shown = f.visible && !sketching;
+        if (f.componentId === active) return [{ id: p.id, patch: p, visible: shown }];
+        // At the root, the planes of a component are shown where its instances are. Picking
+        // one picks the plane of the definition.
+        if (!rootActive) return [];
+        return listInstances(doc, f.componentId)
+          .filter((i) => i.visible)
+          .map((i) => ({
+            id: `${p.id}@${i.id}`,
+            featureId: p.id,
+            patch: transformPatch(p, instanceWorldTransform(doc.assembly, i.id)),
+            visible: shown,
+          }));
       }),
     );
   }, [model.planes, doc.features, doc.assembly, app.activeSketchId, activeComponent, ready]);

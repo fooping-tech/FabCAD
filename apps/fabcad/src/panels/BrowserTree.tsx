@@ -435,6 +435,8 @@ export function BrowserTree(): ReactElement {
           onToggle={() => toggle("root")}
           onClick={() => toggle("root")}
           onDoubleClick={active === root ? undefined : () => activateComponent(null)}
+          onMenu={menuFor({ kind: "component", componentId: root })}
+          selected={isSelected(selection, { kind: "component", componentId: root })}
           dropBodies={dropInto(root)}
         />
         {open.root && (

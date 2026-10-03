@@ -15,6 +15,7 @@ import {
   newComponent,
   newInstance,
   openInstanceMove,
+  openNewComponent,
 } from "./components";
 import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
@@ -348,7 +349,14 @@ export function buildContextMenu(): MenuItem[] {
   }
 
   // ------------------------------------------------------- components
-  if (first?.kind === "component" && selection.length === 1) {
+  if (first?.kind === "component" && selection.length === 1 && first.componentId === doc.assembly.rootComponentId) {
+    // The document (root) row of the Browser.
+    items.push({ label: "New Component", icon: "new-component", onSelect: openNewComponent });
+    if (activeComponentId(doc) !== doc.assembly.rootComponentId) {
+      items.push({ label: "Activate Root", icon: "document", onSelect: () => activateComponent(null) });
+    }
+    sep();
+  } else if (first?.kind === "component" && selection.length === 1) {
     const c = doc.assembly.components[first.componentId];
     if (c) {
       const isActive = activeComponentId(doc) === c.id;
@@ -359,6 +367,7 @@ export function buildContextMenu(): MenuItem[] {
           ? { label: "Activate Root", icon: "document", onSelect: () => activateComponent(null) }
           : { label: "Activate Component", icon: "component", onSelect: () => activateComponent(c.id) },
         { label: "Create Instance", icon: "instance", onSelect: () => newInstance(c.id) },
+        { label: "New Component", icon: "new-component", onSelect: openNewComponent },
         { label: "Rename", icon: "parameters", onSelect: () => appState.set({ renaming: `component:${c.id}` }) },
       );
       if (own.length > 0) {

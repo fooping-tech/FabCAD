@@ -353,6 +353,7 @@ function resetUi(): void {
     activeSketchId: null,
     activeComponentId: null,
     instanceMove: null,
+    newComponent: null,
     tool: "select",
     selection: [],
     hover: null,

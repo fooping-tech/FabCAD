@@ -87,6 +87,14 @@ function nextName(used: Iterable<string>, base: string): string {
   }
 }
 
+/** The name a new component gets when none is given: "Component3". */
+export function nextComponentName(doc: CadDocument): string {
+  return nextName(
+    Object.values(doc.assembly.components).map((c) => c.name),
+    "Component",
+  );
+}
+
 /** Next "Frame:3" style instance name of a definition. */
 function nextInstanceName(doc: CadDocument, componentId: string): string {
   const component = doc.assembly.components[componentId];
@@ -315,12 +323,7 @@ export function createComponent(
     let d = doc;
     let id: string;
     [id, d] = allocateId(d, "component");
-    const name =
-      input.name?.trim() ||
-      nextName(
-        Object.values(doc.assembly.components).map((c) => c.name),
-        "Component",
-      );
+    const name = input.name?.trim() || nextComponentName(doc);
     d = {
       ...d,
       assembly: { ...d.assembly, components: { ...d.assembly.components, [id]: { id, name } } },
