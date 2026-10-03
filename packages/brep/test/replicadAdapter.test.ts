@@ -155,6 +155,29 @@ describe("replicad adapter", () => {
     expect(g.volume).toBeGreaterThan(walls / 2);
   });
 
+  it("shells a body through a face whose edges are rounded", () => {
+    // OpenCASCADE's offset gives a broken solid here without an error; the kernel notices.
+    const block = kernel.extrude([rect(100, 80)], ORIGIN_PLANES.XY, 0, 50);
+    const rim = [
+      { x: 50, y: 0, z: 50 },
+      { x: 100, y: 40, z: 50 },
+      { x: 50, y: 80, z: 50 },
+      { x: 0, y: 40, z: 50 },
+    ].map((point) => ({ point }));
+    const body = kernel.fillet(block, rim, 3);
+    const index = kernel
+      .tessellate(body)
+      .faces.findIndex((f) => f.surface === "plane" && Math.abs(f.center.z - 50) < 1e-6);
+    const shelled = kernel.shell(body, [{ point: { x: 50, y: 40, z: 50 }, normal: { x: 0, y: 0, z: 1 }, index }], 1);
+    expect(kernel.solidProblem(shelled)).toBeNull();
+    const g = kernel.tessellate(shelled);
+    expect(pointInBody(g, { x: 0.5, y: 40, z: 25 })).toBe(true); // wall
+    expect(pointInBody(g, { x: 1.23, y: 40, z: 48.77 })).toBe(true); // the rounded rim
+    expect(pointInBody(g, { x: 50, y: 40, z: 25 })).toBe(false); // inside
+    expect(pointInBody(g, { x: 50, y: 40, z: 49.5 })).toBe(false); // the opening
+    expect(g.volume).toBeLessThan(2 * (100 * 80 + 100 * 50 + 80 * 50));
+  });
+
   it("revolves a profile", () => {
     const solid = kernel.revolve(
       [rect(10, 20, 5, 0)],
