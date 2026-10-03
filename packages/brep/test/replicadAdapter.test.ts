@@ -130,6 +130,31 @@ describe("replicad adapter", () => {
     );
   });
 
+  it("shells a body through a face that has a pocket in it", () => {
+    // OpenCASCADE's offset with an opening fails here; the kernel hollows and cuts instead.
+    const block = kernel.extrude([rect(100, 80)], ORIGIN_PLANES.XY, 0, 50);
+    const pocket = kernel.extrude([rect(60, 40, 20, 20)], ORIGIN_PLANES.XY, 35, 60);
+    const body = kernel.boolean("cut", block, [pocket]);
+    const t = 2;
+    const shelled = kernel.shell(body, [{ point: { x: 5, y: 5, z: 50 }, normal: { x: 0, y: 0, z: 1 } }], t);
+    expect(kernel.solidProblem(shelled)).toBeNull();
+    const g = kernel.tessellate(shelled);
+    // Walls and floor of t all round, the pocket kept as a cup inside.
+    expect(g.bounds.min).toMatchObject({ x: 0, y: 0, z: 0 });
+    expect(g.bounds.max.z).toBeCloseTo(50, 2);
+    expect(pointInBody(g, { x: 1, y: 40, z: 25 })).toBe(true); // outer wall
+    expect(pointInBody(g, { x: 50, y: 40, z: 1 })).toBe(true); // floor
+    expect(pointInBody(g, { x: 19, y: 40, z: 45 })).toBe(true); // wall of the pocket
+    expect(pointInBody(g, { x: 50, y: 40, z: 34 })).toBe(true); // floor of the pocket
+    expect(pointInBody(g, { x: 10, y: 40, z: 25 })).toBe(false); // inside
+    expect(pointInBody(g, { x: 5, y: 5, z: 49 })).toBe(false); // the opened face
+    expect(pointInBody(g, { x: 50, y: 40, z: 45 })).toBe(false); // the pocket itself
+    // Far less than the body, more than the outer walls alone.
+    const walls = 2 * (100 * 80 + 100 * 50 + 80 * 50) * t;
+    expect(g.volume).toBeLessThan(walls);
+    expect(g.volume).toBeGreaterThan(walls / 2);
+  });
+
   it("revolves a profile", () => {
     const solid = kernel.revolve(
       [rect(10, 20, 5, 0)],

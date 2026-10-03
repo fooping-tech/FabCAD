@@ -641,10 +641,16 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.shell": {
     title: "Shell",
     summary: "Hollow a body, leaving walls of one thickness.",
-    what: ["Click the faces to remove: they become the openings. The other faces become walls."],
+    what: [
+      "Click the faces to remove: they become the openings. The other faces become walls.",
+      "A flat face with a pocket in it can be opened too: the pocket stays as a cup with walls of the same thickness.",
+    ],
     requires: ["A body and at least one face to open."],
     parameters: [{ name: "Thickness", text: "Thickness of the walls, measured inwards." }],
-    limitations: ["Fails when the thickness is more than the body can take, e.g. at tight inner radii."],
+    limitations: [
+      "Fails when the thickness is more than the body can take, e.g. at tight inner radii.",
+      "A curved opened face, or many rounded and free-form faces, can make the offset fail. Shell before Fillet usually works.",
+    ],
   },
   "solid.combine": {
     title: "Combine",

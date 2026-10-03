@@ -601,10 +601,16 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "solid.shell": {
     title: "Shell",
     summary: "Body の中をくり抜き、一定の厚みの壁を残します。",
-    what: ["取り除く面をクリックします。その面が開口になり、ほかの面が壁になります。"],
+    what: [
+      "取り除く面をクリックします。その面が開口になり、ほかの面が壁になります。",
+      "ポケット（凹み）のある平らな面も開口にできます。ポケットは、同じ厚みの壁をもつカップとして残ります。",
+    ],
     requires: ["Body と、開口にする面が 1 つ以上。"],
     parameters: [{ name: "Thickness", text: "壁の厚み。内側に取ります。" }],
-    limitations: ["内側の半径が小さい場所など、Body が受け止められない厚みでは失敗します。"],
+    limitations: [
+      "内側の半径が小さい場所など、Body が受け止められない厚みでは失敗します。",
+      "開口にする面が曲面のときや、丸めた面・自由曲面が多いときは、オフセットに失敗することがあります。Fillet の前に Shell をすると、たいていうまくいきます。",
+    ],
   },
   "solid.combine": {
     title: "Combine",
