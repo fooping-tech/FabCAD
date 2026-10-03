@@ -795,14 +795,15 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Make a component: a definition of a part that can be placed several times.",
     what: [
       "A component is a definition: the sketches, features and bodies of one part. It is placed through instances; every instance shows the same geometry at its own position, and a change to the definition shows in all of them.",
-      "With bodies selected (in the root), they move into the new component together with the steps they were made with. Steps and bodies that cannot be separated from them (a Combine that joined two bodies, a sketch on one of their faces) come along, and the message says so. The model stays where it is: the first instance is placed at the origin.",
+      "With bodies selected, they move into the new component together with the steps they were made with. They may be bodies of the root or of another component: right-click a body (in the view or in the Browser) and choose Create Component. Steps and bodies that cannot be separated from them (a Combine that joined two bodies, a sketch on one of their faces) come along, and the message says so.",
+      "The model stays where it is. Bodies of the root get one instance at the origin; bodies taken out of a component get an instance at every placement of that component, shown or hidden as it was.",
       "Without a selection the component starts empty and is activated: the sketches and features you make now belong to it.",
       "The Browser lists the definitions under Components (with their Sketches, Features and Bodies) and the placed instances under Instances.",
     ],
     when: [
       "For parts that occur more than once (a spacer, a bracket), or to keep the parts of an assembly apart.",
     ],
-    requires: ["Nothing, or bodies and features of one component, selected while the root is active."],
+    requires: ["Nothing, or bodies and features of one component."],
     limitations: [
       "Components are not nested: every component is made at the root.",
       "Instances have no parameters of their own: they all show the definition as it is.",

@@ -415,9 +415,7 @@ export function buildContextMenu(): MenuItem[] {
     }
     if (every("body")) {
       items.push(dialogItem("move", "M"));
-      if (activeComponentId(doc) === doc.assembly.rootComponentId) {
-        items.push({ label: "Create Component", icon: "new-component", onSelect: newComponent });
-      }
+      items.push({ label: "Create Component", icon: "new-component", onSelect: newComponent });
       if (bodyIds.length === 1) items.push(dialogItem("split"));
       items.push(
         dialogItem("mirror"),
