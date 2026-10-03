@@ -22,6 +22,11 @@ export interface TopoFace {
   /** Index of the originating B-Rep face. Several facets share it when the face is curved. */
   sourceFace: number;
   surface: "plane" | "curved";
+  /**
+   * True when the kernel knows the originating surface lies flat without stretching (a plane,
+   * cylinder, cone or straight extrusion). Left out when unknown: only the facets can tell.
+   */
+  developable?: boolean;
   /** Outward unit normal. */
   normal: Vec3;
   /**
@@ -51,7 +56,14 @@ export interface IndexedMesh {
   positions: ArrayLike<number>;
   indices: ArrayLike<number>;
   /** Triangle ranges per B-Rep face; `start` and `count` are offsets into `indices`. */
-  faceGroups: { faceIndex: number; start: number; count: number; surface: "plane" | "curved" }[];
+  faceGroups: {
+    faceIndex: number;
+    start: number;
+    count: number;
+    surface: "plane" | "curved";
+    /** See `TopoFace.developable`. */
+    developable?: boolean;
+  }[];
 }
 
 const edgeKey = (a: number, b: number): string => (a < b ? `${a}_${b}` : `${b}_${a}`);
@@ -151,6 +163,7 @@ export function meshToTopology(mesh: IndexedMesh, weldTolerance = 1e-4): SolidTo
     });
     for (const cluster of clusters.values()) {
       const face = buildFacet(cluster, vertices, faces.length, group.faceIndex, group.surface);
+      if (face && group.developable !== undefined) face.developable = group.developable;
       if (face) faces.push(face);
     }
   });

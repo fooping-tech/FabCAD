@@ -127,14 +127,29 @@ const errorWarning = (message: string): FabricationWarning => ({
   message,
 });
 
-/** Strategy settings for a material: the defaults of its category plus the user's overrides. */
+/**
+ * Strategy settings for a material: the defaults of its category plus the user's overrides.
+ * A paper net is split where it would not fit on the sheet, with room for its tabs.
+ */
 export function strategySettingsFor(
   material: MaterialProfile,
-  settings: Pick<LaserFabricationSettings, "board" | "paper">,
+  settings: Pick<LaserFabricationSettings, "board" | "paper"> &
+    Partial<Pick<LaserFabricationSettings, "sheet">>,
 ): StrategySettings {
-  return material.category === "paper"
-    ? resolvePaperSettings(material, settings.paper)
-    : resolveBoardSettings(material, settings.board);
+  if (material.category !== "paper") return resolveBoardSettings(material, settings.board);
+  const paper = resolvePaperSettings(material, settings.paper);
+  const sheet = settings.sheet;
+  if (!sheet) return paper;
+  const tab =
+    paper.joint === "insert"
+      ? Math.max(paper.insertTabs.flap, paper.insertTabs.neck + paper.insertTabs.depth)
+      : paper.glueTabs.enabled
+        ? paper.glueTabs.width
+        : 0;
+  const room = 2 * (sheet.margin + tab);
+  const width = sheet.width - room;
+  const height = sheet.height - room;
+  return width > 0 && height > 0 ? { ...paper, maxNetSize: { width, height } } : paper;
 }
 
 export interface CompileOptions {

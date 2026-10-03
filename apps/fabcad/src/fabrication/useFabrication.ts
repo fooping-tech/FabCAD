@@ -1,5 +1,5 @@
-import type { TessellationOptions } from "@fabcad/brep";
-import type { SolidTopology, Vec3 } from "@fabcad/geometry";
+import { type BodyGeometry, type TessellationOptions, isDevelopableSurface } from "@fabcad/brep";
+import type { SolidTopology } from "@fabcad/geometry";
 import type { CadBody, FabricationWarning } from "@fabcad/fabrication-core";
 import { goreTessellation } from "@fabcad/fabrication-laser";
 import { useEffect, useMemo, useState } from "react";
@@ -100,16 +100,17 @@ const keyOf = (w: WantedBody): string => topologyKey(w.id, w.hash, w.facets);
 
 /**
  * Gores are the facets of the body: when faces curved in two directions are to be made from
- * gores, the body is facetted as coarsely as there are gores to a full turn.
+ * gores, the body is facetted as coarsely as there are gores to a full turn. A body whose
+ * faces are all known to lie flat (planes, cylinders, cones, extruded outlines) has no gores
+ * and keeps the kernel's default facets, which follow its outline closely.
  */
-function facetsFor(
-  settings: LaserFabricationSettings,
-  bounds: { min: Vec3; max: Vec3 } | undefined,
-): Facets {
+function facetsFor(settings: LaserFabricationSettings, geometry: BodyGeometry): Facets {
   const material = currentMaterial(settings);
   if (material.category !== "paper") return undefined;
   const paper = resolvePaperSettings(material, settings.paper);
-  if (paper.doublyCurved !== "gores" || !paper.foldCurvedFacets || !bounds) return undefined;
+  if (paper.doublyCurved !== "gores" || !paper.foldCurvedFacets) return undefined;
+  if (geometry.faces.every((f) => isDevelopableSurface(f.surface))) return undefined;
+  const { bounds } = geometry;
   const size = Math.hypot(
     bounds.max.x - bounds.min.x,
     bounds.max.y - bounds.min.y,
@@ -184,7 +185,7 @@ export function useFabrication(): FabricationState {
         id: b.id,
         name: b.name,
         hash: model.hash,
-        facets: facetsFor(settings, model.geometry.bounds),
+        facets: facetsFor(settings, model.geometry),
       });
     }
     return list;

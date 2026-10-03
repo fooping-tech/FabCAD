@@ -1,4 +1,5 @@
 import {
+  type Bounds2,
   type Plane3,
   type TopoEdge,
   type TopoFace,
@@ -17,6 +18,7 @@ import {
   perp2,
   polygonsOverlap,
   radToDeg,
+  scale3,
   signedArea,
   sub2,
   topoEdgeKey,
@@ -173,6 +175,8 @@ interface NetFace {
   loops: Vec2[][];
   /** Outer loop, slightly shrunk, for overlap tests. */
   test: Vec2[];
+  /** Bounds of `test`. */
+  box: Bounds2;
   /** Per outer-loop edge: the face on the other side of a fold. */
   folds: (undefined | { other: NetFace; index: number; edge: TopoEdge })[];
 }
@@ -225,6 +229,38 @@ interface Net {
   rootPlane: Plane3;
   tabs: Vec2[][];
 }
+
+const boxesMeet = (a: Bounds2, b: Bounds2): boolean =>
+  a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+
+/** Does the shrunk polygon `test` overlap one of `faces`? */
+function hitsAny(
+  test: readonly Vec2[],
+  faces: Iterable<NetFace>,
+  box = boundsOfPoints(test),
+): boolean {
+  for (const f of faces) if (boxesMeet(box, f.box) && polygonsOverlap(test, f.test)) return true;
+  return false;
+}
+
+/**
+ * Tolerance (mm) for overlaps between the facets of one curved face. The facets of a surface
+ * that lies flat are not quite flat where the kernel put vertices inside the face; rolled out,
+ * they overlap by hundredths of a millimetre, which paper does not show.
+ */
+const LOOSE = 0.05;
+const looseCache = new WeakMap<NetFace, Vec2[]>();
+/** The outer loop shrunk by `LOOSE`; empty for a sliver narrower than that. */
+const looseTest = (nf: NetFace): Vec2[] => {
+  let t = looseCache.get(nf);
+  if (!t) {
+    const r = offsetPolygon(nf.loops[0]!, LOOSE);
+    t = r.collapsedEdges.length > 0 ? [] : r.polygon;
+    looseCache.set(nf, t);
+  }
+  return t;
+};
+const overlapsAny = (nf: NetFace, faces: Iterable<NetFace>): boolean => hitsAny(nf.test, faces, nf.box);
 
 function shrink(poly: readonly Vec2[]): Vec2[] {
   if (poly.length < 3) return poly.slice();
@@ -323,6 +359,45 @@ function fabricatePaper(
   };
 
   // 2. Spanning forest by unfolding.
+  //
+  // A curved B-Rep face is laid out as one unit: all of its facets, or none. Facet by facet,
+  // the strip of a curved face would be started next to one face and then run into another,
+  // and what does not fit would be left over as slivers, each a net of its own. A unit that
+  // overlaps itself when rolled out (a cone wrapping past a full turn) is cut where it does;
+  // the rest of it becomes a unit of its own. Gores keep their facets apart: they are units
+  // of one facet.
+  const unitOf = new Map<number, number>();
+  {
+    const parent = new Map<number, number>();
+    const find = (f: number): number => {
+      let r = f;
+      while (parent.get(r) !== r) r = parent.get(r)!;
+      for (let x = f; x !== r; ) {
+        const next = parent.get(x)!;
+        parent.set(x, r);
+        x = next;
+      }
+      return r;
+    };
+    for (const f of included) parent.set(f.id, f.id);
+    for (const edge of topology.edges) {
+      if (edge.faces.length !== 2 || !edge.smooth || gorePlan?.cuts.has(edge.id)) continue;
+      const [f, g] = [topology.faces[edge.faces[0]!]!, topology.faces[edge.faces[1]!]!];
+      if (!includedIds.has(f.id) || !includedIds.has(g.id)) continue;
+      if (f.surface !== "curved" || g.surface !== "curved" || f.sourceFace !== g.sourceFace) continue;
+      if (gorePlan?.levels.has(f.id) || gorePlan?.levels.has(g.id)) continue;
+      parent.set(find(f.id), find(g.id));
+    }
+    for (const f of included) unitOf.set(f.id, find(f.id));
+  }
+  const unitMembers = new Map<number, TopoFace[]>();
+  for (const f of included) {
+    const u = unitOf.get(f.id)!;
+    const list = unitMembers.get(u);
+    if (list) list.push(f);
+    else unitMembers.set(u, [f]);
+  }
+
   const placed = new Map<number, NetFace>();
   const nets: Net[] = [];
   const fitsMax = (points: readonly Vec2[]): boolean => {
@@ -334,12 +409,120 @@ function fabricatePaper(
     return (w <= max.width + 1e-9 && h <= max.height + 1e-9) ||
       (h <= max.width + 1e-9 && w <= max.height + 1e-9);
   };
+  const netFace = (face: TopoFace, net: Net, loops: Vec2[][]): NetFace => {
+    const test = shrink(loops[0]!);
+    return {
+      face,
+      net: net.id,
+      loops,
+      test,
+      box: boundsOfPoints(test),
+      folds: loops[0]!.map(() => undefined),
+    };
+  };
+  const link = (cand: Candidate, nf: NetFace, index: number): void => {
+    nf.folds[index] = { other: cand.from, index: cand.fromIndex, edge: cand.edge };
+    cand.from.folds[cand.fromIndex] = { other: nf, index, edge: cand.edge };
+  };
+  /** Candidates for unfolding across the outer edges of `nf` to faces still free. */
+  const candidatesFrom = (nf: NetFace, taken: (faceId: number) => boolean): Candidate[] => {
+    const out: Candidate[] = [];
+    const ids = nf.face.loops[0]!;
+    for (let i = 0; i < ids.length; i++) {
+      const edge = edgeAt(nf.face, 0, i);
+      if (!edge || edge.faces.length !== 2) continue;
+      // Between two gores: always cut.
+      if (gorePlan?.cuts.has(edge.id)) continue;
+      const otherId = edge.faces[0] === nf.face.id ? edge.faces[1]! : edge.faces[0]!;
+      if (otherId === nf.face.id || !includedIds.has(otherId) || taken(otherId)) continue;
+      const other = topology.faces[otherId];
+      if (!other || outerIndexOf(other, edge) < 0) continue;
+      const loop = nf.loops[0]!;
+      out.push({
+        from: nf,
+        fromIndex: i,
+        to: other,
+        edge,
+        length: dist2(loop[i]!, loop[(i + 1) % loop.length]!),
+      });
+    }
+    return out;
+  };
+  /**
+   * Priority: smooth edges first (strips of curved facets stay together), then longer shared
+   * edges, then lower ids for determinism.
+   */
+  const takeBest = (frontier: Candidate[]): Candidate => {
+    let best = 0;
+    for (let i = 1; i < frontier.length; i++) {
+      const c = frontier[i]!;
+      const b = frontier[best]!;
+      const order =
+        Number(b.edge.smooth) - Number(c.edge.smooth) ||
+        (Math.abs(b.length - c.length) > 1e-9 ? b.length - c.length : 0) ||
+        c.to.id - b.to.id ||
+        c.from.face.id - b.from.face.id;
+      // order > 0: the current best wins; order < 0: the candidate is better.
+      if (order < 0) best = i;
+    }
+    return frontier.splice(best, 1)[0]!;
+  };
+  /**
+   * The facets of the unit of `seed` rolled out from `seed` (which is not in the net yet), or
+   * null when one of them would overlap the net or make it too large. Facets that would
+   * overlap the unit itself are left out.
+   */
+  const layUnit = (seed: NetFace, net: Net): NetFace[] | null => {
+    const unit = unitOf.get(seed.face.id)!;
+    const laid = new Map<number, NetFace>([[seed.face.id, seed]]);
+    const inUnit = (faceId: number): boolean => unitOf.get(faceId) === unit && !placed.has(faceId);
+    const frontier = candidatesFrom(seed, (id) => laid.has(id) || !inUnit(id));
+    while (frontier.length > 0) {
+      const cand = takeBest(frontier);
+      if (laid.has(cand.to.id)) continue;
+      const unfolded = unfold(cand);
+      if (!unfolded) continue;
+      const nf = netFace(cand.to, net, unfolded.loops);
+      const loose = looseTest(nf);
+      if (loose.length > 0) {
+        const hit = [...laid.values()].some(
+          (f) => boxesMeet(nf.box, f.box) && polygonsOverlap(loose, looseTest(f)),
+        );
+        if (hit) continue;
+      }
+      if (overlapsAny(nf, net.faces)) return null;
+      link(cand, nf, unfolded.index);
+      laid.set(nf.face.id, nf);
+      frontier.push(...candidatesFrom(nf, (id) => laid.has(id) || !inUnit(id)));
+    }
+    const faces = [...laid.values()];
+    if (settings.maxNetSize) {
+      const all = net.faces.concat(faces).flatMap((f) => f.loops[0]!);
+      if (!fitsMax(all)) return null;
+    }
+    return faces;
+  };
 
+  const unitArea = (unit: number): number =>
+    unitMembers
+      .get(unit)!
+      .reduce((s, f) => (placed.has(f.id) ? s : s + Math.abs(own.get(f.id)!.area)), 0);
   const remaining = (): TopoFace[] => included.filter((f) => !placed.has(f.id));
-  while (remaining().length > 0) {
-    // Start every net from the largest face that is still free (ties: lower face id).
-    const root = remaining().sort(
-      (a, b) => own.get(b.id)!.area - own.get(a.id)!.area || a.id - b.id,
+  let free = remaining();
+  while (free.length > 0) {
+    // Start every net from the largest unit that is still free, at its largest face
+    // (ties: lower face id).
+    const areaOf = new Map<number, number>();
+    for (const f of free) {
+      const u = unitOf.get(f.id)!;
+      if (!areaOf.has(u)) areaOf.set(u, unitArea(u));
+    }
+    const root = free.slice().sort(
+      (a, b) =>
+        areaOf.get(unitOf.get(b.id)!)! - areaOf.get(unitOf.get(a.id)!)! ||
+        unitOf.get(a.id)! - unitOf.get(b.id)! ||
+        own.get(b.id)!.area - own.get(a.id)!.area ||
+        a.id - b.id,
     )[0]!;
     const rootOwn = own.get(root.id)!;
     const net: Net = {
@@ -351,38 +534,26 @@ function fabricatePaper(
     };
     nets.push(net);
     const frontier: Candidate[] = [];
-    const addFace = (nf: NetFace): void => {
-      net.faces.push(nf);
-      placed.set(nf.face.id, nf);
-      const ids = nf.face.loops[0]!;
-      for (let i = 0; i < ids.length; i++) {
-        const edge = edgeAt(nf.face, 0, i);
-        if (!edge || edge.faces.length !== 2) continue;
-        // Between two gores: always cut.
-        if (gorePlan?.cuts.has(edge.id)) continue;
-        const otherId = edge.faces[0] === nf.face.id ? edge.faces[1]! : edge.faces[0]!;
-        if (otherId === nf.face.id || !includedIds.has(otherId) || placed.has(otherId)) continue;
-        const other = topology.faces[otherId];
-        if (!other || outerIndexOf(other, edge) < 0) continue;
-        const loop = nf.loops[0]!;
-        frontier.push({
-          from: nf,
-          fromIndex: i,
-          to: other,
-          edge,
-          length: dist2(loop[i]!, loop[(i + 1) % loop.length]!),
-        });
+    const commit = (faces: readonly NetFace[]): void => {
+      for (const nf of faces) {
+        net.faces.push(nf);
+        placed.set(nf.face.id, nf);
       }
+      for (const nf of faces) frontier.push(...candidatesFrom(nf, (id) => placed.has(id)));
     };
-    const rootLoops = rootOwn.loops.map((l) => l.map((p) => ({ x: p.x, y: p.y })));
-    addFace({
-      face: root,
-      net: net.id,
-      loops: rootLoops,
-      test: shrink(rootLoops[0]!),
-      folds: rootLoops[0]!.map(() => undefined),
-    });
-    if (!fitsMax(rootLoops[0]!)) {
+    const rootFace = netFace(
+      root,
+      net,
+      rootOwn.loops.map((l) => l.map((p) => ({ x: p.x, y: p.y }))),
+    );
+    const rootUnit = layUnit(rootFace, net);
+    if (rootUnit) commit(rootUnit);
+    else {
+      // The unit does not fit into the largest net on its own: its first face does.
+      rootFace.folds.fill(undefined);
+      commit([rootFace]);
+    }
+    if (!fitsMax(rootFace.loops[0]!)) {
       warnings.push({
         code: "part-too-large",
         severity: "warning",
@@ -392,40 +563,34 @@ function fabricatePaper(
     }
 
     while (frontier.length > 0) {
-      // Priority: smooth edges first (strips of curved facets stay together), then longer
-      // shared edges, then lower ids for determinism.
-      let best = 0;
-      for (let i = 1; i < frontier.length; i++) {
-        const c = frontier[i]!;
-        const b = frontier[best]!;
-        const order =
-          Number(b.edge.smooth) - Number(c.edge.smooth) ||
-          (Math.abs(b.length - c.length) > 1e-9 ? b.length - c.length : 0) ||
-          c.to.id - b.to.id ||
-          c.from.face.id - b.from.face.id;
-        // order > 0: the current best wins; order < 0: the candidate is better.
-        if (order < 0) best = i;
-      }
-      const cand = frontier.splice(best, 1)[0]!;
+      const cand = takeBest(frontier);
       if (placed.has(cand.to.id)) continue;
       const unfolded = unfold(cand);
       if (!unfolded) continue;
-      const test = shrink(unfolded.loops[0]!);
-      if (net.faces.some((f) => polygonsOverlap(test, f.test))) continue;
-      if (settings.maxNetSize) {
-        const all = net.faces.flatMap((f) => f.loops[0]!).concat(unfolded.loops[0]!);
-        if (!fitsMax(all)) continue;
+      const nf = netFace(cand.to, net, unfolded.loops);
+      if (overlapsAny(nf, net.faces)) continue;
+      const faces = layUnit(nf, net);
+      if (!faces) continue;
+      link(cand, nf, unfolded.index);
+      commit(faces);
+    }
+    free = remaining();
+  }
+  // `fitsMax` takes a net in either orientation; turn the nets that fit only standing up.
+  if (settings.maxNetSize) {
+    const max = settings.maxNetSize;
+    for (const net of nets) {
+      const b = boundsOfPoints(net.faces.flatMap((f) => f.loops[0]!));
+      if (b.maxX - b.minX <= max.width + 1e-9 && b.maxY - b.minY <= max.height + 1e-9) continue;
+      const turn = (p: Vec2): Vec2 => ({ x: -p.y, y: p.x });
+      for (const f of net.faces) {
+        f.loops = f.loops.map((l) => l.map(turn));
+        f.test = f.test.map(turn);
+        f.box = boundsOfPoints(f.test);
       }
-      const nf: NetFace = {
-        face: cand.to,
-        net: net.id,
-        loops: unfolded.loops,
-        test,
-        folds: unfolded.loops[0]!.map(() => undefined),
-      };
-      nf.folds[unfolded.index] = { other: cand.from, index: cand.fromIndex, edge: cand.edge };
-      cand.from.folds[cand.fromIndex] = { other: nf, index: unfolded.index, edge: cand.edge };
-      addFace(nf);
+      // (x, y) → (−y, x): the frame turns with it.
+      const plane = net.rootPlane;
+      net.rootPlane = { ...plane, xDir: scale3(plane.yDir, -1), yDir: plane.xDir };
     }
   }
 
@@ -701,7 +866,7 @@ function fabricatePaper(
       const flap = makeTab(slitSide.be, variant.scale, flapHeight, 0, variant.fit);
       if (!flap) continue;
       const flapTest = shrink(flap);
-      if (slitSide.net.faces.some((f) => polygonsOverlap(flapTest, f.test))) continue;
+      if (hitsAny(flapTest, slitSide.net.faces)) continue;
       if (slitSide.net.tabs.some((other) => polygonsOverlap(flapTest, other))) continue;
 
       for (const layout of layouts) {
@@ -712,7 +877,7 @@ function fabricatePaper(
           const polygon = buildTab(s0, s1, layout.depth);
           // The tab lies outside the net and clear of the other tabs and flaps.
           const test = shrink(polygon);
-          if (tabSide.net.faces.some((f) => polygonsOverlap(test, f.test))) continue;
+          if (hitsAny(test, tabSide.net.faces)) continue;
           const others = [...tabSide.net.tabs, ...tests];
           if (tabSide.net === slitSide.net) others.push(flapTest);
           if (others.some((other) => polygonsOverlap(test, other))) continue;
@@ -860,7 +1025,7 @@ function fabricatePaper(
           const tab = makeTab(end.be, variant.scale, tabSettings.width, tabSettings.inset, variant.fit);
           if (!tab) continue;
           const test = shrink(tab);
-          const hitsFace = end.net.faces.some((f) => polygonsOverlap(test, f.test));
+          const hitsFace = hitsAny(test, end.net.faces);
           const hitsTab = end.net.tabs.some((other) => polygonsOverlap(test, other));
           if (hitsFace || hitsTab) continue;
           end.be.tab = tab;

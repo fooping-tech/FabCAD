@@ -17,6 +17,7 @@ import {
   createCircle,
   createPolyline,
   createRectangle2Point,
+  createSpline,
   detectProfiles,
   editSketch,
   profileRefOf,
@@ -26,7 +27,7 @@ import { createDefaultSolver } from "@fabcad/sketch-solver";
 import { renderSheetSvg } from "@fabcad/svg";
 import { renderSheetDxf } from "@fabcad/dxf";
 import { nodeKernel } from "../../../packages/brep/test/nodeKernel";
-import { goreTessellation } from "@fabcad/fabrication-laser";
+import { doublyCurvedFaces, goreTessellation } from "@fabcad/fabrication-laser";
 import { compileFabrication } from "../src/fabrication/pipeline";
 import { defaultFabricationSettings } from "../src/fabrication/settingsModel";
 
@@ -248,6 +249,39 @@ describe("milestone scenarios", () => {
     for (const r of radius(part.holes[0]!)) expect(r).toBeCloseTo(10, 1);
     expect(part.paths.filter((p) => p.role === "outline")).toHaveLength(1);
     expect(part.paths.filter((p) => p.role === "hole")).toHaveLength(1);
+  });
+
+  it("the walls of an extruded spline are rolled out whole, not cut into facets", async () => {
+    // A wavy closed outline: its walls are surfaces of extrusion, whose facets have vertices
+    // inside the face that do not lie quite flat.
+    const blob = (sketch: Sketch): Sketch =>
+      editSketch(sketch, (b) => {
+        const pts = Array.from({ length: 9 }, (_, i) => {
+          const a = (i * 2 * Math.PI) / 9;
+          const r = 40 + (i % 2 === 0 ? 12 : -8);
+          return { x: r * Math.cos(a), y: r * Math.sin(a) };
+        });
+        createSpline(b, "fit", pts, true);
+      });
+    const body = await model(blob, { x: 0, y: 0 }, "20");
+    expect(body.topology.faces.some((f) => f.surface === "curved" && f.developable)).toBe(true);
+    expect(doublyCurvedFaces(body.topology)).toEqual([]);
+
+    for (const doublyCurved of ["reject", "gores"] as const) {
+      const out = compileFabrication([body], {
+        ...defaultFabricationSettings(),
+        materialId: "paper-0.2",
+        paper: { doublyCurved, joint: "glue" },
+      });
+      expect(out.detections[0]).toMatchObject({ kind: "net", supported: true });
+      // Top, bottom and the wall: no slivers of facets left over as nets of their own.
+      expect(out.parts.length).toBeLessThanOrEqual(3);
+      expect(out.parts.flatMap((p) => p.sourceFaces)).toHaveLength(body.topology.faces.length);
+      for (const part of out.parts) {
+        expect(Math.min(part.bounds.maxX - part.bounds.minX, part.bounds.maxY - part.bounds.minY)).toBeGreaterThan(15);
+      }
+      expect(out.layout.unplaced).toEqual([]);
+    }
   });
 
   it("a cylinder with a rounded edge is not unfolded: the rounding is curved in two directions", async () => {

@@ -13,6 +13,10 @@ import { type SolidTopology, type Vec3, dot3, len3, sub3 } from "@fabcad/geometr
  * What is missing (the angular defect) is the curvature that paper cannot follow. One such
  * vertex in a face is the tip of a cone, which is cut open along one line and lies flat.
  * Several of them are a surface curved in two directions.
+ *
+ * Faces the kernel marks `developable` (a cylinder, a cone, the side wall of an extruded
+ * spline) are not tested: their facets can have vertices inside the face whose corners miss
+ * 360° by a little, which says something about the facetting and nothing about the surface.
  */
 export interface DoublyCurvedFace {
   /** B-Rep face the facets belong to. */
@@ -61,7 +65,7 @@ export function doublyCurvedFaces(
           around.set(v, entry);
         }
         entry.sources.add(face.sourceFace);
-        if (face.surface !== "curved") entry.curved = false;
+        if (face.surface !== "curved" || face.developable) entry.curved = false;
         entry.sum += cornerAngle(at, before, after);
       }
     }

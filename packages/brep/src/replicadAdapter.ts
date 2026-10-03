@@ -92,6 +92,7 @@ const SURFACES: Record<string, SurfaceKind> = {
   CONE: "cone",
   SPHERE: "sphere",
   TORUS: "torus",
+  EXTRUSION_SURFACE: "extrusion",
 };
 
 function guard<T>(what: string, fn: () => T): T {

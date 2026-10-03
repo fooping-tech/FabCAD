@@ -15,7 +15,22 @@ export interface KernelShape {
 
 export type BooleanOp = "union" | "cut" | "intersect";
 
-export type SurfaceKind = "plane" | "cylinder" | "cone" | "sphere" | "torus" | "other";
+/** "extrusion": a curve swept along a straight line (the side walls of an extruded spline). */
+export type SurfaceKind =
+  | "plane"
+  | "cylinder"
+  | "cone"
+  | "sphere"
+  | "torus"
+  | "extrusion"
+  | "other";
+
+/**
+ * Surfaces that are known to lie flat without stretching (developable). Others may or may not
+ * be; for them only the facets can tell.
+ */
+export const isDevelopableSurface = (surface: SurfaceKind): boolean =>
+  surface === "plane" || surface === "cylinder" || surface === "cone" || surface === "extrusion";
 
 export interface MeshFaceGroup {
   faceIndex: number;

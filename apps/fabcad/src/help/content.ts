@@ -789,7 +789,7 @@ export const HELP: Record<string, HelpEntry> = {
       "A sheet is only a flat part when its thickness is the thickness of the material (within 0.1 mm).",
       "A box must be larger than twice the material thickness in every direction.",
       "Cases with lids, dividers or cut-outs are not generated.",
-      "Paper: flat faces, cylinders and cones are unfolded. A body with a face curved in two directions (a sphere, a torus, the rounding of a circular edge) is Unsupported: paper bends but does not stretch. With Double curvature set to Gores, such faces are approximated instead.",
+      "Paper: flat faces, cylinders, cones and the walls of an extruded outline (text, splines) are unfolded. A curved face stays in one piece: it is rolled out as a whole strip, or starts a net of its own. A net that would not fit on the sheet (with room for its tabs) is split. A body with a face curved in two directions (a sphere, a torus, the rounding of a circular edge) is Unsupported: paper bends but does not stretch. With Double curvature set to Gores, such faces are approximated instead.",
       "Gores are an approximation: every strip is flat across its width, so the model shows facets where the body is round. All round faces of the body, cylinders included, get as many facets to a full turn as there are gores (the number may be off by one or two). Every second gore hangs on the other end of the face, or is a part of its own, to leave room for the tabs.",
       "Tab & Slit: edges too short for a tab get a glue tab instead. Tabs on one side and a flap on the other make the net larger than glue tabs do, so it may need a larger sheet.",
     ],
