@@ -567,9 +567,10 @@ class ReplicadKernel implements GeometryKernel {
       } catch {
         result = null;
       }
-      if (shrunk(result)) return wrap(result);
-      // The offset fails, among others, where an opened face has a pocket in it. Hollow the
-      // body without openings and cut the openings out instead.
+      if (shrunk(result) && this.solidProblem(wrap(result)) === null) return wrap(result);
+      // The offset fails where an opened face has a pocket in it, and gives a broken solid
+      // where an opened face meets rounded edges. Hollow the body without openings and cut
+      // the openings out instead.
       const opened = this.shellByCutting(s, list, thickness);
       if (shrunk(opened) && this.solidProblem(wrap(opened)) === null) return wrap(opened);
       throw new KernelError(
