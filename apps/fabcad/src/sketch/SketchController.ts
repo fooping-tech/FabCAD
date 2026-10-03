@@ -20,8 +20,6 @@ import {
   type SnapResult,
   type WindowItem,
   breakCurve,
-  circularPattern,
-  copyEntities,
   editSketch,
   entityPointIds,
   entityToCurves,
@@ -31,13 +29,9 @@ import {
   hitTestText,
   resolveProfileRefs,
   measureDimension,
-  mirrorEntities,
-  moveEntities,
   offsetEntities,
   profileRefOf,
   projectedEntityIds,
-  rectangularPattern,
-  scaleEntities,
   sketchChamfer,
   sketchTexts,
   textBox,
@@ -81,6 +75,17 @@ import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension }
 import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "./offsetGeometry";
 import { cancelOffset, commitOffset, patchOffset } from "./offsetTool";
 import { TOOLS_WITH_WINDOW } from "./toolWindows";
+import { shapeAnchor, shapeDimensions } from "./shapeDimensions";
+import {
+  type SketchTransform,
+  type TransformTool,
+  TRANSFORM_TITLES,
+  TRANSFORM_TOOLS,
+  pickInto,
+  startTransform,
+  transformResult,
+} from "./transformDialog";
+import { commitTransform, transformEvaluate } from "./transformTool";
 import { dragStep } from "../viewport/extrudeManipulator";
 import {
   type BuiltShape,
@@ -132,15 +137,8 @@ const HIT_PX = 7;
 const SNAP_PX = 9;
 const DRAG_START_PX = 4;
 
-/** Tools that operate on the current selection and need one or two point picks. */
-const SELECTION_TOOLS = new Set([
-  "move",
-  "copy",
-  "scale",
-  "mirror",
-  "rectangular-pattern",
-  "circular-pattern",
-]);
+/** Move, Copy, Scale, Mirror and the patterns: commands with a window (`transformDialog.ts`). */
+const SELECTION_TOOLS = TRANSFORM_TOOLS;
 
 interface PointerInfo {
   x: number;
@@ -340,6 +338,23 @@ export class SketchController {
       this.setHint(`${step} · or type x, y (@dx, dy) for an exact point`);
       return;
     }
+    const transform = appState.get().sketchTransform;
+    if (transform) {
+      const title = TRANSFORM_TITLES[transform.tool];
+      const step: Record<string, string> = {
+        objects: "click the curves and points to include (click again to leave one out), then the next field in the window",
+        center: "click the point to turn or scale about",
+        base: "click the point to move from",
+        target: "click the point to move to",
+        axis: "click the line to mirror across",
+      };
+      this.setHint(
+        transform.picking
+          ? `${title}: ${step[transform.picking]}`
+          : `${title}: check the preview and the values, then OK (Enter)`,
+      );
+      return;
+    }
     if (tool.startsWith("constraint:")) {
       const def = CONSTRAINT_TOOLS.find((c) => `constraint:${c.type}` === tool);
       this.setHint(def ? `${def.label}: ${def.hint}` : "");
@@ -375,6 +390,12 @@ export class SketchController {
   /** Cancel the running command. Returns true when there was something to cancel. */
   cancel(): boolean {
     this.offsetDrag = false;
+    if (appState.get().sketchTransform) {
+      // Esc in a transform command leaves it without changing anything.
+      appState.set({ sketchTransform: null, tool: "select" });
+      this.requestDraw();
+      return true;
+    }
     const had =
       cancelOffset() || this.picks.length > 0 || this.entityPicks.length > 0 || this.drag !== null;
     if (this.drag) {
@@ -498,15 +519,16 @@ export class SketchController {
     this.previewSketch = null;
     this.cursor = null;
     this.offsetDrag = false;
-    appState.set({ sketchOffset: null, toolPanel: null, pointEntry: null });
-    const { tool, selection, activeSketchId } = appState.get();
-    if (SELECTION_TOOLS.has(tool) && activeSketchId) {
-      const ids = selection.filter((s) => s.kind === "entity" && s.sketchId === activeSketchId);
-      if (ids.length === 0) toast("Select the geometry first, then start the command.", "warning");
-      // Commands on the selection have their options at hand from the start, beside the
-      // place where the geometry was selected.
-      else if (TOOLS_WITH_WINDOW.has(tool)) this.openToolPanel(null);
-    }
+    appState.set({ sketchOffset: null, toolPanel: null, pointEntry: null, shapeDimensions: null });
+    const { tool, activeSketchId, toolOptions } = appState.get();
+    // Move, Copy, Scale, Mirror and the patterns open their window with the selection as the
+    // objects; what is missing is picked from there.
+    appState.set({
+      sketchTransform:
+        SELECTION_TOOLS.has(tool) && activeSketchId
+          ? startTransform(tool as TransformTool, activeSketchId, this.selectedEntityIds(activeSketchId), toolOptions)
+          : null,
+    });
     this.refreshHint();
     this.requestDraw();
   }
@@ -559,9 +581,13 @@ export class SketchController {
     }
 
     if (SELECTION_TOOLS.has(tool)) {
-      this.cursor = this.pickAt(sketch, p);
-      this.updateTransformPreview(feature);
-      appState.set({ cursor: this.cursor?.position ?? null });
+      // Points snap like a Create tool; objects and the mirror line are hovered like a selection.
+      const picking = appState.get().sketchTransform?.picking;
+      const pointPick = picking === "center" || picking === "base" || picking === "target";
+      this.cursor = pointPick ? this.pickAt(sketch, p) : null;
+      const e = !pointPick && picking ? this.hitEntity(sketch, p, picking === "axis" ? { points: false } : undefined) : null;
+      const hover: Selection | null = e ? { kind: "entity", sketchId: feature.id, entityId: e.id } : null;
+      appState.set({ cursor: this.projectorFor(sketch).toSketch(p.x, p.y), hover });
       this.requestDraw();
       return true;
     }
@@ -800,6 +826,11 @@ export class SketchController {
       this.requestDraw();
       return true;
     }
+    if (appState.get().sketchTransform) {
+      commitTransform();
+      this.requestDraw();
+      return true;
+    }
     const create = createTool(appState.get().tool);
     if (create && create.clicks === "many" && this.picks.length >= create.minPicks) {
       this.finishCreate(feature);
@@ -817,6 +848,8 @@ export class SketchController {
     const last = this.picks[this.picks.length - 1];
     if (last && dist2(last.position, pick.position) < 1e-9) return;
     this.picks.push(pick);
+    // A new shape is started: the dimensions of the previous one are left as drawn.
+    if (this.picks.length === 1 && appState.get().shapeDimensions) appState.set({ shapeDimensions: null });
     if (this.picks.length === 1 && TOOLS_WITH_WINDOW.has(tool) && !appState.get().toolPanel) {
       const s = this.projectorFor(feature.sketch).toScreen(pick.position);
       this.openToolPanel({ x: s.x, y: s.y, shift: false, meta: false });
@@ -860,6 +893,7 @@ export class SketchController {
       return built ? built.sketch : sketch;
     });
     const result = built as BuiltShape | null;
+    if (ok && result) this.offerDimensions(create.id, create.label, result);
     if (!ok || !result) {
       if (!result) toast(`${create.label}: the picked points do not form a valid shape.`, "warning");
     } else if (create.chain) {
@@ -873,6 +907,23 @@ export class SketchController {
     }
     this.refreshHint();
     this.requestDraw();
+  }
+
+  /** Open the window with the dimensions that size the shape just drawn, beside it. */
+  private offerDimensions(tool: string, label: string, built: BuiltShape): void {
+    const feature = this.activeFeature();
+    if (!feature) return;
+    const fields = shapeDimensions(feature.sketch, tool, built.result);
+    const at = shapeAnchor(feature.sketch, built.result);
+    if (fields.length === 0 || !at) {
+      appState.set({ shapeDimensions: null });
+      return;
+    }
+    const s = this.projectorFor(feature.sketch).toScreen(at);
+    const r = this.canvas.getBoundingClientRect();
+    appState.set({
+      shapeDimensions: { sketchId: feature.id, title: label, anchor: { x: s.x + r.left, y: s.y + r.top }, fields },
+    });
   }
 
   // -------------------------------------------------------- selection / drag
@@ -1287,93 +1338,40 @@ export class SketchController {
     this.requestDraw();
   }
 
-  /** Move / Copy / Scale / Mirror / Patterns on the current selection. */
+  /** A click for the input of the transform command that is being picked. */
   private transformClick(feature: SketchFeature, p: PointerInfo): void {
-    const { tool, toolOptions } = appState.get();
-    const ids = this.selectedEntityIds(feature.id);
-    if (ids.length === 0) {
-      toast("Select the geometry first, then start the command.", "warning");
-      return;
+    const t = appState.get().sketchTransform;
+    if (!t || t.sketchId !== feature.id || !t.picking) return;
+    let next: SketchTransform;
+    if (t.picking === "objects" || t.picking === "axis") {
+      const e = this.hitEntity(feature.sketch, p, t.picking === "axis" ? { points: false } : undefined);
+      if (!e) return;
+      next = pickInto(t, { entity: e.id, entityType: e.type });
+    } else {
+      const pick = this.pickAt(feature.sketch, p);
+      if (!pick) return;
+      next = pickInto(t, {
+        point: { position: pick.position, ...(pick.snap.pointId ? { pointId: pick.snap.pointId } : {}) },
+      });
     }
-    const done = (label: string, fn: (s: Sketch) => Sketch): void => {
-      this.picks = [];
-      this.previewSketch = null;
-      editSketchSolved(feature.id, label, fn);
-      appState.set({ tool: "select" });
-      this.toolChanged();
-    };
-
-    if (tool === "mirror") {
-      const axis = this.hitEntity(feature.sketch, p, { points: false });
-      if (!axis || axis.type !== "line") {
-        toast("Click a line to mirror across.", "warning");
-        return;
-      }
-      const sources = ids.filter((id) => id !== axis.id);
-      done("Mirror", (s) =>
-        mirrorEntities(s, sources, axis.id, { symmetryConstraints: toolOptions.mirrorSymmetry }).sketch,
-      );
-      return;
-    }
-
-    const pick = this.pickAt(feature.sketch, p);
-    if (!pick) return;
-
-    if (tool === "scale") {
-      done("Scale", (s) => scaleEntities(s, ids, pick.position, toolOptions.scaleFactor));
-      return;
-    }
-    if (tool === "circular-pattern") {
-      done("Circular pattern", (s) =>
-        circularPattern(s, ids, { center: pick.position, count: Math.max(2, toolOptions.patternCount) }).sketch,
-      );
-      return;
-    }
-    if (this.picks.length === 0) {
-      this.picks = [pick];
-      if (TOOLS_WITH_WINDOW.has(tool) && !appState.get().toolPanel) this.openToolPanel(p);
-      this.refreshHint();
-      this.requestDraw();
-      return;
-    }
-    const delta = sub2(pick.position, this.picks[0]!.position);
-    if (Math.hypot(delta.x, delta.y) < 1e-9) return;
-    if (tool === "move") done("Move", (s) => moveEntities(s, ids, delta));
-    else if (tool === "copy") done("Copy", (s) => copyEntities(s, ids, delta).sketch);
-    else {
-      done("Rectangular pattern", (s) =>
-        rectangularPattern(s, ids, {
-          dx: delta,
-          countX: Math.max(1, toolOptions.patternCount),
-          dy: { x: -delta.y, y: delta.x },
-          countY: Math.max(1, toolOptions.patternCountY),
-        }).sketch,
-      );
-    }
+    // The objects are shown as the selection.
+    appState.set({
+      sketchTransform: next,
+      selection: next.objects.map((entityId) => ({ kind: "entity", sketchId: feature.id, entityId })),
+    });
+    this.requestDraw();
   }
 
-  private updateTransformPreview(feature: SketchFeature): void {
-    this.previewSketch = null;
-    const { tool, toolOptions } = appState.get();
-    const base = this.picks[0];
-    if (!base || !this.cursor) return;
-    const ids = this.selectedEntityIds(feature.id);
-    const delta = sub2(this.cursor.position, base.position);
-    if (ids.length === 0 || Math.hypot(delta.x, delta.y) < 1e-9) return;
-    try {
-      if (tool === "move" || tool === "copy") {
-        this.previewSketch = copyEntities(feature.sketch, ids, delta).sketch;
-      } else if (tool === "rectangular-pattern") {
-        this.previewSketch = rectangularPattern(feature.sketch, ids, {
-          dx: delta,
-          countX: Math.max(1, toolOptions.patternCount),
-          dy: { x: -delta.y, y: delta.x },
-          countY: Math.max(1, toolOptions.patternCountY),
-        }).sketch;
-      }
-    } catch {
-      this.previewSketch = null;
-    }
+  private transformCache: { sketch: Sketch; t: SketchTransform; preview: Sketch | null } | null = null;
+
+  /** The preview of the transform command, kept while neither the sketch nor the inputs change. */
+  private transformPreview(sketch: Sketch, t: SketchTransform): Sketch | null {
+    const c = this.transformCache;
+    if (c && c.sketch === sketch && c.t === t) return c.preview;
+    const r = transformResult(sketch, t, transformEvaluate);
+    const preview = r.ok ? r.preview : null;
+    this.transformCache = { sketch, t, preview };
+    return preview;
   }
 
   // ----------------------------------------------------- profiles in 3D mode
@@ -1639,7 +1637,10 @@ export class SketchController {
       const offset = state.sketchOffset;
       const offsetPreview =
         offset && offset.sketchId === f.id ? offsetSketch(sketch, offset) : null;
-      const previewSketch = this.preview?.sketch ?? this.previewSketch ?? offsetPreview;
+      const transform = state.sketchTransform;
+      const transformPreview =
+        transform && transform.sketchId === f.id ? this.transformPreview(sketch, transform) : null;
+      const previewSketch = this.preview?.sketch ?? this.previewSketch ?? offsetPreview ?? transformPreview;
       if (previewSketch) {
         const fresh = new Set(
           Object.keys(previewSketch.entities).filter((e) => !sketch.entities[e]),
@@ -1678,6 +1679,11 @@ export class SketchController {
       }
       for (const pick of this.picks) {
         drawSnapMarker(ctx, projector.toScreen(pick.position), "point");
+      }
+      if (transform && transform.sketchId === f.id) {
+        for (const picked of [transform.center, transform.base, transform.target]) {
+          if (picked) drawSnapMarker(ctx, projector.toScreen(picked.position), "center");
+        }
       }
       const toolUsesSnap =
         createTool(state.tool) !== undefined ||

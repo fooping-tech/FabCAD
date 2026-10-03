@@ -75,7 +75,9 @@ const SECTIONS: Section[] = [
       {
         list: [
           "Typed points: while a Create tool (Line, Rectangle, Circle, Arc, Spline …) runs in a sketch, type a digit and a Point box opens at the bottom of the view. Type `x, y` (absolute), `@dx, dy` (relative to the previous point) or `@length<angle` (polar, degrees), then Enter. The box stays open for the next point; Enter on an empty box finishes a polyline or spline; Esc closes the box. Values may be expressions with parameters (`width / 2, 10`).",
+          "Dimension window: when a Line, Rectangle, Circle, Arc, Polygon or Slot is finished, a window beside it shows the sizes that define it (Length; Width and Height; Diameter; Radius …). Click a value, type, press Enter: typed values become driving dimensions. Typing a number in the view (when the Point box is closed) starts the first value. Esc closes the window without adding dimensions.",
           "Dimensions: press D, click a line (or two points, a circle …), click empty space to place the dimension, type the value in the box that opens, Enter. A dimension can be edited later by double-clicking it.",
+          "Move, Copy, Scale, Mirror and the sketch patterns open a window with every input: Objects (the selection when the command started), the point or line they need (Center point, Fixed point, From / To point, Mirror line) and the numbers. Click a selection field so that it turns blue, then click in the sketch; the result is previewed, and OK (Enter) applies it. Selecting the objects before starting the command saves a step.",
           "Feature values (Extrude distance, Fillet radius …) are typed in the command window; Enter in the window, or OK, applies the feature.",
           "Parameters: File → Parameters… defines named values that every field accepts.",
         ],
@@ -107,8 +109,8 @@ const SECTIONS: Section[] = [
               "Press R. The status bar asks for a plane.",
               "In the Browser, click Origin to open it, then click \"XY Plane\". The sketch opens.",
               "Type `0, 0` Enter, then `@60, 40` Enter: a rectangle from the origin.",
-              "Press Esc twice (closes the Point box, then ends the tool).",
-              "Press E. The only profile of the sketch is preselected and the Extrude window opens.",
+              "Press Esc to close the Point box. A window beside the rectangle shows Width 60 and Height 40; to fix them as dimensions, click Width, type 60, press Tab, type 40, press Enter.",
+              "Press E. The sketch is finished, its only profile is preselected and the Extrude window opens.",
               "Type 5 in Distance, press Enter.",
             ],
           },
@@ -121,7 +123,7 @@ const SECTIONS: Section[] = [
             steps: [
               "Click the top face of the plate in the view, then press C: a sketch on that face starts with the Circle tool. (Or press C, then click the face.)",
               "Type the centre, e.g. `30, 20` Enter, then a point on the circle, `@4, 0` Enter: a circle of radius 4.",
-              "Press Esc twice, then E. Click inside the circle to select its profile if it is not selected.",
+              "Press Esc to close the Point box (the window beside the circle shows Diameter 8), then E. Click inside the circle to select its profile if it is not selected.",
               "In the Extrude window choose Flipped (into the plate): the operation turns to Cut by itself. Type 5, Enter.",
             ],
           },
@@ -149,7 +151,7 @@ const SECTIONS: Section[] = [
     blocks: [
       {
         list: [
-          "Esc works in steps: first it drops the picks of the command (or closes the Point box), then it ends the command, then it clears the selection.",
+          "Esc works in steps: first it closes the Point box or the dimension window, or drops the picks of the command; then it ends the command; then it clears the selection.",
           "In a sketch with the Select tool, dragging moves geometry. Outside a sketch, left-drag orbits the view; right-drag orbits too, middle-drag pans, the wheel zooms. F6 (or Fit) brings everything into view.",
           "Shortcuts are single letters. They do nothing while a text field has the focus; click the view first if a letter is not taken.",
           "A sketch tool started outside a sketch asks for a plane first (a Browser plane row or a planar face).",

@@ -23,6 +23,12 @@ const SNAP_NOTE =
   "vertically with other points, and otherwise fall on whole millimetres while Snap 1 mm is on. " +
   "Hold Ctrl / Cmd to place a point freely.";
 
+const WINDOW_NOTE = "The window holds every input: click a selection field (it turns blue), then click in the sketch; type the numbers. The result is previewed in the sketch and OK (Enter) applies it as one step; Cancel (Esc) leaves the sketch as it was.";
+
+const DIMENSIONS_NOTE =
+  "When the shape is drawn, a window beside it shows the sizes that define it. Type a value " +
+  "(typing a number in the view starts the first one) and press Enter: it becomes a dimension.";
+
 const OPERATION = {
   name: "Operation",
   text:
@@ -134,6 +140,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Click the start and the end of a line. The next line starts where the last one ended, until you press Esc.",
       "A line drawn almost horizontally or vertically becomes exactly so and gets the constraint.",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
     when: ["Outlines made of straight pieces, construction lines, mirror lines and axes."],
     examples: ["Click four corners and then the first point again, then Esc: a closed profile to extrude."],
@@ -144,6 +151,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click the start and the end. The line is construction geometry: it helps to place, mirror and constrain, and is left out when profiles are extruded.",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
     when: ["Centre lines, mirror lines and axes of revolution."],
   },
@@ -162,6 +170,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click one corner, then the opposite one. The sides are constrained horizontal and vertical.",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
     examples: ["Dimension two sides afterwards (D) to fix the size."],
   },
@@ -171,37 +180,38 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "The first two clicks give one side and with it the angle; the third gives the width.",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
   },
   "sketch.rectangle-center": {
     title: "Center Rectangle",
     summary: "A rectangle from its centre and one corner.",
-    what: ["Click the centre, then a corner. The rectangle stays centred on the first point."],
+    what: ["Click the centre, then a corner. The rectangle stays centred on the first point.", DIMENSIONS_NOTE],
     when: ["Shapes that are symmetric about a point, e.g. about the sketch origin."],
   },
   "sketch.circle": {
     title: "Center Diameter Circle",
     shortcut: "C",
     summary: "A circle from its centre and a point on it.",
-    what: ["Click the centre, then a point of the circle.", SNAP_NOTE],
+    what: ["Click the centre, then a point of the circle.", SNAP_NOTE, DIMENSIONS_NOTE],
     examples: ["Draw circles inside a profile to get holes when the profile is extruded."],
   },
   "sketch.circle-3point": {
     title: "3-Point Circle",
     summary: "The circle through three points.",
-    what: ["Click three points of the circle."],
+    what: ["Click three points of the circle.", DIMENSIONS_NOTE],
     limitations: ["Three points on one straight line have no circle."],
   },
   "sketch.arc-3point": {
     title: "3-Point Arc",
     shortcut: "A",
     summary: "An arc from its two ends and a point in between.",
-    what: ["Click the start, the end and then a point the arc passes through."],
+    what: ["Click the start, the end and then a point the arc passes through.", DIMENSIONS_NOTE],
   },
   "sketch.arc-center": {
     title: "Center Point Arc",
     summary: "An arc from its centre, its start and its end.",
-    what: ["Click the centre, the start of the arc and then where it ends."],
+    what: ["Click the centre, the start of the arc and then where it ends.", DIMENSIONS_NOTE],
   },
   "sketch.ellipse": {
     title: "Ellipse",
@@ -215,6 +225,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click the centre, then a corner. The corners lie on a circle through the second click.",
       "The second click also turns the polygon: move it straight above the centre, where it snaps into line, to get a corner exactly at the top.",
+      DIMENSIONS_NOTE,
     ],
     parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in the window that opens beside the first click; the preview follows." }],
     examples: ["Sides 6, centre on the origin, second click straight above it: a hexagon standing on a corner."],
@@ -224,6 +235,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "A regular polygon from its centre and the middle of one side.",
     what: [
       "Click the centre, then the middle of a side. The sides touch a circle through the second click.",
+      DIMENSIONS_NOTE,
     ],
     parameters: [{ name: "Sides", text: "Number of sides, 3 or more. Set in the window that opens beside the first click; the preview follows." }],
     when: ["When the distance across the flats is what is known, as for a hexagon nut."],
@@ -231,7 +243,7 @@ export const HELP: Record<string, HelpEntry> = {
   "sketch.slot": {
     title: "Slot",
     summary: "A slot with round ends: two clicks for the centres, a third for the width.",
-    what: ["Click the centres of the two round ends, then a point that gives the width."],
+    what: ["Click the centres of the two round ends, then a point that gives the width.", DIMENSIONS_NOTE],
   },
   "sketch.spline-fit": {
     title: "Fit Point Spline",
@@ -375,59 +387,57 @@ export const HELP: Record<string, HelpEntry> = {
   "sketch.modify.move": {
     title: "Move (Sketch)",
     shortcut: "M",
-    summary: "Move the selected entities from one point to another.",
+    summary: "Move entities by a distance, picked from one point to another or typed.",
     what: [
-      "Select the entities first, then start the tool.",
-      "Click the point to move from, then the point to move to.",
+      "Objects: the selection when the tool starts; click curves and points to add or leave out.",
+      "From point and To point fill X distance and Y distance; the distances can also be typed.",
+      WINDOW_NOTE,
     ],
+    parameters: [{ name: "X distance / Y distance", text: "How far the objects move, in mm." }],
     limitations: ["Constraints still hold: constrained geometry may not follow all the way."],
   },
   "sketch.modify.copy": {
     title: "Copy (Sketch)",
-    summary: "Duplicate the selected entities at another place.",
+    summary: "Duplicate entities at a distance, picked from one point to another or typed.",
     what: [
-      "Select the entities first, then start the tool.",
-      "Click the point to copy from, then where the copy goes.",
+      "Objects: the selection when the tool starts; click curves and points to add or leave out.",
+      "From point and To point fill X distance and Y distance; the distances can also be typed.",
+      WINDOW_NOTE,
     ],
+    parameters: [{ name: "X distance / Y distance", text: "Where the copy goes, in mm from the original." }],
   },
   "sketch.modify.scale": {
     title: "Scale",
-    summary: "Scale the selected entities about a point.",
-    what: ["Select the entities first, then start the tool.", "Click the point that stays where it is."],
-    parameters: [{ name: "Factor", text: "2 doubles the size, 0.5 halves it. Set in the window that opens when the tool starts." }],
+    summary: "Scale entities about a fixed point.",
+    what: ["Objects, then the Fixed point that stays where it is.", WINDOW_NOTE],
+    parameters: [{ name: "Factor", text: "2 doubles the size, 0.5 halves it." }],
     limitations: ["Dimensions on the scaled geometry keep their values and pull it back: remove them first."],
   },
   "sketch.modify.mirror": {
     title: "Mirror (Sketch)",
-    summary: "Mirror the selected entities across a line.",
-    what: ["Select the entities first, then start the tool.", "Click the line to mirror across."],
+    summary: "Mirror entities across a line.",
+    what: ["Objects, then the Mirror line (a line of the sketch).", WINDOW_NOTE],
     parameters: [
       {
         name: "Symmetry constraints",
-        text: "Ties the copy to the original, so that both change together. Set in the window that opens when the tool starts.",
+        text: "Ties the copy to the original, so that both change together.",
       },
     ],
   },
   "sketch.modify.rectangular-pattern": {
     title: "Rectangular Pattern (Sketch)",
-    summary: "Repeat the selected entities in rows and columns.",
-    what: [
-      "Select the entities first, then start the tool.",
-      "Click two points: they give the direction and the spacing. Rows follow at right angles, at the same spacing.",
-    ],
+    summary: "Repeat entities in rows and columns.",
+    what: ["Objects, then the numbers: no points to pick.", WINDOW_NOTE],
     parameters: [
-      { name: "Count", text: "Number of copies along the direction, the original included. Set in the window that opens beside the first click." },
-      { name: "Rows", text: "Number of rows at right angles to it." },
+      { name: "Count", text: "Number of copies along the direction, the original included." },
+      { name: "Rows", text: "Number of rows at right angles to it. Spacing and Row spacing are the distances; Direction turns the pattern (degrees from the X axis)." },
     ],
   },
   "sketch.modify.circular-pattern": {
     title: "Circular Pattern (Sketch)",
-    summary: "Repeat the selected entities around a centre.",
-    what: [
-      "Select the entities first, then start the tool.",
-      "Click the centre. The copies are spread evenly over the full turn.",
-    ],
-    parameters: [{ name: "Count", text: "Number of copies, the original included. Set in the window that opens when the tool starts." }],
+    summary: "Repeat entities around a centre.",
+    what: ["Objects, then the Center point.", WINDOW_NOTE],
+    parameters: [{ name: "Count", text: "Number of copies, the original included, spread over Total angle (360 for a full turn)." }],
   },
   "sketch.modify.toggle-construction": {
     title: "Normal / Construction",

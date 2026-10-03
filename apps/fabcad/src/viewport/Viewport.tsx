@@ -1065,10 +1065,14 @@ export function Viewport(): ReactElement {
     controllerRef.current?.toolChanged();
   }, [app.tool]);
 
-  // The hint of Offset changes between picking a curve and adjusting the preview.
+  // The hint of Offset changes between picking a curve and adjusting the preview, and the hint
+  // of a transform command with the input being picked.
   useEffect(() => {
     controllerRef.current?.refreshHint();
-  }, [app.sketchOffset === null]);
+  }, [app.sketchOffset === null, app.sketchTransform?.picking, app.sketchTransform === null]);
+  useEffect(() => {
+    controllerRef.current?.requestDraw();
+  }, [app.sketchTransform]);
 
   useEffect(() => {
     sceneRef.current?.setProjection(app.projection);

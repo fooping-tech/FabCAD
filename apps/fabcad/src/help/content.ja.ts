@@ -13,6 +13,12 @@ const SNAP_NOTE =
   "位置は、既存の点・中点・中心・曲線にスナップします。ほかの点の真上・真下・真横ではその点にそろい、" +
   "それ以外は Snap 1 mm がオンなら 1 mm 単位になります。Ctrl / Cmd を押している間は自由に置けます。";
 
+const WINDOW_NOTE = "入力はすべて窓にあります。選択の欄をクリックして（青くなります）スケッチでクリックし、数値は入力します。結果はスケッチにプレビューされ、OK（Enter）で 1 つの操作として確定します。Cancel（Esc）ではスケッチは変わりません。";
+
+const DIMENSIONS_NOTE =
+  "描き終えると、形の大きさを決める寸法が横の窓に出ます。値を入力して Enter を押すと寸法になります" +
+  "（ビューで数字を打つと、最初の値の入力が始まります）。";
+
 const SELECT_FIRST = "先に対象を選択してから、ツールを開始します。";
 
 const OPERATION = {
@@ -122,6 +128,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
       "線の始点と終点をクリックします。次の線は前の線の終点から始まります。Esc で終わります。",
       "ほぼ水平または垂直に描いた線は、正確に水平・垂直になり、その拘束が付きます。",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
     when: ["直線でできた輪郭、補助線、Mirror の軸、回転の軸。"],
     examples: ["4 つの角をクリックし、最後に最初の点をクリックして Esc を押すと、押し出せる閉じた輪郭になります。"],
@@ -132,6 +139,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: [
       "始点と終点をクリックします。線は Construction（補助）で、位置決め、Mirror、拘束に使えますが、押し出しの対象にはなりません。",
       SNAP_NOTE,
+      DIMENSIONS_NOTE,
     ],
     when: ["中心線、Mirror の軸、Revolve の軸。"],
   },
@@ -147,43 +155,43 @@ export const HELP_JA: Record<string, HelpEntry> = {
     title: "2-Point Rectangle",
     shortcut: "R",
     summary: "向かい合う 2 つの角から、辺が水平・垂直の長方形を描きます。",
-    what: ["1 つの角、次に反対側の角をクリックします。辺には水平・垂直の拘束が付きます。", SNAP_NOTE],
+    what: ["1 つの角、次に反対側の角をクリックします。辺には水平・垂直の拘束が付きます。", SNAP_NOTE, DIMENSIONS_NOTE],
     examples: ["描いたあと、2 つの辺に寸法（D）を付けて大きさを決めます。"],
   },
   "sketch.rectangle-3point": {
     title: "3-Point Rectangle",
     summary: "傾いた長方形を描きます。2 回のクリックで 1 辺、3 回目で幅を決めます。",
-    what: ["最初の 2 回のクリックで 1 辺と角度が決まり、3 回目で幅が決まります。", SNAP_NOTE],
+    what: ["最初の 2 回のクリックで 1 辺と角度が決まり、3 回目で幅が決まります。", SNAP_NOTE, DIMENSIONS_NOTE],
   },
   "sketch.rectangle-center": {
     title: "Center Rectangle",
     summary: "中心と 1 つの角から長方形を描きます。",
-    what: ["中心、次に角をクリックします。長方形は最初の点を中心に保ちます。"],
+    what: ["中心、次に角をクリックします。長方形は最初の点を中心に保ちます。", DIMENSIONS_NOTE],
     when: ["ある点（スケッチの原点など）について対称な形。"],
   },
   "sketch.circle": {
     title: "Center Diameter Circle",
     shortcut: "C",
     summary: "中心と円周上の 1 点から円を描きます。",
-    what: ["中心、次に円周上の点をクリックします。", SNAP_NOTE],
+    what: ["中心、次に円周上の点をクリックします。", SNAP_NOTE, DIMENSIONS_NOTE],
     examples: ["輪郭の内側に円を描くと、押し出したときに穴になります。"],
   },
   "sketch.circle-3point": {
     title: "3-Point Circle",
     summary: "3 つの点を通る円を描きます。",
-    what: ["円周上の点を 3 つクリックします。"],
+    what: ["円周上の点を 3 つクリックします。", DIMENSIONS_NOTE],
     limitations: ["一直線に並んだ 3 点を通る円はありません。"],
   },
   "sketch.arc-3point": {
     title: "3-Point Arc",
     shortcut: "A",
     summary: "両端と、その間の 1 点から円弧を描きます。",
-    what: ["始点、終点、円弧が通る点の順にクリックします。"],
+    what: ["始点、終点、円弧が通る点の順にクリックします。", DIMENSIONS_NOTE],
   },
   "sketch.arc-center": {
     title: "Center Point Arc",
     summary: "中心、始点、終点から円弧を描きます。",
-    what: ["中心、円弧の始点、終わる位置の順にクリックします。"],
+    what: ["中心、円弧の始点、終わる位置の順にクリックします。", DIMENSIONS_NOTE],
   },
   "sketch.ellipse": {
     title: "Ellipse",
@@ -197,6 +205,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: [
       "中心、次に頂点をクリックします。頂点は、2 回目のクリックを通る円の上に並びます。",
       "2 回目のクリックで多角形の向きも決まります。中心の真上に動かすとそろう位置に吸着するので、頂点をちょうど上に置けます。",
+      DIMENSIONS_NOTE,
     ],
     parameters: [{ name: "Sides", text: "辺の数。3 以上。1 回目のクリックの横に開く窓で指定します。プレビューも追従します。" }],
     examples: ["Sides を 6、中心を原点、2 回目のクリックを中心の真上にすると、頂点が上を向いた六角形になります。"],
@@ -204,14 +213,14 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "sketch.polygon-circumscribed": {
     title: "Circumscribed Polygon",
     summary: "中心と 1 辺の中点から正多角形を描きます。",
-    what: ["中心、次に辺の中点をクリックします。辺は、2 回目のクリックを通る円に接します。"],
+    what: ["中心、次に辺の中点をクリックします。辺は、2 回目のクリックを通る円に接します。", DIMENSIONS_NOTE],
     parameters: [{ name: "Sides", text: "辺の数。3 以上。1 回目のクリックの横に開く窓で指定します。プレビューも追従します。" }],
     when: ["六角ナットのように、向かい合う辺の距離（二面幅）が分かっているとき。"],
   },
   "sketch.slot": {
     title: "Slot",
     summary: "両端が丸い長穴を描きます。2 回のクリックで中心、3 回目で幅を決めます。",
-    what: ["両端の円弧の中心を 2 つクリックし、次に幅を決める点をクリックします。"],
+    what: ["両端の円弧の中心を 2 つクリックし、次に幅を決める点をクリックします。", DIMENSIONS_NOTE],
   },
   "sketch.spline-fit": {
     title: "Fit Point Spline",
@@ -346,50 +355,57 @@ export const HELP_JA: Record<string, HelpEntry> = {
   "sketch.modify.move": {
     title: "Move (Sketch)",
     shortcut: "M",
-    summary: "選択した図形を、ある点から別の点へ移動します。",
-    what: [SELECT_FIRST, "移動の基準になる点、次に移動先の点をクリックします。"],
-    limitations: ["拘束は保たれます。拘束された図形は、指定した位置まで動かないことがあります。"],
+    summary: "図形を、点から点へ選んだ距離、または入力した距離だけ動かします。",
+    what: [
+      "Objects：ツールを始めたときの選択です。曲線や点をクリックして追加・除外できます。",
+      "From point と To point を選ぶと X distance と Y distance が入ります。距離は直接入力もできます。",
+      WINDOW_NOTE,
+    ],
+    parameters: [{ name: "X distance / Y distance", text: "動かす距離（mm）。" }],
+    limitations: ["拘束は保たれるので、拘束された図形は最後まで動かないことがあります。"],
   },
   "sketch.modify.copy": {
     title: "Copy (Sketch)",
-    summary: "選択した図形を、別の位置に複製します。",
-    what: [SELECT_FIRST, "コピーの基準になる点、次にコピーを置く位置をクリックします。"],
+    summary: "図形を、点から点へ選んだ距離、または入力した距離の位置に複製します。",
+    what: [
+      "Objects：ツールを始めたときの選択です。曲線や点をクリックして追加・除外できます。",
+      "From point と To point を選ぶと X distance と Y distance が入ります。距離は直接入力もできます。",
+      WINDOW_NOTE,
+    ],
+    parameters: [{ name: "X distance / Y distance", text: "元の図形から複製を置く位置までの距離（mm）。" }],
   },
   "sketch.modify.scale": {
     title: "Scale",
-    summary: "選択した図形を、1 点を基準に拡大・縮小します。",
-    what: [SELECT_FIRST, "動かさない点（基準点）をクリックします。"],
-    parameters: [{ name: "Factor", text: "2 で 2 倍、0.5 で半分になります。ツールを始めると開く窓で指定します。" }],
-    limitations: ["拡大・縮小する図形に寸法が付いていると、寸法が値を保って元に戻します。先に寸法を削除してください。"],
+    summary: "図形を、固定点を中心に拡大・縮小します。",
+    what: ["Objects のあと、動かない点（Fixed point）を選びます。", WINDOW_NOTE],
+    parameters: [{ name: "Factor", text: "2 で 2 倍、0.5 で半分になります。" }],
+    limitations: ["拡大した図形の寸法は値を保つので、図形が引き戻されます。先に寸法を削除してください。"],
   },
   "sketch.modify.mirror": {
     title: "Mirror (Sketch)",
-    summary: "選択した図形を、線を軸に反転してコピーします。",
-    what: [SELECT_FIRST, "軸にする線をクリックします。"],
+    summary: "図形を、線を軸に鏡像に複製します。",
+    what: ["Objects のあと、軸にする線（Mirror line）を選びます。", WINDOW_NOTE],
     parameters: [
       {
         name: "Symmetry constraints",
-        text: "コピーを元の図形と結び付け、片方を変えるともう片方も変わるようにします。ツールを始めると開く窓で指定します。",
+        text: "コピーを元の図形と結び付け、片方を変えるともう片方も変わるようにします。",
       },
     ],
   },
   "sketch.modify.rectangular-pattern": {
     title: "Rectangular Pattern (Sketch)",
-    summary: "選択した図形を、行と列に並べて繰り返します。",
-    what: [
-      SELECT_FIRST,
-      "点を 2 つクリックします。その 2 点が方向と間隔になります。行はそれと直角の方向に、同じ間隔で並びます。",
-    ],
+    summary: "図形を、行と列に並べて複製します。",
+    what: ["Objects のあとは数値だけです。点を選ぶ必要はありません。", WINDOW_NOTE],
     parameters: [
-      { name: "Count", text: "方向に沿った個数。元の図形を含みます。1 回目のクリックの横に開く窓で指定します。" },
-      { name: "Rows", text: "直角の方向の行の数。" },
+      { name: "Count", text: "方向に沿った個数。元の図形を含みます。" },
+      { name: "Rows", text: "直角の方向の行の数。Spacing と Row spacing が間隔、Direction でパターンの向き（X 軸からの角度）を変えます。" },
     ],
   },
   "sketch.modify.circular-pattern": {
     title: "Circular Pattern (Sketch)",
-    summary: "選択した図形を、中心のまわりに繰り返します。",
-    what: [SELECT_FIRST, "中心をクリックします。コピーは 1 周に等間隔で並びます。"],
-    parameters: [{ name: "Count", text: "個数。元の図形を含みます。ツールを始めると開く窓で指定します。" }],
+    summary: "図形を、中心のまわりに並べて複製します。",
+    what: ["Objects のあと、中心（Center point）を選びます。", WINDOW_NOTE],
+    parameters: [{ name: "Count", text: "個数。元の図形を含み、Total angle（1 周なら 360）に均等に並べます。" }],
   },
   "sketch.modify.toggle-construction": {
     title: "Normal / Construction",

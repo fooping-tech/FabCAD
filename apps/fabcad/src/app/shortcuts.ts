@@ -3,6 +3,7 @@ import { createTool } from "../sketch/createTools";
 import { startsPointEntry } from "../sketch/pointEntry";
 import { submitPointEntry } from "../panels/PointEntry";
 import { runPaletteSelection } from "../panels/CommandPalette";
+import { applyShapeDimensions } from "../panels/ShapeDimensionsPanel";
 import {
   beginSketchPlanePick,
   closeDialog,
@@ -39,6 +40,10 @@ export function pressEscape(): void {
   const state = appState.get();
   if (state.dimensionEdit) {
     appState.set({ dimensionEdit: null });
+    return;
+  }
+  if (state.shapeDimensions) {
+    appState.set({ shapeDimensions: null });
     return;
   }
   if (state.dialog) {
@@ -161,6 +166,18 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       e.preventDefault();
       return;
     }
+    // Once a number has started the first dimension of the shape just drawn, the keys that
+    // arrive before its field has the focus belong to it.
+    const shape = appState.get().shapeDimensions;
+    if (shape?.typed && appState.get().activeSketchId && !meta) {
+      if (e.key === "Enter") applyShapeDimensions();
+      else if (e.key === "Escape") appState.set({ shapeDimensions: null });
+      else if (e.key === "Backspace") appState.set({ shapeDimensions: { ...shape, typed: { ...shape.typed, text: shape.typed.text.slice(0, -1) } } });
+      else if (e.key.length === 1) appState.set({ shapeDimensions: { ...shape, typed: { ...shape.typed, text: shape.typed.text + e.key } } });
+      else return;
+      e.preventDefault();
+      return;
+    }
     // Keys that arrive before the point box has the focus belong to it.
     const entry = appState.get().pointEntry;
     if (entry && appState.get().activeSketchId && !meta) {
@@ -245,6 +262,12 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
       }
       // Digits (and @ - . ( ) start a typed point of the running Create tool.
       const typed = composing ? (/^Digit(\d)$/.exec(e.code)?.[1] ?? "") : e.key;
+      // With the dimensions of the shape just drawn on screen, a number is one of them.
+      const dims = state.shapeDimensions;
+      if (dims && startsPointEntry(typed)) {
+        appState.set({ shapeDimensions: { ...dims, typed: { text: typed, at: Date.now() } } });
+        return;
+      }
       if (createTool(state.tool) && startsPointEntry(typed)) {
         appState.set({ pointEntry: { text: typed } });
         return;

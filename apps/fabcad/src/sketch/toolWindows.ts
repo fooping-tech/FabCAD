@@ -5,8 +5,4 @@ export const TOOLS_WITH_WINDOW = new Set([
   "fillet",
   "chamfer",
   "offset",
-  "scale",
-  "mirror",
-  "rectangular-pattern",
-  "circular-pattern",
 ]);

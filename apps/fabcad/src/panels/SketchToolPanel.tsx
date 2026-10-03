@@ -86,10 +86,6 @@ const TITLES: Record<string, string> = {
   fillet: "Sketch Fillet",
   chamfer: "Sketch Chamfer",
   offset: "Offset",
-  scale: "Scale",
-  mirror: "Mirror",
-  "rectangular-pattern": "Rectangular Pattern",
-  "circular-pattern": "Circular Pattern",
 };
 
 function setOptions(patch: Partial<ToolOptions>): void {
@@ -159,32 +155,6 @@ function OptionsBody({ tool, options }: { tool: string; options: ToolOptions }):
     case "chamfer":
       return (
         <NumberField label="Distance" unit="mm" value={options.chamferDistance} min={0.01} step={0.5} onChange={(v) => setOptions({ chamferDistance: v })} />
-      );
-    case "scale":
-      return (
-        <NumberField label="Factor" value={options.scaleFactor} min={0.001} step={0.1} onChange={(v) => setOptions({ scaleFactor: v })} />
-      );
-    case "circular-pattern":
-      return (
-        <NumberField label="Count" integer value={options.patternCount} min={2} onChange={(v) => setOptions({ patternCount: v })} />
-      );
-    case "rectangular-pattern":
-      return (
-        <>
-          <NumberField label="Count" integer value={options.patternCount} min={2} onChange={(v) => setOptions({ patternCount: v })} />
-          <NumberField label="Rows" integer value={options.patternCountY} min={1} onChange={(v) => setOptions({ patternCountY: v })} />
-        </>
-      );
-    case "mirror":
-      return (
-        <label className="field tool-field check">
-          <input
-            type="checkbox"
-            checked={options.mirrorSymmetry}
-            onChange={(e) => setOptions({ mirrorSymmetry: e.target.checked })}
-          />
-          Symmetry constraints
-        </label>
       );
     default:
       return null;

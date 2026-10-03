@@ -322,6 +322,9 @@ export interface ToolOptions {
   alignSnap: boolean;
 }
 
+import type { ShapeDimension } from "../sketch/shapeDimensions";
+import type { SketchTransform } from "../sketch/transformDialog";
+
 export type FabricationProcess = "laser" | "print";
 
 /** Sketch Offset waiting for OK: the chain, and the distance and side previewed. */
@@ -361,6 +364,19 @@ export interface AppState {
   pointEntry: { text: string; error?: string } | null;
   /** The command palette (Ctrl / Cmd + K) while it is open, with what has been typed. */
   commandPalette: { query: string } | null;
+  /**
+   * The window with the dimensions of the shape just drawn (`sketch/shapeDimensions.ts`).
+   * `typed` is set when a key typed in the view starts editing its first value.
+   */
+  shapeDimensions: {
+    sketchId: string;
+    title: string;
+    anchor: { x: number; y: number };
+    fields: ShapeDimension[];
+    typed?: { text: string; at: number };
+  } | null;
+  /** Move, Copy, Scale, Mirror or a pattern of the sketch, with its window (`transformDialog.ts`). */
+  sketchTransform: SketchTransform | null;
   /** The window with the history log (steps, bodies) is open. */
   historyLogOpen: boolean;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
@@ -426,6 +442,8 @@ export const appState = new TinyStore<AppState>({
   pointEntry: null,
   commandPalette: null,
   historyLogOpen: false,
+  shapeDimensions: null,
+  sketchTransform: null,
   cursor: null,
   toasts: [],
   hint: "",
