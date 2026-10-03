@@ -281,6 +281,13 @@ describe("milestone scenarios", () => {
         expect(Math.min(part.bounds.maxX - part.bounds.minX, part.bounds.maxY - part.bounds.minY)).toBeGreaterThan(15);
       }
       expect(out.layout.unplaced).toEqual([]);
+      // Along the wall, the short edges of the facets are joined in runs: one tab for many.
+      const glued = out.connections.filter((c) => c.joint === "glue-tab");
+      const tabs = out.parts.flatMap((p) => p.joints.filter((j) => j.kind === "glue-tab"));
+      expect(tabs.length).toBeLessThan(glued.length / 3);
+      // Edge by edge, nearly every tab ran into the next one; a few short edges in a notch
+      // remain without room.
+      expect(out.warnings.filter((w) => w.code === "overlap").length).toBeLessThan(10);
     }
   });
 

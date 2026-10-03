@@ -203,6 +203,10 @@ interface BoundaryEdge {
   /** Flap with the slits for the tabs of the other side: slits and folds share its base line. */
   flap?: { polygon: Vec2[]; slits: [Vec2, Vec2][]; folds: [Vec2, Vec2][] };
   connectionId?: string;
+  /** Under the tab or flap of the edge before it (a run of edges joined as one): not cut. */
+  covered?: boolean;
+  /** The edges after this one that its tab or flap covers. */
+  covering?: BoundaryEdge[];
 }
 
 /** The lowest glue tab or flap worth cutting (mm). */
@@ -217,6 +221,10 @@ const TAB_VARIANTS: readonly { scale: number; fit: boolean }[] = [
   { scale: 1, fit: true },
   { scale: 0.5, fit: true },
 ];
+/** A run of cut edges carries a tab on a side whose points lie this close to a line (mm). */
+const RUN_STRAIGHT = 0.2;
+/** … and whose other side bends away from the line by no more than this (mm). */
+const RUN_BEND = 1;
 /** The narrowest insert tab worth cutting (mm). */
 const MIN_INSERT_WIDTH = 4;
 /** Paper left between a slit, or the shoulder of a tab, and the end of the edge (mm). */
@@ -262,9 +270,9 @@ const looseTest = (nf: NetFace): Vec2[] => {
 };
 const overlapsAny = (nf: NetFace, faces: Iterable<NetFace>): boolean => hitsAny(nf.test, faces, nf.box);
 
-function shrink(poly: readonly Vec2[]): Vec2[] {
+function shrink(poly: readonly Vec2[], slack = 0): Vec2[] {
   if (poly.length < 3) return poly.slice();
-  const result = offsetPolygon(poly, TOUCH);
+  const result = offsetPolygon(poly, TOUCH + slack);
   return result.collapsedEdges.length > 0 ? poly.slice() : result.polygon;
 }
 
@@ -576,6 +584,27 @@ function fabricatePaper(
     }
     free = remaining();
   }
+  // Neighbouring faces that the tree did not join but that came to lie edge to edge in the
+  // same net (around a vertex inside a curved face) are folded there, not cut apart.
+  for (const edge of topology.edges) {
+    if (edge.faces.length !== 2 || gorePlan?.cuts.has(edge.id)) continue;
+    const f = placed.get(edge.faces[0]!);
+    const g = placed.get(edge.faces[1]!);
+    if (!f || !g || f === g || f.net !== g.net) continue;
+    const i = outerIndexOf(f.face, edge);
+    const j = outerIndexOf(g.face, edge);
+    if (i < 0 || j < 0 || f.folds[i] || g.folds[j]) continue;
+    const fl = f.loops[0]!;
+    const gl = g.loops[0]!;
+    // The faces run along the edge in opposite directions.
+    const meet =
+      dist2(fl[i]!, gl[(j + 1) % gl.length]!) <= LOOSE &&
+      dist2(fl[(i + 1) % fl.length]!, gl[j]!) <= LOOSE;
+    if (!meet) continue;
+    f.folds[i] = { other: g, index: j, edge };
+    g.folds[j] = { other: f, index: i, edge };
+  }
+
   // `fitsMax` takes a net in either orientation; turn the nets that fit only standing up.
   if (settings.maxNetSize) {
     const max = settings.maxNetSize;
@@ -784,6 +813,7 @@ function fabricatePaper(
     tabSide: { net: Net; be: BoundaryEdge },
     slitSide: { net: Net; be: BoundaryEdge },
     edge: TopoEdge,
+    slack = 0,
   ): {
     tabs: NonNullable<BoundaryEdge["inserts"]>;
     flap: NonNullable<BoundaryEdge["flap"]>;
@@ -865,7 +895,7 @@ function fabricatePaper(
       // Along the whole edge: the slits lie in its fold line.
       const flap = makeTab(slitSide.be, variant.scale, flapHeight, 0, variant.fit);
       if (!flap) continue;
-      const flapTest = shrink(flap);
+      const flapTest = shrink(flap, slack);
       if (hitsAny(flapTest, slitSide.net.faces)) continue;
       if (slitSide.net.tabs.some((other) => polygonsOverlap(flapTest, other))) continue;
 
@@ -876,7 +906,7 @@ function fabricatePaper(
         for (const [s0, s1] of layout.spans) {
           const polygon = buildTab(s0, s1, layout.depth);
           // The tab lies outside the net and clear of the other tabs and flaps.
-          const test = shrink(polygon);
+          const test = shrink(polygon, slack);
           if (hitsAny(test, tabSide.net.faces)) continue;
           const others = [...tabSide.net.tabs, ...tests];
           if (tabSide.net === slitSide.net) others.push(flapTest);
@@ -952,9 +982,16 @@ function fabricatePaper(
     return poly.length >= 3 ? poly : null;
   };
 
+  // Cut edges that follow each other along both nets, on a straight line on one side, are
+  // joined as one: a run gets one glue tab (or one row of insert tabs) along its whole
+  // length, instead of a sliver of a tab on every facet. A run ends at a corner, and where
+  // the other side bends away from the line (a tab that runs along a curve is cut short so
+  // that it can follow it). A single edge is a run of its own.
+  type End = { net: Net; be: BoundaryEdge };
+  const pairs: { edge: TopoEdge; x: End; y: End }[] = [];
   for (const edge of topology.edges) {
     if (edge.faces.length !== 2) continue;
-    const ends: { net: Net; be: BoundaryEdge }[] = [];
+    const ends: End[] = [];
     for (const faceId of edge.faces.slice().sort((a, b) => a - b)) {
       const nf = placed.get(faceId);
       if (!nf) continue;
@@ -968,9 +1005,135 @@ function fabricatePaper(
       });
     }
     if (ends.length !== 2) continue; // fold edges are not on any boundary
-    const [x, y] = [ends[0]!, ends[1]!];
+    pairs.push({ edge, x: ends[0]!, y: ends[1]! });
+  }
+  const pairOf = new Map<BoundaryEdge, (typeof pairs)[number]>();
+  for (const pair of pairs) {
+    pairOf.set(pair.x.be, pair);
+    pairOf.set(pair.y.be, pair);
+  }
+  const placeOf = new Map<BoundaryEdge, { loop: BoundaryEdge[]; k: number }>();
+  for (const loops of netLoops.values()) {
+    for (const loop of loops) loop.forEach((be, k) => placeOf.set(be, { loop, k }));
+  }
+  const step = (be: BoundaryEdge, by: 1 | -1): BoundaryEdge | undefined => {
+    const at = placeOf.get(be);
+    if (!at || at.loop.length < 2) return undefined;
+    return at.loop[(at.k + by + at.loop.length) % at.loop.length];
+  };
+  /** Largest distance of the points of a chain of boundary edges from the line of its ends. */
+  const deviation = (chain: readonly BoundaryEdge[]): number => {
+    const a = chain[0]!.a;
+    const b = chain[chain.length - 1]!.b;
+    const u = norm2(sub2(b, a));
+    const length = dist2(a, b);
+    let worst = 0;
+    for (const be of chain) {
+      const d = sub2(be.b, a);
+      const along = d.x * u.x + d.y * u.y;
+      const off = Math.abs(d.x * u.y - d.y * u.x);
+      worst = Math.max(worst, along < -1e-9 || along > length + 1e-9 ? Infinity : off);
+    }
+    return worst;
+  };
+  /** Both sides of a run, each in the order in which its net boundary passes it. */
+  interface Run {
+    edges: TopoEdge[];
+    x: BoundaryEdge[];
+    y: BoundaryEdge[];
+    xNet: Net;
+    yNet: Net;
+  }
+  const fits = (x: readonly BoundaryEdge[], y: readonly BoundaryEdge[]): boolean => {
+    const dx = deviation(x);
+    const dy = deviation(y);
+    return Math.min(dx, dy) <= RUN_STRAIGHT && Math.max(dx, dy) <= RUN_BEND;
+  };
+  const runs: Run[] = [];
+  const inRun = new Set<(typeof pairs)[number]>();
+  for (const pair of pairs) {
+    if (inRun.has(pair)) continue;
+    inRun.add(pair);
+    const run: Run = {
+      edges: [pair.edge],
+      x: [pair.x.be],
+      y: [pair.y.be],
+      xNet: pair.x.net,
+      yNet: pair.y.net,
+    };
+    // x runs forwards along its boundary, y backwards: the nets meet face to face.
+    for (const by of [1, -1] as const) {
+      for (;;) {
+        const xEdge = by === 1 ? run.x[run.x.length - 1]! : run.x[0]!;
+        const yEdge = by === 1 ? run.y[0]! : run.y[run.y.length - 1]!;
+        const nextX = step(xEdge, by);
+        const nextY = step(yEdge, by === 1 ? -1 : 1);
+        if (!nextX || !nextY || nextX === nextY) break;
+        const next = pairOf.get(nextX);
+        if (!next || inRun.has(next) || pairOf.get(nextY) !== next) break;
+        const x = by === 1 ? [...run.x, nextX] : [nextX, ...run.x];
+        const y = by === 1 ? [nextY, ...run.y] : [...run.y, nextY];
+        if (!fits(x, y)) break;
+        inRun.add(next);
+        run.x = x;
+        run.y = y;
+        if (by === 1) run.edges.push(next.edge);
+        else run.edges.unshift(next.edge);
+      }
+    }
+    runs.push(run);
+  }
+
+  /** One boundary edge standing for a run: from where it starts to where it ends. */
+  const spanOf = (chain: readonly BoundaryEdge[]): BoundaryEdge => {
+    if (chain.length === 1) return chain[0]!;
+    const first = chain[0]!;
+    const last = chain[chain.length - 1]!;
+    const span: BoundaryEdge = { ...first, b: last.b };
+    freeAngles.set(span, {
+      a: freeAngles.get(first)?.a ?? Math.PI,
+      b: freeAngles.get(last)?.b ?? Math.PI,
+    });
+    return span;
+  };
+  /** The joint made for the span belongs to the first edge; the cut skips the others. */
+  const handOver = (span: BoundaryEdge, chain: readonly BoundaryEdge[]): void => {
+    if (chain.length === 1) return;
+    const first = chain[0]!;
+    if (span.tab) first.tab = span.tab;
+    if (span.inserts) first.inserts = span.inserts;
+    if (span.flap) first.flap = span.flap;
+    if (span.tab || span.inserts || span.flap) {
+      first.covering = chain.slice(1);
+      for (const be of first.covering) be.covered = true;
+    }
+  };
+
+  for (const run of runs) {
+    const edge = run.edges[0]!;
+    const xSpan = spanOf(run.x);
+    const ySpan = spanOf(run.y);
+    const x: End = { net: run.xNet, be: xSpan };
+    const y: End = { net: run.yNet, be: ySpan };
+    const ends = [x, y];
+    // A tab or a flap lies along the straight line of its side.
+    const straight = (end: End): boolean =>
+      deviation(end === x ? run.x : run.y) <= RUN_STRAIGHT;
+    /** The run as one edge of the solid, from where x starts to where it ends. */
+    const runEdge: TopoEdge =
+      run.edges.length === 1
+        ? edge
+        : { ...edge, a: startVertex(run.x[0]!), b: startVertex(run.y[0]!) };
+    const position = midpoint(run.edges[Math.floor(run.edges.length / 2)]!);
+    const length = dist2(xSpan.a, xSpan.b);
+    // The boundary of a run strays from its line by up to RUN_STRAIGHT: so may its tabs.
+    const slack = run.edges.length > 1 ? RUN_STRAIGHT : 0;
     const theta = edgeInteriorAngle(topology, edge) ?? Math.PI;
     const connectionId = `${body.id}.conn-${edge.id}`;
+    run.edges.forEach((e, i) => {
+      run.x[i]!.connectionId = `${body.id}.conn-${e.id}`;
+      run.y[run.y.length - 1 - i]!.connectionId = `${body.id}.conn-${e.id}`;
+    });
     x.be.connectionId = connectionId;
     y.be.connectionId = connectionId;
     let glued: { net: Net; be: BoundaryEdge } | undefined;
@@ -993,7 +1156,8 @@ function fabricatePaper(
             [y, x],
             [x, y],
           ]) as [typeof x, typeof x][]) {
-        const made = makeInserts(tabSide, slitSide, edge);
+        if (!straight(tabSide) || !straight(slitSide)) continue;
+        const made = makeInserts(tabSide, slitSide, runEdge, slack);
         if (!made) continue;
         tabSide.be.inserts = made.tabs;
         tabSide.net.tabs.push(...made.tabTests);
@@ -1007,12 +1171,12 @@ function fabricatePaper(
           code: "joint-fallback",
           severity: "info",
           message:
-            `This edge (${dist2(x.be.a, x.be.b).toFixed(1)} mm) has no room for a tab and its flap. ` +
+            `This edge (${length.toFixed(1)} mm) has no room for a tab and its flap. ` +
             (tabSettings.enabled ? "A glue tab is used instead." : "It is left without a joint."),
           connectionId,
           partId: x.net.partId,
           edgeId: `${x.net.partId}.edge-${x.be.partEdge}`,
-          position: midpoint(edge),
+          position,
         });
       }
     }
@@ -1022,9 +1186,10 @@ function fabricatePaper(
       // then with tabs whose sides are fitted into the notch they stand in.
       for (const variant of TAB_VARIANTS) {
         for (const end of ends) {
+          if (!straight(end)) continue;
           const tab = makeTab(end.be, variant.scale, tabSettings.width, tabSettings.inset, variant.fit);
           if (!tab) continue;
-          const test = shrink(tab);
+          const test = shrink(tab, slack);
           const hitsFace = hitsAny(test, end.net.faces);
           const hitsTab = end.net.tabs.some((other) => polygonsOverlap(test, other));
           if (hitsFace || hitsTab) continue;
@@ -1045,26 +1210,36 @@ function fabricatePaper(
           connectionId,
           partId: x.net.partId,
           edgeId: `${x.net.partId}.edge-${x.be.partEdge}`,
-          position: midpoint(edge),
+          position,
         });
       }
     }
-    const endOf = (end: { net: Net; be: BoundaryEdge }): EdgeConnection["a"] => ({
-      partId: end.net.partId,
-      edgeId: `${end.net.partId}.edge-${end.be.partEdge}`,
-      role: inserted ? (end === inserted ? "tab" : "slot") : end === glued ? "glue-tab" : "glue",
-    });
+    handOver(xSpan, run.x);
+    handOver(ySpan, run.y);
+    const role = (end: End): EdgeConnection["a"]["role"] =>
+      inserted ? (end === inserted ? "tab" : "slot") : end === glued ? "glue-tab" : "glue";
     // The side carrying the tab is listed first.
     const first = (inserted ?? glued) === y ? y : x;
     const second = first === x ? y : x;
-    connections.push({
-      id: connectionId,
-      a: endOf(first),
-      b: endOf(second),
-      joint: inserted ? "tab-slot" : "glue-tab",
-      angle: radToDeg(theta),
-      length: dist2(x.be.a, x.be.b),
-      sourceEdge: edge.id,
+    run.edges.forEach((e, i) => {
+      const sides = new Map<End, BoundaryEdge>([
+        [x, run.x[i]!],
+        [y, run.y[run.y.length - 1 - i]!],
+      ]);
+      const endOf = (end: End): EdgeConnection["a"] => ({
+        partId: end.net.partId,
+        edgeId: `${end.net.partId}.edge-${sides.get(end)!.partEdge}`,
+        role: role(end),
+      });
+      connections.push({
+        id: `${body.id}.conn-${e.id}`,
+        a: endOf(first),
+        b: endOf(second),
+        joint: inserted ? "tab-slot" : "glue-tab",
+        angle: radToDeg(edgeInteriorAngle(topology, e) ?? Math.PI),
+        length: dist2(sides.get(x)!.a, sides.get(x)!.b),
+        sourceEdge: e.id,
+      });
     });
   }
   connections.sort((a, b) => (a.sourceEdge ?? 0) - (b.sourceEdge ?? 0));
@@ -1085,6 +1260,18 @@ function fabricatePaper(
       const cut: Vec2[] = [];
       for (const be of loop) {
         const edgeId = `${net.partId}.edge-${be.partEdge}`;
+        /**
+         * Under a tab that covers a run of edges the cut follows the line of the run, not the
+         * edges: what lies between them belongs to the tab. `poly` closed along the edges.
+         */
+        const closed = (poly: readonly Vec2[]): Vec2[] => {
+          if (!be.covering) return poly.slice();
+          const out = [be.a, ...poly, be.covering[be.covering.length - 1]!.b];
+          for (const c of be.covering.slice().reverse()) out.push(c.a);
+          const result: Vec2[] = [];
+          for (const q of out) pushPoint(result, q, 1e-9);
+          return result;
+        };
         edges.push({
           id: edgeId,
           index: be.partEdge,
@@ -1096,7 +1283,7 @@ function fabricatePaper(
           sourceEdge: be.edge?.id,
         });
         pushPoint(raw, be.a);
-        pushPoint(cut, be.a);
+        if (!be.covered) pushPoint(cut, be.a);
         if (be.tab && be.connectionId) {
           // Splice the tab into the cut path so that it stays attached to the net.
           for (const p of be.tab) pushPoint(cut, p);
@@ -1104,7 +1291,7 @@ function fabricatePaper(
             kind: "glue-tab",
             connectionId: be.connectionId,
             edgeId,
-            polygons: [be.tab],
+            polygons: [closed(be.tab)],
           });
           tabFolds.push({
             type: "fold",
@@ -1132,7 +1319,10 @@ function fabricatePaper(
             kind: "tab",
             connectionId: be.connectionId,
             edgeId,
-            polygons: be.inserts.map((t) => t.polygon),
+            polygons: [
+              ...be.inserts.map((t) => t.polygon),
+              ...(be.covering ? [closed([])] : []),
+            ],
           });
         }
         if (be.flap && be.connectionId) {
@@ -1141,7 +1331,7 @@ function fabricatePaper(
             kind: "flap",
             connectionId: be.connectionId,
             edgeId,
-            polygons: [be.flap.polygon],
+            polygons: [closed(be.flap.polygon)],
           });
           joints.push({ kind: "slot", connectionId: be.connectionId, polygons: be.flap.slits });
           for (const fold of be.flap.folds) {
