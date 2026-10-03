@@ -798,7 +798,7 @@ export const HELP: Record<string, HelpEntry> = {
       "A component is a definition: the sketches, features and bodies of one part. It is placed through instances; every instance shows the same geometry at its own position, and a change to the definition shows in all of them.",
       "With bodies selected, they move into the new component together with the steps they were made with. They may be bodies of the root or of another component: right-click a body (in the view or in the Browser) and choose Create Component. The steps that change them come along, with the sketches and planes those steps use, and bodies a Combine used up. A sketch drawn on a face of another body, a projection or a plane based on a face only refers to that body and ties nothing. When a step changes a body that is not selected as well (an Extrude that joins into two bodies), nothing moves: the message names the step, and its Show button selects the step and shows it in the timeline (double-click it there to edit it). Edit the step so that it changes one body only, or select that body too.",
       "The model stays where it is. Bodies of the root get one instance at the origin; bodies taken out of a component get an instance at every placement of that component, shown or hidden as it was.",
-      "Without a selection the component starts empty and is activated: the sketches and features you make now belong to it.",
+      "New Component (the ribbon, or right-click the document or a component in the Browser) opens a window, as in Fusion: the name, whether the selected bodies go into it, and whether it is activated. An empty, activated component is ready to model in: the sketches and features you make now belong to it. Create Component in the context menu of a body makes one of the selected bodies at once.",
       "The Browser lists the definitions under Components (with their Sketches, Features and Bodies) and the placed instances under Instances.",
       "To give bodies to a component that already exists, drag them in the Browser onto that component (or its Bodies folder); drop them on the document to give them back to the root. Selected bodies are dragged together. What goes along is decided as for New Component. When the two components are placed differently, a Move step is added at the end of the moved history so that the bodies stay where they are seen; with several instances, the first one counts.",
     ],
@@ -806,6 +806,12 @@ export const HELP: Record<string, HelpEntry> = {
       "For parts that occur more than once (a spacer, a bracket), or to keep the parts of an assembly apart.",
     ],
     requires: ["Nothing, or bodies and features of one component."],
+    parameters: [
+      { name: "Name", text: "Name of the component; its instances are called Name:1, Name:2 …" },
+      { name: "Parent", text: "Always the root: components are not nested." },
+      { name: "From selected bodies", text: "Shown when bodies are selected: they move into the new component with the steps that change them." },
+      { name: "Activate", text: "Activate the new component, so that what you make next belongs to it." },
+    ],
     limitations: [
       "Components are not nested: every component is made at the root.",
       "Dragging in the Browser needs a mouse (or a pen); on a touch screen, Create Component in the context menu of a body makes a new component.",
@@ -832,6 +838,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Double-click a component in the Browser, or choose Activate Component in its context menu (or in that of one of its instances). The view shows only that component, where its definition lies, and what you make belongs to it.",
       "Activate Root (the ribbon button, the context menu, or a double-click on the document in the Browser) returns to the whole model: the root bodies and every instance in its place.",
       "With the root active, an instance is selected as a whole. Its faces and edges cannot be picked for a command: activate the component to change it.",
+      "The construction planes of a component are shown at its instances while the root is active. Create Sketch on one activates the component and starts the sketch there: a sketch belongs to the component of its plane.",
     ],
     limitations: [
       "Features work inside one component. Combine, Join / Cut targets, Move/Copy and patterns refuse bodies of different components: the dialog says so and OK stays disabled.",

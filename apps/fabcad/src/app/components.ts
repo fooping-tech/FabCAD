@@ -58,6 +58,7 @@ export function activateComponent(componentId: string | null): void {
     tool: "select",
     dialog: null,
     instanceMove: null,
+    newComponent: null,
     selection: id ? [{ kind: "component", componentId: id }] : [],
     hover: null,
     dimensionEdit: null,
@@ -71,12 +72,58 @@ export function activateComponent(componentId: string | null): void {
  * activated, ready to model in.
  */
 export function newComponent(): void {
-  const doc = documentStore.document;
+  const { bodyIds, featureIds } = selectedForComponent();
+  makeComponent({ bodyIds, featureIds, activate: bodyIds.length + featureIds.length === 0 });
+}
+
+/** Bodies and features of the selection that a new component can be made of. */
+function selectedForComponent(): { bodyIds: string[]; featureIds: string[] } {
   const selection = appState.get().selection;
-  const bodyIds = selection.flatMap((s) => (s.kind === "body" ? [s.bodyId] : []));
-  const featureIds = selection.flatMap((s) =>
-    s.kind === "feature" || s.kind === "plane" ? [s.featureId] : [],
-  );
+  return {
+    bodyIds: selection.flatMap((s) => (s.kind === "body" ? [s.bodyId] : [])),
+    featureIds: selection.flatMap((s) => (s.kind === "feature" || s.kind === "plane" ? [s.featureId] : [])),
+  };
+}
+
+/**
+ * The New Component window (as in Fusion): name, whether the selected bodies go into it, and
+ * whether it is activated. Opened from the ribbon and from the Browser.
+ */
+export function openNewComponent(): void {
+  if (documentStore.inTransaction) documentStore.commit();
+  const { bodyIds, featureIds } = selectedForComponent();
+  appState.set({
+    newComponent: { anchor: lastViewportPoint(), bodyIds, featureIds },
+    dialog: null,
+    instanceMove: null,
+  });
+}
+
+export function cancelNewComponent(): void {
+  if (appState.get().newComponent) appState.set({ newComponent: null });
+}
+
+/** OK of the New Component window. */
+export function commitNewComponent(options: { name: string; fromSelection: boolean; activate: boolean }): void {
+  const pending = appState.get().newComponent;
+  if (!pending) return;
+  appState.set({ newComponent: null });
+  makeComponent({
+    name: options.name,
+    bodyIds: options.fromSelection ? pending.bodyIds : [],
+    featureIds: options.fromSelection ? pending.featureIds : [],
+    activate: options.activate,
+  });
+}
+
+function makeComponent(input: {
+  name?: string;
+  bodyIds: string[];
+  featureIds: string[];
+  activate: boolean;
+}): void {
+  const doc = documentStore.document;
+  const { bodyIds, featureIds } = input;
   const fromSelection = bodyIds.length + featureIds.length > 0;
   const owners = new Set([
     ...bodyIds.map((id) => doc.bodies[id]?.componentId),
@@ -93,13 +140,17 @@ export function newComponent(): void {
     return;
   }
   const out: CreatedComponent = {};
-  if (!run(createComponent({ bodyIds, featureIds }, out)) || !out.id) return;
+  if (!run(createComponent({ name: input.name, bodyIds, featureIds }, out)) || !out.id) return;
+  if (input.activate) activateComponent(out.id);
   if (!fromSelection) {
-    activateComponent(out.id);
-    toast("New component. It is active: what you make now belongs to it.");
+    toast(
+      input.activate
+        ? "New component. It is active: what you make now belongs to it."
+        : "New component. Activate it (double-click it in the Browser) to model in it.",
+    );
     return;
   }
-  setSelection([{ kind: "component", componentId: out.id }]);
+  if (!input.activate) setSelection([{ kind: "component", componentId: out.id }]);
   const bodies = out.bodyIds?.length ?? 0;
   const extra = bodies - bodyIds.length;
   const after = documentStore.document;

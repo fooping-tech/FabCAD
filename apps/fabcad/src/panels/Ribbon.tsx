@@ -20,8 +20,8 @@ import { useStore } from "../app/tinyStore";
 import { useDocument } from "../app/session";
 import {
   activateComponent,
-  newComponent,
   newInstance,
+  openNewComponent,
   useActiveComponentId,
 } from "../app/components";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
@@ -396,14 +396,17 @@ function AssembleGroup(): ReactElement {
           ? active
           : undefined;
   const activeName = doc.assembly.components[active]?.name ?? "";
+  const opening = useStore(appState, (s) => s.newComponent !== null);
   return (
     <Group label="Assemble">
       <Tool
         icon="new-component"
-        label="Component"
-        title="New Component — from the selected bodies, or an empty one to model in"
+        label="New Component"
+        title="New Component — an empty component to model in, or one made of the selected bodies"
         help="component.new"
-        onClick={newComponent}
+        wide
+        active={opening}
+        onClick={openNewComponent}
       />
       <Tool
         icon="instance"
