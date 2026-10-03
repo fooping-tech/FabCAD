@@ -74,10 +74,6 @@ export function newComponent(): void {
     s.kind === "feature" || s.kind === "plane" ? [s.featureId] : [],
   );
   const fromSelection = bodyIds.length + featureIds.length > 0;
-  if (fromSelection && activeComponentId(doc) !== doc.assembly.rootComponentId) {
-    toast("Components are made from the root. Activate the root first, then select the bodies.", "warning");
-    return;
-  }
   const owners = new Set([
     ...bodyIds.map((id) => doc.bodies[id]?.componentId),
     ...featureIds.map((id) => doc.features[id]?.componentId),
@@ -96,9 +92,20 @@ export function newComponent(): void {
   setSelection([{ kind: "component", componentId: out.id }]);
   const bodies = out.bodyIds?.length ?? 0;
   const extra = bodies - bodyIds.length;
+  const after = documentStore.document;
+  const name = after.assembly.components[out.id]?.name ?? "the component";
+  const from =
+    out.sourceComponentId && out.sourceComponentId !== after.assembly.rootComponentId
+      ? after.assembly.components[out.sourceComponentId]?.name
+      : undefined;
   toast(
-    `Made a component of ${bodies} ${bodies === 1 ? "body" : "bodies"} and ${out.featureIds?.length ?? 0} steps` +
-      (extra > 0 ? ` (${extra} more ${extra === 1 ? "body was" : "bodies were"} tied to the selection).` : "."),
+    `Moved ${bodies} ${bodies === 1 ? "body" : "bodies"} and ${out.featureIds?.length ?? 0} steps` +
+      (from ? ` from ${from}` : "") +
+      ` into ${name}` +
+      (extra > 0 ? ` (${extra} more ${extra === 1 ? "body was" : "bodies were"} tied to the selection)` : "") +
+      ((out.instanceIds?.length ?? 0) > 1 ? `, placed at the ${out.instanceIds!.length} instances of ${from}.` : "."),
+    "info",
+    6000,
   );
 }
 

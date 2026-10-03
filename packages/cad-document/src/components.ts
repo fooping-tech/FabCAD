@@ -180,17 +180,23 @@ export function entangledFeatures(
 export interface CreatedComponent {
   id?: string;
   instanceId?: string;
+  /** Every instance made: one per instance of the component the selection came from. */
+  instanceIds?: string[];
+  /** Component the selection was taken out of. */
+  sourceComponentId?: string;
   /** Features moved into the new definition (more than selected when they were entangled). */
   featureIds?: string[];
   bodyIds?: string[];
 }
 
 /**
- * New component definition with its first instance, at the identity: nothing moves on screen.
+ * New component definition with its instances.
  *
  * Selected bodies and features move into the definition together with everything they cannot
  * be separated from (`entangledFeatures`). They all have to belong to one component; the
- * command does nothing otherwise.
+ * command does nothing otherwise. They may come from the root or from another component: the
+ * new definition gets an instance at every placement of the component they came from (one at
+ * the origin for the root), so nothing moves on screen.
  */
 export function createComponent(
   input: { name?: string; featureIds?: readonly string[]; bodyIds?: readonly string[] } = {},
@@ -232,10 +238,25 @@ export function createComponent(
       for (const b of moved.bodyIds) bodies[b] = { ...bodies[b]!, componentId: id };
       d = { ...d, features, bodies };
     }
-    let instance: ComponentInstance;
-    [instance, d] = withInstance(d, id, IDENTITY_INSTANCE_TRANSFORM);
+    // Bodies taken out of a component are placed where that component's instances showed
+    // them, so that nothing moves on screen. Root bodies, and new empty components, start at
+    // the origin.
+    const from =
+      source && source !== doc.assembly.rootComponentId ? listInstances(doc, source) : [];
+    const placements = from.length > 0 ? from : [{ transform: IDENTITY_INSTANCE_TRANSFORM, visible: true }];
+    const instanceIds: string[] = [];
+    for (const p of placements) {
+      let instance: ComponentInstance;
+      [instance, d] = withInstance(d, id, p.transform);
+      if (!p.visible) {
+        d = patchInstances(d, { [instance.id]: { ...instance, visible: false } });
+      }
+      instanceIds.push(instance.id);
+    }
     out.id = id;
-    out.instanceId = instance.id;
+    out.instanceId = instanceIds[0];
+    out.instanceIds = instanceIds;
+    out.sourceComponentId = source;
     out.featureIds = moved.featureIds;
     out.bodyIds = moved.bodyIds;
     return d;

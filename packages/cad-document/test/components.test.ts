@@ -87,6 +87,31 @@ describe("components", () => {
     expect(doc.timeline).toBe(timeline);
   });
 
+  it("takes a body out of a component into a new one, placed like the old one's instances", () => {
+    const store = new DocumentStore(createDocument());
+    const frame: CreatedComponent = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    const a = box(store, 0, frame.id);
+    const b = box(store, 50, frame.id);
+    const second: { id?: string } = {};
+    store.execute(createInstance(frame.id!, second, { position: [0, 100, 0], rotation: [0, 0, 0, 1] }));
+    store.execute(setInstancesVisible([second.id!], false));
+
+    const out: CreatedComponent = {};
+    store.execute(createComponent({ bodyIds: [b.bodyId] }, out));
+    const doc = store.document;
+    expect(out.sourceComponentId).toBe(frame.id);
+    expect(doc.bodies[b.bodyId]!.componentId).toBe(out.id);
+    expect(doc.features[b.extrudeId]!.componentId).toBe(out.id);
+    expect(doc.bodies[a.bodyId]!.componentId).toBe(frame.id);
+    expect(
+      listInstances(doc, out.id).map((i) => [i.transform.position, i.visible]),
+    ).toEqual([
+      [[0, 0, 0], true],
+      [[0, 100, 0], false],
+    ]);
+  });
+
   it("takes along bodies that a Combine ties together", () => {
     const store = new DocumentStore(createDocument());
     const a = box(store, 0);
