@@ -3,6 +3,7 @@ import {
   type CreatedRef,
   DocumentStore,
   addExtrude,
+  addImport,
   addSketch,
   createDocument,
   deserializeDocument,
@@ -52,5 +53,15 @@ describe("history log", () => {
     // The project at the end loads again as it was.
     const json = log.slice(log.indexOf("Project (JSON):\n") + "Project (JSON):\n".length);
     expect(deserializeDocument(json).features).toEqual(store.document.features);
+  });
+
+  it("gives the size of a long value, such as an imported file, instead of the value", () => {
+    const store = new DocumentStore(createDocument());
+    const data = "A".repeat(50_000);
+    store.execute(addImport({ format: "step", fileName: "part.step", data }));
+    const log = historyLog(store.document, {}, {}, { version: "", date: new Date(0), project: false });
+    expect(log).toContain("fileName part.step");
+    expect(log).toContain("data (50000 characters)");
+    expect(log.length).toBeLessThan(1000);
   });
 });
