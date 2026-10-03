@@ -21,6 +21,7 @@ import {
   type MoveFeature,
   type MovedToComponent,
   removeComponents,
+  separationProblem,
   removeInstances,
   renameComponent,
   serializeDocument,
@@ -45,6 +46,37 @@ function box(store: DocumentStore, x: number, componentId?: string) {
   const e: CreatedRef = {};
   store.execute(
     addExtrude({ sketchId: s.id!, profiles: [profileRefOf(detectProfiles(sketch)[0]!)], distance: "5" }, e),
+  );
+  return { sketchId: s.id!, extrudeId: e.id!, bodyId: e.bodyId! };
+}
+
+/** A sketch with a rectangle on a face of `bodyId` (at z = `z`), extruded with `input`. */
+function onFace(
+  store: DocumentStore,
+  bodyId: string,
+  z: number,
+  input: { operation?: "new" | "join" | "cut"; targetBodyIds?: string[] } = {},
+) {
+  const s: CreatedRef = {};
+  const plane = {
+    origin: { x: 0, y: 0, z },
+    normal: { x: 0, y: 0, z: 1 },
+    xDir: { x: 1, y: 0, z: 0 },
+    yDir: { x: 0, y: 1, z: 0 },
+  };
+  const owner = store.document.bodies[bodyId]!.componentId;
+  store.execute(addSketch({ type: "face", bodyId, hint: { x: 1, y: 1, z }, plane }, s, owner));
+  store.execute(
+    updateSketch(s.id!, "Rectangle", (sk) =>
+      editSketch(sk, (b) => {
+        createRectangle2Point(b, { x: 1, y: 1 }, { x: 4, y: 4 });
+      }),
+    ),
+  );
+  const sketch = (store.document.features[s.id!] as SketchFeature).sketch;
+  const e: CreatedRef = {};
+  store.execute(
+    addExtrude({ sketchId: s.id!, profiles: [profileRefOf(detectProfiles(sketch)[0]!)], distance: "2", ...input }, e),
   );
   return { sketchId: s.id!, extrudeId: e.id!, bodyId: e.bodyId! };
 }
@@ -153,6 +185,38 @@ describe("components", () => {
     expect(store.document.bodies[inside.bodyId]!.componentId).toBe(root);
     // Into the component it already belongs to: nothing to do.
     expect(store.execute(moveToComponent({ bodyIds: [inside.bodyId] }, root))).toBe(false);
+  });
+
+  it("separates bodies that only refer to each other's faces", () => {
+    const store = new DocumentStore(createDocument());
+    const frame: CreatedComponent = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    const base = box(store, 0, frame.id);
+    // A lid sketched on a face of the base, and a cut into the base sketched on the lid.
+    const lid = onFace(store, base.bodyId, 5);
+    const cut = onFace(store, lid.bodyId, 7, { operation: "cut", targetBodyIds: [base.bodyId] });
+    expect(separationProblem(store.document, { bodyIds: [lid.bodyId] })).toBeNull();
+    const out: CreatedComponent = {};
+    store.execute(createComponent({ bodyIds: [lid.bodyId] }, out));
+    const doc = store.document;
+    expect(out.bodyIds).toEqual([lid.bodyId]);
+    expect(out.featureIds).toEqual([lid.sketchId, lid.extrudeId]);
+    expect(doc.features[cut.extrudeId]).toBeDefined();
+    // The cut changes the base: it stays, with its sketch, which refers to the lid's face.
+    expect(doc.features[cut.extrudeId]!.componentId).toBe(frame.id);
+    expect(doc.features[cut.sketchId]!.componentId).toBe(frame.id);
+    expect(doc.bodies[base.bodyId]!.componentId).toBe(frame.id);
+  });
+
+  it("explains which feature ties two bodies together", () => {
+    const store = new DocumentStore(createDocument());
+    const base = box(store, 0);
+    const lid = onFace(store, base.bodyId, 5);
+    onFace(store, lid.bodyId, 7, { operation: "join", targetBodyIds: [base.bodyId, lid.bodyId] });
+    const problem = separationProblem(store.document, { bodyIds: [lid.bodyId] });
+    expect(problem).toContain('"Body001" would have to move too');
+    expect(problem).toContain('"Extrude003"');
+    expect(separationProblem(store.document, { bodyIds: [lid.bodyId, base.bodyId] })).toBeNull();
   });
 
   it("takes along bodies that a Combine ties together", () => {
