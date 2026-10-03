@@ -140,3 +140,64 @@ describe("projectCurve", () => {
     expect(edgeOn).toMatchObject({ type: "line" });
   });
 });
+
+describe("projectCurve with the exact edge", () => {
+  // Single-precision samples of a circle about the origin are a little off.
+  const noisy = (r: number, from: number, to: number): Vec3[] =>
+    Array.from({ length: 49 }, (_, i) => {
+      const a = from + ((to - from) * i) / 48;
+      return { x: Math.fround(r * Math.cos(a)) + 2e-6, y: Math.fround(r * Math.sin(a)) - 2e-6, z: 10 };
+    });
+
+  it("takes the center and radius of a circle from the B-Rep", () => {
+    const exact = {
+      curve: "circle" as const,
+      from: { x: 55, y: 0, z: 10 },
+      to: { x: 55, y: 0, z: 10 },
+      center: { x: 1e-15, y: -1e-15, z: 10 },
+      radius: 55,
+    };
+    expect(projectCurve(XY, noisy(55, 0, 2 * Math.PI), undefined, exact)).toEqual({
+      type: "circle",
+      center: { x: 0, y: 0 },
+      radius: 55,
+    });
+  });
+
+  it("takes the ends of arcs and lines from the B-Rep, so that neighbours meet exactly", () => {
+    const end = { x: 0, y: 30, z: 10 };
+    const arc = projectCurve(XY, noisy(30, 0, Math.PI / 2), undefined, {
+      curve: "circle",
+      from: { x: 30, y: 0, z: 10 },
+      to: end,
+      center: { x: 0, y: 0, z: 10 },
+      radius: 30,
+    });
+    expect(arc).toEqual({ type: "arc", center: v0, start: { x: 30, y: 0 }, end: { x: 0, y: 30 } });
+    const line = projectCurve(
+      XY,
+      [
+        { x: 2e-6, y: 30.00001, z: 10 },
+        { x: -20, y: 30, z: 10 },
+      ],
+      undefined,
+      { curve: "line", from: end, to: { x: -20, y: 30, z: 10 } },
+    );
+    expect(line).toEqual({ type: "line", a: { x: 0, y: 30 }, b: { x: -20, y: 30 } });
+  });
+
+  it("leaves a tilted circle, which projects to an ellipse, to the samples", () => {
+    // Turned 60° about the x axis: seen from above it is an ellipse.
+    const tilted = circle3d(8, 0).map((p) => ({ x: p.x, y: 5 + (p.y - 5) * 0.5, z: 5 + (p.y - 5) * Math.sin(Math.PI / 3) }));
+    const shape = projectCurve(XY, tilted, undefined, {
+      curve: "circle",
+      from: tilted[0]!,
+      to: tilted[0]!,
+      center: { x: 10, y: 5, z: 5 },
+      radius: 8,
+    });
+    expect(shape).toMatchObject({ type: "spline", closed: true });
+  });
+});
+
+const v0 = { x: 0, y: 0 };

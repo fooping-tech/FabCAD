@@ -161,6 +161,8 @@ export class KernelError extends Error {
   }
 }
 
+export type SolidProblem = "empty" | "open" | "invalid";
+
 export interface GeometryKernel {
   readonly name: string;
 
@@ -220,7 +222,13 @@ export interface GeometryKernel {
   exportSTEP(shapes: { shape: KernelShape; name: string }[]): Promise<Uint8Array>;
   exportSTL(shapes: KernelShape[], options?: TessellationOptions & { binary?: boolean }): Promise<Uint8Array>;
 
-  /** True when the shape contains at least one solid with positive volume. */
+  /** True when `solidProblem` finds nothing wrong with the shape. */
   isValidSolid(shape: KernelShape): boolean;
+  /**
+   * What is wrong with a shape that should be a solid: nothing there or no volume (`empty`), a
+   * shell with edges that do not join two faces (`open`), or a B-Rep that OpenCASCADE's checker
+   * rejects (`invalid`). Null for a closed, valid solid.
+   */
+  solidProblem(shape: KernelShape): SolidProblem | null;
   dispose(shape: KernelShape): void;
 }

@@ -11,7 +11,8 @@ import {
   snapPoint,
 } from "../src/measure";
 import type { DimensionType, Sketch, SketchDimension } from "../src/model";
-import { emptySketch, v } from "./helpers";
+import { addProjection } from "../src/project";
+import { build, emptySketch, v } from "./helpers";
 
 function fixture(): { sketch: Sketch; ids: Record<string, string> } {
   const b = new SketchBuilder(emptySketch());
@@ -207,5 +208,17 @@ describe("alignPoint", () => {
     const some = alignmentReferences(sketch, [ids.l1a!]);
     expect(all.length).toBe(some.length + 1);
     expect(all).toContainEqual(v(30, 40));
+  });
+
+  it("leaves out the centers of projected circles and arcs", () => {
+    const drawn = build((b) => createCircle(b, v(5, 5), 3));
+    const sketch = addProjection(
+      drawn.sketch,
+      { type: "circle", center: v(-0.00001, 0.00001), radius: 50 },
+      { bodyId: "body-1", source: "edge", hint: { x: 50, y: 0, z: 0 } },
+    )!.sketch;
+    const refs = alignmentReferences(sketch);
+    expect(refs).toContainEqual(v(5, 5));
+    expect(refs).not.toContainEqual(v(-0.00001, 0.00001));
   });
 });

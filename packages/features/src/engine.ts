@@ -4,6 +4,7 @@ import {
   type HoleSpec,
   type KernelShape,
   type LoftSectionInput,
+  type MeshEdgeGroup,
   type PathCurve3,
   type ShapeTransform,
   type TessellationOptions,
@@ -238,6 +239,19 @@ const ORIGIN_AXES: Record<"X" | "Y" | "Z", Vec3> = {
   Y: { x: 0, y: 1, z: 0 },
   Z: { x: 0, y: 0, z: 1 },
 };
+
+/**
+ * Stop unless `shape` is a closed, valid solid. `empty` is what an empty result means for the
+ * feature; a shape with a gap or a broken B-Rep is never reported as a success.
+ */
+function requireSolid(kernel: GeometryKernel, shape: KernelShape, empty: string): void {
+  const problem = kernel.solidProblem(shape);
+  if (problem === "empty") throw new Error(empty);
+  if (problem === "open") {
+    throw new Error("The result is not a closed solid: some edges do not join two faces.");
+  }
+  if (problem === "invalid") throw new Error("The result is not a valid solid.");
+}
 
 function decodeBase64(data: string): Uint8Array {
   const bin = atob(data);
@@ -519,6 +533,7 @@ export class FeatureEngine {
       let points: Vec3[];
       let hint: Vec3;
       let bezier: Vec3[] | undefined;
+      let exact: MeshEdgeGroup | undefined;
       if (ref.source === "silhouette") {
         const index = ref.ref
           ? (resolveFaceRef(ref.ref, body)?.index ?? -1)
@@ -569,8 +584,9 @@ export class FeatureEngine {
         points = edgePolyline(geometry, edge);
         hint = edge.midpoint;
         bezier = edge.bezier;
+        exact = edge;
       }
-      const shape = projectCurve(plane, points, bezier);
+      const shape = projectCurve(plane, points, bezier, exact);
       const live = current.projections.find((r) => r.id === ref.id);
       if (!shape || !live) continue;
       current = updateProjection(current, live, shape, hint) ?? current;
@@ -787,7 +803,7 @@ export class FeatureEngine {
     entry.owned.push(tool);
     const made = this.named(tool, entry.hash, toolNames);
     if (feature.operation === "new") {
-      if (!this.kernel.isValidSolid(tool)) throw new Error("The result is not a valid solid.");
+      requireSolid(this.kernel, tool, "The result is not a valid solid.");
       entry.outputs.set(feature.bodyId, made);
       entry.tools.push({ tool: made, operation: "join", targets: [feature.bodyId] });
       return;
@@ -804,9 +820,7 @@ export class FeatureEngine {
       const target = this.requireBody(bodies, targetId);
       const result = this.kernel.boolean(op, target.shape, [tool]);
       entry.owned.push(result);
-      if (!this.kernel.isValidSolid(result)) {
-        throw new Error("The operation removes the whole body.");
-      }
+      requireSolid(this.kernel, result, "The operation removes the whole body.");
       entry.outputs.set(
         targetId,
         this.named(result, hashString(entry.hash + targetId), (g) =>
@@ -1098,7 +1112,7 @@ export class FeatureEngine {
         }
         const result = this.kernel.boolean(op, state.shape, copies.map((c) => c.shape));
         entry.owned.push(result);
-        if (!this.kernel.isValidSolid(result)) throw new Error("The pattern removes the whole body.");
+        requireSolid(this.kernel, result, "The pattern removes the whole body.");
         state.shape = result;
         state.inputs.push(...copies);
       }
@@ -1348,7 +1362,7 @@ export class FeatureEngine {
           tools.map((t) => t.shape),
         );
         entry.owned.push(result);
-        if (!kernel.isValidSolid(result)) throw new Error("The result is empty.");
+        requireSolid(kernel, result, "The result is empty.");
         entry.outputs.set(
           feature.targetBodyId,
           this.named(result, entry.hash, (g) => propagateNames([target, ...tools], g, feature.id)),

@@ -119,7 +119,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Start a sketch on an origin plane, a construction plane or a flat face.",
     what: [
       "Asks for the plane of the sketch and opens the sketch environment, looking straight at the plane.",
-      "A sketch on a face starts with the outline of the face projected into it, and follows the face when the body changes. A sketch on a construction plane follows that plane.",
+      "A sketch on a face starts with the outline of the face projected into it, and follows the face when the body changes. The outline does not cut what you draw: a closed shape drawn across it stays one profile. A sketch on a construction plane follows that plane.",
     ],
     requires: ["A plane or a flat face. One that is already selected is used directly."],
     limitations: ["Curved faces cannot carry a sketch."],
@@ -299,6 +299,7 @@ export const HELP: Record<string, HelpEntry> = {
       "A curved face also gives its silhouette: where it turns away from the sketch plane. A cylinder seen from the side becomes a rectangle, a sphere a circle. Edges that land on the same line (the seams of a cylinder seen from the side) are projected once.",
       "Curved edges made from sketch splines (and ellipses) are projected exactly, as control splines, so that a profile drawn on the projection matches the faces of the body.",
       "Projected geometry follows the body when the body changes.",
+      "Projected geometry is a reference for profiles: it does not cut a region that drawn curves enclose. A ring drawn across the edge of a face is extruded as the whole ring. Where nothing is drawn, the projection makes regions of its own: the face itself, the face around a drawn hole, or the parts of the face a drawn line divides.",
     ],
     when: ["To dimension or constrain against what is already there."],
     limitations: ["Projected geometry cannot be dragged: it is where the body puts it."],
@@ -648,7 +649,10 @@ export const HELP: Record<string, HelpEntry> = {
   "solid.combine": {
     title: "Combine",
     summary: "Join bodies, cut one from another, or keep what they share.",
-    what: ["The tool bodies are joined to, cut from or intersected with the target body."],
+    what: [
+      "The tool bodies are joined to, cut from or intersected with the target body.",
+      "The result is checked: when it is not a closed, valid solid, or has a volume the operation cannot give (a join smaller than one of its bodies), Combine reports an error instead of keeping a broken body.",
+    ],
     requires: ["A target body and at least one tool body."],
     parameters: [
       { name: "Operation", text: "Join, Cut or Intersect." },

@@ -37,6 +37,7 @@ import {
   type PathCurve3,
   type PointRef,
   type ShapeTransform,
+  type SolidProblem,
   type SweepOptions,
   type SurfaceKind,
   type TessellationOptions,
@@ -300,7 +301,17 @@ interface OcPipeShell extends OcDeletable {
   MakeSolid(): boolean;
   Shape(): unknown;
 }
+interface OcAnalyzer extends OcDeletable {
+  IsValid(): boolean;
+}
 interface OcSubset {
+  BRepCheck_Analyzer: new (
+    shape: unknown,
+    geomControls: boolean,
+    parallel: boolean,
+    exact: boolean,
+  ) => OcAnalyzer;
+  BRep_Tool: { IsClosed(shape: unknown): boolean };
   BRepOffsetAPI_MakePipeShell: new (spine: unknown) => OcPipeShell;
   BRepBuilderAPI_TransitionMode: { BRepBuilderAPI_RightCorner: unknown };
   gp_Dir: new (x: number, y: number, z: number) => OcDeletable;
@@ -393,8 +404,45 @@ class ReplicadKernel implements GeometryKernel {
         else if (op === "cut") result = result.cut(t);
         else result = result.intersect(t);
       }
+      this.checkBoolean(op, target, tools, wrap(result));
       return wrap(result);
     });
+  }
+
+  /**
+   * OpenCASCADE can return a broken shape from a Boolean of valid solids without reporting an
+   * error. Refuse it rather than pass it on: an open shell, a B-Rep that fails the checker, or a
+   * volume that the operation cannot produce (a union smaller than one of its inputs).
+   */
+  private checkBoolean(
+    op: BooleanOp,
+    target: KernelShape,
+    tools: KernelShape[],
+    result: KernelShape,
+  ): void {
+    const inputs = [target, ...tools];
+    if (inputs.some((s) => this.solidProblem(s) !== null)) return;
+    const problem = this.solidProblem(result);
+    if (problem === "open" || problem === "invalid") {
+      throw new KernelError(
+        `Boolean failed: the result is not a closed solid (${problem === "open" ? "some edges do not join two faces" : "the B-Rep is invalid"}).`,
+      );
+    }
+    if (problem === "empty") return;
+    const volumes = inputs.map((s) => replicad.measureVolume(unwrap(s)));
+    const volume = replicad.measureVolume(unwrap(result));
+    const tolerance = 1e-6 * Math.max(...volumes) + 1e-6;
+    const wrong =
+      op === "union"
+        ? volume < Math.max(...volumes) - tolerance
+        : op === "cut"
+          ? volume > volumes[0]! + tolerance
+          : volume > Math.min(...volumes) + tolerance;
+    if (wrong) {
+      throw new KernelError(
+        `Boolean failed: the result has a volume that a ${op} of these bodies cannot have.`,
+      );
+    }
   }
 
   private findEdges(shape: Shape3D, refs: PointRef[]): replicad.Edge[] {
@@ -811,11 +859,29 @@ class ReplicadKernel implements GeometryKernel {
   }
 
   isValidSolid(shape: KernelShape): boolean {
+    return this.solidProblem(shape) === null;
+  }
+
+  solidProblem(shape: KernelShape): SolidProblem | null {
+    let s: Shape3D;
     try {
-      const s = unwrap(shape);
-      return !s.isNull && s.faces.length > 0 && replicad.measureVolume(s) > 1e-9;
+      s = unwrap(shape);
+      if (s.isNull || s.faces.length === 0 || !(replicad.measureVolume(s) > 1e-9)) return "empty";
     } catch {
-      return false;
+      return "empty";
+    }
+    try {
+      const oc = openCascade();
+      // Every edge of a shell must join exactly two faces, or the "solid" has a gap.
+      for (const shell of replicad.iterTopo(s.wrapped, "shell")) {
+        if (!oc.BRep_Tool.IsClosed(shell)) return "open";
+      }
+      const analyzer = new oc.BRepCheck_Analyzer(s.wrapped, true, false, false);
+      const valid = analyzer.IsValid();
+      analyzer.delete();
+      return valid ? null : "invalid";
+    } catch {
+      return "invalid";
     }
   }
 

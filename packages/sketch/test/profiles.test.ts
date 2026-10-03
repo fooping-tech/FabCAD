@@ -26,6 +26,8 @@ import {
   regionAtPoint,
   resolveProfileRef,
 } from "../src/profiles";
+import { addProjection } from "../src/project";
+import type { Sketch } from "../src/model";
 import { build, v } from "./helpers";
 
 function expectContiguous(loop: Loop2): void {
@@ -353,5 +355,86 @@ describe("profile references", () => {
     expect(resolveProfileRef(regions, partial)).toBe(regions[0]);
     expect(resolveProfileRef(regions, { entityIds: ["gone"], point: v(5, 5) })).toBe(regions[0]);
     expect(resolveProfileRef(regions, { entityIds: ["gone"], point: v(500, 5) })).toBeUndefined();
+  });
+});
+
+describe("projected geometry", () => {
+  const from = { bodyId: "body-1", source: "edge" as const };
+  /** Project circles about the origin, as the outline of a ring face. */
+  const projectRing = (sketch: Sketch, radii: number[]): Sketch =>
+    radii.reduce(
+      (current, radius, i) =>
+        addProjection(
+          current,
+          { type: "circle", center: v(0, 0), radius },
+          { ...from, hint: { x: radius, y: 0, z: i } },
+        )!.sketch,
+      sketch,
+    );
+
+  it("does not cut a region the drawn curves enclose", () => {
+    const drawn = build((b) => [createCircle(b, v(25, 0), 25), createCircle(b, v(25, 0), 30)]);
+    const sketch = projectRing(drawn.sketch, [55, 50]);
+    const regions = detectProfiles(sketch);
+    const [inner, outer] = drawn.out.map((c) => c.entities[0]!);
+    const ring = regionAtPoint(regions, v(25, 27.5))!;
+    expect(ring.entityIds).toEqual([outer]);
+    expect(ring.holeEntityIds).toEqual([[inner]]);
+    expect(ring.area).toBeCloseTo(Math.PI * (30 * 30 - 25 * 25), 6);
+    const disk = regionAtPoint(regions, v(25, 0))!;
+    expect(disk.entityIds).toEqual([inner]);
+    // Where nothing is drawn, the projected outline still makes regions: the rest of the face.
+    const rest = regionAtPoint(regions, v(-52.5, 0))!;
+    expect(rest.entityIds).toContain(outer);
+    expect(rest.area).toBeLessThan(Math.PI * (55 * 55 - 50 * 50));
+    // No region overlaps another one.
+    for (const r of regions) {
+      for (const q of regions) {
+        if (r === q) continue;
+        expect(regionAtPoint([q], r.interiorPoint)).toBeUndefined();
+      }
+    }
+  });
+
+  it("closes regions with drawn curves that end on the projection", () => {
+    const base = build((b) => createLine(b, v(0, -20), v(0, 20)));
+    const sketch = [
+      [v(-20, -20), v(20, -20)],
+      [v(20, -20), v(20, 20)],
+      [v(20, 20), v(-20, 20)],
+      [v(-20, 20), v(-20, -20)],
+    ].reduce(
+      (current, [a, b], i) =>
+        addProjection(current, { type: "line", a: a!, b: b! }, { ...from, hint: { x: i, y: 0, z: 0 } })!
+          .sketch,
+      base.sketch,
+    );
+    const regions = detectProfiles(sketch);
+    expect(regions).toHaveLength(2);
+    expect(regions.map((r) => r.area)).toEqual([800, 800].map((a) => expect.closeTo(a, 6)));
+  });
+
+  it("treats a circle drawn twice on the same place as one", () => {
+    const once = build((b) => [createCircle(b, v(25, 0), 25), createCircle(b, v(25, 0), 30)]);
+    const twice = build(
+      (b) => [
+        createCircle(b, v(25, 0), 25),
+        createCircle(b, v(25, 0), 30),
+        createCircle(b, v(25, 0), 30),
+        createCircle(b, v(25, 0), 25),
+      ],
+      projectRing(once.sketch, []),
+    );
+    const areas = (sketch: Sketch): number[] =>
+      detectProfiles(projectRing(sketch, [55, 50])).map((r) => r.area);
+    expect(areas(twice.sketch).slice(0, 4)).toEqual(areas(once.sketch).slice(0, 4).map((a) => expect.closeTo(a, 6)));
+    expect(areas(twice.sketch)).toHaveLength(areas(once.sketch).length);
+  });
+
+  it("makes the regions of the projection alone in a sketch with nothing drawn", () => {
+    const sketch = projectRing(build(() => null).sketch, [55, 50]);
+    const regions = detectProfiles(sketch);
+    expect(regions).toHaveLength(2);
+    expect(regionAtPoint(regions, v(52.5, 0))!.area).toBeCloseTo(Math.PI * (55 * 55 - 50 * 50), 6);
   });
 });

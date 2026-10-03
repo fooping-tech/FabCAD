@@ -123,12 +123,83 @@ export function projectPolyline(plane: Plane3, points: readonly Vec3[]): Project
   return picked.length >= 2 ? { type: "spline", points: picked, closed } : null;
 }
 
+/** What the B-Rep knows exactly about an edge, beyond its sampled points. */
+export interface ExactEdge {
+  curve: "line" | "circle" | "other";
+  from: Vec3;
+  to: Vec3;
+  /** For circles and circular arcs. */
+  center?: Vec3;
+  radius?: number;
+}
+
 /**
  * Project an edge. A Bézier edge (`bezier`: its control points) projects exactly to the
  * Bézier of the projected control points, which a control spline holds as it is; anything else
- * is recognised from the sampled `points` (`projectPolyline`).
+ * is recognised from the sampled `points` (`projectPolyline`). With `exact`, the recognised
+ * shape takes its end points, and a circle its center and radius, from the B-Rep instead of
+ * the single-precision samples: the ends of neighbouring edges then meet exactly, and a circle
+ * concentric with the sketch origin has its center exactly there.
  */
 export function projectCurve(
+  plane: Plane3,
+  points: readonly Vec3[],
+  bezier?: readonly Vec3[],
+  exact?: ExactEdge,
+): ProjectedShape | null {
+  const shape = projectSampled(plane, points, bezier);
+  return shape && exact ? snapToExact(plane, shape, exact) : shape;
+}
+
+/** Normalise exact values: drop the last bits of rounding noise and negative zero. */
+const tidy = (v: number): number => {
+  const r = Math.round(v * 1e9) / 1e9;
+  return Object.is(r, -0) ? 0 : r;
+};
+
+function snapToExact(plane: Plane3, shape: ProjectedShape, edge: ExactEdge): ProjectedShape {
+  const at = (p: Vec3): Vec2 => {
+    const q = worldToPlane(plane, p);
+    return { x: tidy(q.x), y: tidy(q.y) };
+  };
+  const from = at(edge.from);
+  const to = at(edge.to);
+  // Which exact end each end of the recognised shape is.
+  const ends = (a: Vec2, b: Vec2): [Vec2, Vec2] =>
+    dist2(a, from) + dist2(b, to) <= dist2(a, to) + dist2(b, from) ? [from, to] : [to, from];
+  const near = (a: Vec2, b: Vec2): boolean => dist2(a, b) <= 1e-3;
+  switch (shape.type) {
+    case "line": {
+      // A curve seen edge-on also becomes a line, but its ends are not those of the edge.
+      if (edge.curve !== "line" || (!near(shape.a, from) && !near(shape.a, to))) return shape;
+      const [a, b] = ends(shape.a, shape.b);
+      return { type: "line", a, b };
+    }
+    case "circle":
+    case "arc": {
+      if (edge.curve !== "circle" || !edge.center || edge.radius === undefined) return shape;
+      const center = at(edge.center);
+      // The circle lies parallel to the sketch: its radius is that of the edge.
+      if (dist2(center, shape.center) > 1e-3) return shape;
+      if (shape.type === "circle") return { type: "circle", center, radius: tidy(edge.radius) };
+      if (!near(shape.start, from) && !near(shape.start, to)) return shape;
+      const [start, end] = ends(shape.start, shape.end);
+      return { type: "arc", center, start, end };
+    }
+    case "spline": {
+      if (shape.closed || shape.kind === "control" || shape.points.length < 2) return shape;
+      const points = shape.points.slice();
+      const [first, last] = ends(points[0]!, points[points.length - 1]!);
+      points[0] = first;
+      points[points.length - 1] = last;
+      return { ...shape, points };
+    }
+    default:
+      return shape;
+  }
+}
+
+function projectSampled(
   plane: Plane3,
   points: readonly Vec3[],
   bezier?: readonly Vec3[],

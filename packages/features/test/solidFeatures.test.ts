@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import type { BodyGeometry, GeometryKernel } from "@fabcad/brep";
+import { type BodyGeometry, type GeometryKernel, edgePolyline, faceEdges } from "@fabcad/brep";
 import {
   type BodyOperation,
   type CircularPatternFeature,
@@ -11,6 +11,7 @@ import {
   type SketchFeature,
   type SplitFeature,
   addAlign,
+  addBoolean,
   addCircularPattern,
   addExtrude,
   addFillet,
@@ -39,6 +40,7 @@ import {
   type Sketch,
   type SketchBuilder,
   type SketchPlaneRef,
+  addProjection,
   createArcCenter,
   createCircle,
   createLine,
@@ -48,6 +50,7 @@ import {
   detectProfiles,
   editSketch,
   profileRefOf,
+  projectCurve,
   regionAtPoint,
 } from "@fabcad/sketch";
 import { createDefaultSolver } from "@fabcad/sketch-solver";
@@ -208,6 +211,74 @@ function onFace(ctx: Ctx, bodyId: string, center: Vec3): SketchPlaneRef {
 }
 
 const circleArea = (d: number): number => (Math.PI * d * d) / 4;
+
+// ------------------------------------------- sketch on a face, outline projected
+
+describe("sketch on a face with its outline projected", () => {
+  /**
+   * A ring R25 / R30 drawn on the top of a ring R50 / R55, crossing its inner edge and touching
+   * its outer one (issue #8). The projected outline must not cut the drawn ring, and the union
+   * of the two rings is one closed solid.
+   */
+  it("extrudes the drawn ring whole and unites it with the body below", async () => {
+    const ctx = context();
+    const base = sketch(ctx, XY, (b) => [createCircle(b, { x: 0, y: 0 }, 55), createCircle(b, { x: 0, y: 0 }, 50)]);
+    const e1: CreatedRef = {};
+    ctx.store.execute(
+      addExtrude({ sketchId: base.id, profiles: [profileAt(ctx, base.id, { x: 52.5, y: 0 })], distance: "10" }, e1),
+    );
+    await compute(ctx);
+    const below = geometry(ctx, e1.bodyId!).volume;
+    expect(below).toBeCloseTo(Math.PI * (55 * 55 - 50 * 50) * 10, 0);
+
+    const g = geometry(ctx, e1.bodyId!);
+    const top = g.faces.findIndex((f) => f.surface === "plane" && f.normal.z > 0.99);
+    const plane = makePlane({ x: 0, y: 0, z: 10 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 });
+    const onTop: SketchPlaneRef = {
+      type: "face",
+      bodyId: e1.bodyId!,
+      hint: { x: 52.5, y: 0, z: 10 },
+      plane,
+      ref: makeFaceRef(body(ctx, e1.bodyId!), top)!,
+    };
+    const s = sketch(ctx, onTop, (b) => [createCircle(b, { x: 25, y: 0 }, 25), createCircle(b, { x: 25, y: 0 }, 30)]);
+    // As the app does: the outline of the face is projected into the new sketch.
+    ctx.store.execute(
+      updateSketch(s.id, "Project", (sk) =>
+        faceEdges(g, top).reduce((current, edge) => {
+          const shape = projectCurve(plane, edgePolyline(g, edge), edge.bezier, edge)!;
+          return addProjection(current, shape, { bodyId: e1.bodyId!, source: "edge", hint: edge.midpoint })!.sketch;
+        }, sk),
+      ),
+    );
+    const sk = sketchOf(ctx, s.id);
+    // The projected circles are exactly concentric with the sketch origin.
+    for (const ref of sk.projections) {
+      const circle = ref.entityIds.map((id) => sk.entities[id]).find((x) => x?.type === "circle");
+      if (circle?.type !== "circle") continue;
+      expect(sk.entities[circle.center]).toMatchObject({ x: 0, y: 0 });
+    }
+
+    const [inner, outer] = s.made.map((c) => c.entities[0]!);
+    const ring = profileAt(ctx, s.id, { x: 25, y: 27.5 });
+    expect(ring.entityIds).toEqual([outer]);
+    const region = regionAtPoint(detectProfiles(sk), { x: 25, y: 27.5 })!;
+    expect(region.holeEntityIds).toEqual([[inner]]);
+    expect(region.area).toBeCloseTo(Math.PI * (30 * 30 - 25 * 25), 3);
+
+    const e2: CreatedRef = {};
+    ctx.store.execute(addExtrude({ sketchId: s.id, profiles: [ring], distance: "10" }, e2));
+    await compute(ctx);
+    const upper = geometry(ctx, e2.bodyId!).volume;
+    expect(upper).toBeCloseTo(Math.PI * (30 * 30 - 25 * 25) * 10, 0);
+
+    ctx.store.execute(addBoolean({ operation: "union", targetBodyId: e1.bodyId!, toolBodyIds: [e2.bodyId!] }));
+    await compute(ctx);
+    const union = geometry(ctx, e1.bodyId!).volume;
+    expect(union).toBeGreaterThanOrEqual(Math.max(below, upper) - 1e-6);
+    expect(union).toBeCloseTo(below + upper, 0);
+  });
+});
 
 // --------------------------------------------------------------------- hole
 
