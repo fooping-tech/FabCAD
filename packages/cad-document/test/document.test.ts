@@ -6,16 +6,19 @@ import {
   type CreatedRef,
   type ExtrudeFeature,
   type SketchFeature,
+  addBoolean,
   addExtrude,
   addFillet,
   addParameter,
   addSketch,
   affectedFeatures,
   buildDependencyGraph,
+  consumedBodies,
   createDocument,
   deserializeDocument,
   downstream,
   featureNode,
+  listBodies,
   paramNode,
   removeFeatures,
   renameParameter,
@@ -226,5 +229,42 @@ describe("save / load", () => {
     expect(() =>
       deserializeDocument(JSON.stringify({ format: "fabcad", formatVersion: 99, document: {} })),
     ).toThrow(/newer/);
+  });
+});
+
+describe("bodies at the history marker", () => {
+  function block(store: DocumentStore, x: number): string {
+    const s: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, s));
+    store.execute(
+      updateSketch(s.id!, "Rectangle", (sk) =>
+        editSketch(sk, (b) => void createRectangle2Point(b, { x, y: 0 }, { x: x + 10, y: 10 })),
+      ),
+    );
+    const region = detectProfiles((store.document.features[s.id!] as SketchFeature).sketch)[0]!;
+    const e: CreatedRef = {};
+    store.execute(addExtrude({ sketchId: s.id!, profiles: [profileRefOf(region)], distance: "5" }, e));
+    return e.bodyId!;
+  }
+
+  it("leaves out the bodies that Combine joined into another", () => {
+    const store = new DocumentStore(createDocument("Join"));
+    const a = block(store, 0);
+    const b = block(store, 5);
+    const c: CreatedRef = {};
+    store.execute(addBoolean({ operation: "union", targetBodyId: a, toolBodyIds: [b] }, c));
+    expect(listBodies(store.document).map((x) => x.id)).toEqual([a]);
+    expect(consumedBodies(store.document)).toEqual(new Map([[b, c.id]]));
+    // The record stays: before the Combine, or with it suppressed, both bodies are there.
+    expect(store.document.bodies[b]).toBeDefined();
+    const at = store.document.timeline.indexOf(c.id!);
+    store.execute(setTimelineCursor(at));
+    expect(listBodies(store.document).map((x) => x.id)).toEqual([a, b]);
+    store.execute(setTimelineCursor(null));
+    store.execute(updateFeature(c.id!, { suppressed: true }));
+    expect(listBodies(store.document).map((x) => x.id)).toEqual([a, b]);
+    // Keeping the tools keeps them listed.
+    store.execute(updateFeature(c.id!, { suppressed: false, keepTools: true }));
+    expect(listBodies(store.document).map((x) => x.id)).toEqual([a, b]);
   });
 });
