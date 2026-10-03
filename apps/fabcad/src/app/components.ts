@@ -7,6 +7,8 @@ import {
   createInstance,
   duplicateInstances,
   listInstances,
+  type MovedToComponent,
+  moveToComponent,
   removeComponents,
   removeInstances,
   validComponentId,
@@ -106,6 +108,48 @@ export function newComponent(): void {
       ((out.instanceIds?.length ?? 0) > 1 ? `, placed at the ${out.instanceIds!.length} instances of ${from}.` : "."),
     "info",
     6000,
+  );
+}
+
+/**
+ * Give bodies to another component (`targetId`; the root's id for the root), as dropped on it
+ * in the Browser. Steps they cannot be separated from go along, and a Move step is added when
+ * the two components are placed differently, so that the bodies stay where they are seen.
+ */
+export function moveBodiesToComponent(bodyIds: readonly string[], targetId: string): void {
+  const doc = documentStore.document;
+  const owners = new Set(bodyIds.map((id) => doc.bodies[id]?.componentId));
+  if (owners.size !== 1) {
+    toast("The bodies belong to different components. Drag the bodies of one component at a time.", "warning");
+    return;
+  }
+  if (owners.has(targetId)) return;
+  const out: MovedToComponent = {};
+  if (!run(moveToComponent({ bodyIds }, targetId, out))) return;
+  const after = documentStore.document;
+  const root = after.assembly.rootComponentId;
+  const name = targetId === root ? "the root" : (after.assembly.components[targetId]?.name ?? "the component");
+  const moved = out.bodyIds?.length ?? 0;
+  const extra = moved - bodyIds.length;
+  const target = after.assembly.components[targetId];
+  const several =
+    out.moveId !== undefined && targetId !== root && listInstances(after, targetId).length > 1;
+  toast(
+    `Moved ${moved} ${moved === 1 ? "body" : "bodies"} and ${out.featureIds?.length ?? 0} steps into ${name}` +
+      (extra > 0 ? ` (${extra} more ${extra === 1 ? "body was" : "bodies were"} tied to them)` : "") +
+      "." +
+      (out.moveId
+        ? ` A Move step at the end keeps ${moved === 1 ? "it" : "them"} where ${moved === 1 ? "it was" : "they were"}` +
+          (several ? `, matched to ${listInstances(after, targetId)[0]!.name} (${target?.name} has several instances).` : ".")
+        : ""),
+    "info",
+    7000,
+  );
+  // In a component the bodies are seen through its instances: select it, which highlights them.
+  setSelection(
+    targetId === root
+      ? (out.bodyIds ?? []).filter((id) => after.bodies[id]).map((bodyId) => ({ kind: "body" as const, bodyId }))
+      : [{ kind: "component", componentId: targetId }],
   );
 }
 

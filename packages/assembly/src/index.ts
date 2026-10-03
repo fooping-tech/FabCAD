@@ -216,6 +216,47 @@ export function instanceTransformFromMatrix(m: readonly number[]): InstanceTrans
   return { position: [px, py, pz], rotation: normalizeQuaternion(q) };
 }
 
+type Quaternion = [number, number, number, number];
+
+function multiplyQuaternions(a: readonly number[], b: readonly number[]): Quaternion {
+  const [ax, ay, az, aw] = a as Quaternion;
+  const [bx, by, bz, bw] = b as Quaternion;
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ];
+}
+
+function rotateByQuaternion(q: readonly number[], v: readonly number[]): [number, number, number] {
+  const [x, y, z, w] = normalizeQuaternion(q);
+  const r = multiplyQuaternions(multiplyQuaternions([x, y, z, w], [v[0]!, v[1]!, v[2]!, 0]), [-x, -y, -z, w]);
+  return [r[0], r[1], r[2]];
+}
+
+/** `a` after `b`: a point is placed by `b` first, then by `a`. */
+export function composeInstanceTransforms(a: InstanceTransform, b: InstanceTransform): InstanceTransform {
+  const moved = rotateByQuaternion(a.rotation, b.position);
+  return {
+    position: [moved[0] + a.position[0], moved[1] + a.position[1], moved[2] + a.position[2]],
+    rotation: normalizeQuaternion(multiplyQuaternions(a.rotation, b.rotation)),
+  };
+}
+
+export function invertInstanceTransform(t: InstanceTransform): InstanceTransform {
+  const [x, y, z, w] = normalizeQuaternion(t.rotation);
+  const inverse: Quaternion = [-x, -y, -z, w];
+  const p = rotateByQuaternion(inverse, t.position);
+  return { position: [-p[0], -p[1], -p[2]], rotation: inverse };
+}
+
+/** Whether a placement leaves everything where it is (within `tolerance` mm / radians). */
+export function isIdentityTransform(t: InstanceTransform, tolerance = 1e-9): boolean {
+  const [x, y, z] = normalizeQuaternion(t.rotation);
+  return Math.hypot(...t.position) <= tolerance && Math.hypot(x, y, z) <= tolerance;
+}
+
 export function normalizeQuaternion(q: readonly number[]): [number, number, number, number] {
   const [x = 0, y = 0, z = 0, w = 1] = q;
   const len = Math.hypot(x, y, z, w);

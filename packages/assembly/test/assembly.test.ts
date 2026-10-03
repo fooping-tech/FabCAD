@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   IDENTITY_INSTANCE_TRANSFORM,
   anglesFromQuaternion,
+  composeInstanceTransforms,
   instanceMatrix,
   instanceTransformFromMatrix,
+  invertInstanceTransform,
+  isIdentityTransform,
   quaternionFromAngles,
   ROOT_INSTANCE_ID,
   addComponent,
@@ -92,5 +95,18 @@ describe("assembly model", () => {
     const back = instanceTransformFromMatrix(instanceMatrix(t));
     expect(back.position).toEqual([1, 2, 3]);
     back.rotation.forEach((v, k) => expect(v).toBeCloseTo(t.rotation[k]!));
+  });
+
+  it("composes and inverts placements like their matrices", () => {
+    const a = { position: [5, -2, 7] as [number, number, number], rotation: quaternionFromAngles(20, 0, 70) };
+    const b = { position: [1, 2, 3] as [number, number, number], rotation: quaternionFromAngles(-30, 45, 10) };
+    const p = { x: 3, y: -1, z: 2 };
+    const ab = transformPoint(instanceMatrix(composeInstanceTransforms(a, b)), p);
+    const expected = transformPoint(instanceMatrix(a), transformPoint(instanceMatrix(b), p));
+    expect(ab.x).toBeCloseTo(expected.x);
+    expect(ab.y).toBeCloseTo(expected.y);
+    expect(ab.z).toBeCloseTo(expected.z);
+    expect(isIdentityTransform(composeInstanceTransforms(invertInstanceTransform(a), a), 1e-9)).toBe(true);
+    expect(isIdentityTransform(a)).toBe(false);
   });
 });
