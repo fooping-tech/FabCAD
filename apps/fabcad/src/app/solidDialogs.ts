@@ -886,10 +886,7 @@ export function solidDialogProblem(dialog: SolidDialog, doc: CadDocument, scope:
       return dialog.toPoint ? null : "Select the point to align with";
     case "split":
       if (!dialog.bodyId || !doc.bodies[dialog.bodyId]) return "Select the body to split";
-      if (!dialog.tool) return "Select a splitting plane";
-      return dialog.tool.type === "face" && dialog.tool.bodyId === dialog.bodyId
-        ? "Select a face of another body, or an origin plane"
-        : null;
+      return dialog.tool ? null : "Select a splitting plane";
     case "sweep": {
       if (!dialog.sketchId || dialog.profiles.length === 0) return "Select a profile";
       const sketch = sketchOf(doc, dialog.pathSketchId);

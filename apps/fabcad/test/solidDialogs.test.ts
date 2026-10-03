@@ -776,9 +776,8 @@ describe("why a dialog cannot be applied", () => {
     expect(problem(SPLIT)).toBe("Select the body to split");
     expect(problem({ ...SPLIT, bodyId: a.bodyId })).toBe("Select a splitting plane");
     const face = { kind: "face" as const, point: { x: 0, y: 0, z: 0 } };
-    expect(problem({ ...SPLIT, bodyId: a.bodyId, tool: { type: "face", bodyId: a.bodyId, ref: face } })).toMatch(
-      /another body/,
-    );
+    // A face of the body itself is fine: its plane may run through the body (a step).
+    expect(problem({ ...SPLIT, bodyId: a.bodyId, tool: { type: "face", bodyId: a.bodyId, ref: face } })).toBeNull();
     expect(problem({ ...SPLIT, bodyId: a.bodyId, tool: { type: "origin-plane", plane: "YZ" } })).toBeNull();
 
     const profile = profileAt(doc, a.sketchId, { x: 50, y: 40 });
