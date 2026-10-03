@@ -3,6 +3,7 @@ import { resolveSketchPlane } from "@fabcad/features";
 import type { Plane3, Vec2 } from "@fabcad/geometry";
 import { resolveProfileRefs } from "@fabcad/sketch";
 import type { Dialog } from "../app/appState";
+import { reachSpan } from "../app/extrudeTarget";
 import { currentScope, sketchView } from "../app/session";
 
 /**
@@ -23,9 +24,11 @@ export interface ExtrudeManipulator {
   removing: boolean;
 }
 
+/** `reach`: how far the extrusion goes when it goes up to a target (`extrudeTargetReach`). */
 export function extrudeManipulator(
   doc: CadDocument,
   dialog: ExtrudeDialog,
+  reach: number | null = null,
 ): ExtrudeManipulator | null {
   if (!dialog.sketchId || dialog.profiles.length === 0) return null;
   const f = doc.features[dialog.sketchId];
@@ -39,14 +42,21 @@ export function extrudeManipulator(
   if (regions.length === 0) return null;
 
   let distance: number | null = null;
-  try {
-    distance = evaluateAs(dialog.distance, "length", currentScope(doc));
-  } catch {
-    distance = null;
+  let from: number;
+  let to: number;
+  if (dialog.extent === "to") {
+    distance = reach;
+    [from, to] = reach === null ? [0, 0] : reachSpan(reach);
+  } else {
+    try {
+      distance = evaluateAs(dialog.distance, "length", currentScope(doc));
+    } catch {
+      distance = null;
+    }
+    const d = distance ?? 0;
+    [from, to] =
+      dialog.direction === "symmetric" ? [-d / 2, d / 2] : dialog.direction === "negative" ? [-d, 0] : [0, d];
   }
-  const d = distance ?? 0;
-  const [from, to] =
-    dialog.direction === "symmetric" ? [-d / 2, d / 2] : dialog.direction === "negative" ? [-d, 0] : [0, d];
 
   return {
     plane: resolveSketchPlane(f.sketch.plane),

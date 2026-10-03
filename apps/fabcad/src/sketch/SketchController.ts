@@ -27,6 +27,7 @@ import {
   getPoint,
   hitTestSketch,
   hitTestText,
+  isCurve,
   resolveProfileRefs,
   measureDimension,
   offsetEntities,
@@ -47,6 +48,8 @@ import {
 import {
   type Selection,
   appState,
+  isAdditiveClick,
+  isSelected,
   lastViewportPoint,
   select,
   selectionKey,
@@ -783,7 +786,20 @@ export class SketchController {
         this.openDimensionEditor(feature, label.id, false);
         return true;
       }
-      if (!this.hitEntity(feature.sketch, p)) {
+      const hit = this.hitEntity(feature.sketch, p, { points: false });
+      if (hit && isCurve(hit)) {
+        // A curve: the chain it belongs to, as in Fusion (a rectangle: its four sides).
+        const chain = connectedChain(feature.sketch, hit.id);
+        const items: Selection[] = chain.map((entityId) => ({ kind: "entity", sketchId: feature.id, entityId }));
+        const additive = isAdditiveClick({ shiftKey: p.shift, metaKey: p.meta, ctrlKey: false });
+        const keep = additive
+          ? appState.get().selection.filter((s) => !items.some((i) => isSelected([i], s)))
+          : [];
+        appState.set({ selection: [...keep, ...items] });
+        this.requestDraw();
+        return true;
+      }
+      if (!hit) {
         const text = this.hitText(feature.sketch, p);
         if (text) editText(feature.id, text);
       }
@@ -1266,7 +1282,19 @@ export class SketchController {
         // Another curve: the offset that was waiting is kept, and the new one starts.
         if (appState.get().sketchOffset) commitOffset();
         const current = this.activeFeature() ?? feature;
-        const chain = connectedChain(current.sketch, curve.id);
+        // Curves selected together (a chain picked by double-click, or several picked by hand)
+        // are offset together when one of them is clicked; otherwise the chain of the curve.
+        const selected = appState
+          .get()
+          .selection.flatMap((s) =>
+            s.kind === "entity" && s.sketchId === feature.id && isCurve(current.sketch.entities[s.entityId])
+              ? [s.entityId]
+              : [],
+          );
+        const chain =
+          selected.length > 1 && selected.includes(curve.id)
+            ? selected
+            : connectedChain(current.sketch, curve.id);
         const distance = options.offsetDistance;
         const side = offsetSideAt(current.sketch, chain, distance, at);
         if (side === null) {

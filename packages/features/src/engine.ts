@@ -99,6 +99,7 @@ import {
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
 import { type PlanePatch, facePlanePatch, offsetPlanePatch, originPlanePatch } from "./planes";
+import { extrudeReach } from "./extrudeTo";
 import { freeMoveSteps } from "./move";
 import { resolveSketchPlane, solveSketchWithParameters } from "./sketchSolve";
 
@@ -1279,14 +1280,28 @@ export class FeatureEngine {
           feature.sketchId,
           feature.profiles,
         );
-        const d = evaluateAs(feature.distance, "length", scope);
-        if (Math.abs(d) < 1e-9) throw new Error("Distance must not be zero.");
-        const [from, to] =
-          feature.direction === "symmetric"
-            ? [-d / 2, d / 2]
-            : feature.direction === "negative"
-              ? [-d, 0]
-              : [0, d];
+        let from: number;
+        let to: number;
+        if (feature.to) {
+          // Up to the target, measured again every time, on whichever side it is.
+          const target = feature.to;
+          const reach = extrudeReach(
+            sketch.plane,
+            target.type === "origin-plane" || target.type === "face" || target.type === "plane"
+              ? { plane: this.resolvePlane(target, bodies) }
+              : { point: this.resolvePoint(target, sketches, bodies) },
+          );
+          [from, to] = reach < 0 ? [reach, 0] : [0, reach];
+        } else {
+          const d = evaluateAs(feature.distance, "length", scope);
+          if (Math.abs(d) < 1e-9) throw new Error("Distance must not be zero.");
+          [from, to] =
+            feature.direction === "symmetric"
+              ? [-d / 2, d / 2]
+              : feature.direction === "negative"
+                ? [-d, 0]
+                : [0, d];
+        }
         const tool = kernel.extrude(profiles, sketch.plane, from, to);
         const plane = sketch.plane;
         // "start" is the end of the extrusion that lies on the sketch side.

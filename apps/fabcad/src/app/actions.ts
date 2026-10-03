@@ -61,6 +61,7 @@ import {
   holeBody,
   isSolidDialog,
   nextPicking,
+  pickExtrudeTarget,
   solidDialogCommand,
   solidDialogProblem,
 } from "./solidDialogs";
@@ -75,6 +76,8 @@ import {
   sketchView,
 } from "./session";
 import { bodiesCenter } from "./moveTransform";
+import type { HandleContext } from "./dialogHandles";
+import { extrudeTargetReach, reachSpan } from "./extrudeTarget";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
@@ -664,6 +667,9 @@ export function openDialog(type: Dialog["type"]): void {
               autoSketch,
               distance: "10",
               direction: "positive",
+              extent: "distance",
+              to: null,
+              picking: "profile",
               operation: hasBodies ? "join" : "new",
               targetBodyIds: faceBody ? [faceBody] : defaultTargets(),
             }
@@ -783,6 +789,9 @@ export function editFeature(featureId: string): void {
         direction: f.direction,
         // The direction of an existing feature is what the user settled on.
         directionChosen: true,
+        extent: f.to ? "to" : "distance",
+        to: f.to ?? null,
+        picking: "profile",
         operation: f.operation,
         targetBodyIds: f.targetBodyIds,
       };
@@ -870,7 +879,9 @@ export function patchDialog(patch: Partial<Dialog>): void {
   if (!d) return;
   let next = { ...d, ...patch } as Dialog;
   if (d.type === "extrude" && next.type === "extrude") {
-    const turned = ("direction" in patch || "distance" in patch) && !("operation" in patch)
+    const turned =
+      ("direction" in patch || "distance" in patch || "to" in patch || "extent" in patch) &&
+      !("operation" in patch)
       ? operationAfterTurn(d, next)
       : null;
     if (turned) {
@@ -891,12 +902,27 @@ type ExtrudeDialog = Extract<Dialog, { type: "extrude" }>;
 
 /** The side of its sketch an extrusion goes to: 1, -1, or 0 for symmetric or unknown. */
 function extrudeSide(dialog: ExtrudeDialog): number {
-  try {
-    const [from, to] = extrudeRange(dialog.direction, evaluateAs(dialog.distance, "length", currentScope()));
-    return Math.sign(from + to);
-  } catch {
-    return 0;
+  const span = extrudeSpan(dialog);
+  return span ? Math.sign(span[0] + span[1]) : 0;
+}
+
+/** Where the extrusion of the dialog goes along the sketch normal; null while unknown. */
+function extrudeSpan(dialog: ExtrudeDialog): [number, number] | null {
+  if (dialog.extent === "to") {
+    const found = extrudeTargetReach(dialog, handleContext());
+    return found && "reach" in found ? reachSpan(found.reach) : null;
   }
+  try {
+    return extrudeRange(dialog.direction, evaluateAs(dialog.distance, "length", currentScope()));
+  } catch {
+    return null;
+  }
+}
+
+/** What the dialog handles and the extrude target are resolved against: the live model. */
+function handleContext(): HandleContext {
+  const model = modelState.get();
+  return { doc: documentStore.document, bodies: model.bodies, planes: model.planes, scope: currentScope() };
 }
 
 /**
@@ -912,12 +938,8 @@ function operationAfterTurn(from: ExtrudeDialog, to: ExtrudeDialog): Partial<Ext
   const f = to.sketchId ? doc.features[to.sketchId] : undefined;
   if (f?.type !== "sketch" || to.profiles.length === 0) return null;
   const plane = resolveSketchPlane(f.sketch.plane);
-  let range: [number, number];
-  try {
-    range = extrudeRange(to.direction, evaluateAs(to.distance, "length", currentScope()));
-  } catch {
-    return null;
-  }
+  const range = extrudeSpan(to);
+  if (!range) return null;
   const mid = (range[0] + range[1]) / 2;
   const samples = to.profiles.map((p) => {
     const q = planeToWorld(plane, p.point);
@@ -976,6 +998,15 @@ export function expressionError(expression: string, kind: "length" | "angle", po
  */
 export function pickInDialog(item: Selection, additive = false): boolean {
   const dialog = appState.get().dialog;
+  if (dialog?.type === "extrude" && dialog.picking === "to") {
+    const picked = pickedOf(item);
+    const to = picked ? pickExtrudeTarget(picked, { doc: documentStore.document, faceIndexOf }, dialog) : null;
+    if (to) {
+      patchDialog({ to, picking: "profile" });
+      appState.set({ hover: null });
+    }
+    return true;
+  }
   if (!isSolidDialog(dialog)) return false;
   const picked = pickedOf(item);
   const patch = picked
@@ -994,6 +1025,11 @@ export function dialogProblem(dialog: Dialog): string | null {
     case "extrude":
       if (!dialog.sketchId || dialog.profiles.length === 0) return "Select a profile";
       if (dialog.operation !== "new" && dialog.targetBodyIds.length === 0) return "Select a target body";
+      if (dialog.extent === "to") {
+        if (!dialog.to) return "Select a plane, a flat face or a point to extrude to";
+        const found = extrudeTargetReach(dialog, handleContext());
+        return found && "error" in found ? found.error : null;
+      }
       return expressionError(dialog.distance, "length", false);
     case "revolve":
       if (!dialog.sketchId || dialog.profiles.length === 0) return "Select a profile";
@@ -1055,6 +1091,8 @@ export function commitDialog(): boolean {
         profiles: dialog.profiles,
         distance: dialog.distance,
         direction: dialog.direction,
+        // Undefined, not left out: an edit back to a distance takes the target away.
+        to: dialog.extent === "to" && dialog.to ? dialog.to : undefined,
         operation: dialog.operation,
         targetBodyIds: dialog.operation === "new" ? [] : dialog.targetBodyIds,
       };

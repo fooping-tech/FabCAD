@@ -22,6 +22,7 @@ import {
   type CircularPatternFeature,
   type EdgeRef,
   type ExtrudeDirection,
+  type ExtrudeTarget,
   type ExtrudeFeature,
   type FaceRef,
   type Feature,
@@ -319,6 +320,8 @@ export interface ExtrudeInput {
   profiles: ProfileRef[];
   distance: string;
   direction?: ExtrudeDirection;
+  /** Extrude up to this instead of by `distance`. */
+  to?: ExtrudeTarget;
   operation?: BodyOperation;
   targetBodyIds?: string[];
 }
@@ -349,6 +352,7 @@ export function addExtrude(input: ExtrudeInput, out: CreatedRef = {}): Command {
       profiles: input.profiles,
       distance: input.distance,
       direction: input.direction ?? "positive",
+      ...(input.to ? { to: input.to } : {}),
       operation,
       targetBodyIds: operation === "new" ? [] : (input.targetBodyIds ?? []),
       bodyId,

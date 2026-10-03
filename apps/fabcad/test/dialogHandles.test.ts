@@ -37,6 +37,7 @@ import {
   type LinearHandle,
   dialogHandles,
 } from "../src/app/dialogHandles";
+import { extrudeTargetReach } from "../src/app/extrudeTarget";
 
 let kernel: GeometryKernel;
 const solver = createDefaultSolver();
@@ -244,5 +245,37 @@ describe("dialog handles", () => {
     // One instance: the arrow shows the spacing itself.
     near(tip(second!), { x: 5, y: 25, z: 5 });
     expect(second!.patch(30)).toEqual({ distance2: "30" });
+  });
+
+  it("measures how far Extrude goes up to a target, and drags back to a distance", async () => {
+    const store = new DocumentStore(createDocument());
+    const s = sketch(store, XY, (b) => createRectangle2Point(b, { x: 0, y: 0 }, { x: 10, y: 10 }));
+    const point = sketch(store, XZ, (b) => createPoint(b, { x: 50, y: -8 }).entities[0]!);
+    const ctx = await compute(store, new FeatureEngine(kernel, solver));
+    const base: Extract<Dialog, { type: "extrude" }> = {
+      type: "extrude",
+      editing: null,
+      sketchId: s.id,
+      profiles: [profileAt(store.document, s.id, { x: 5, y: 5 })],
+      distance: "10",
+      direction: "positive",
+      extent: "to",
+      to: null,
+      picking: "to",
+      operation: "new",
+      targetBodyIds: [],
+    };
+    expect(extrudeTargetReach(base, ctx)).toBeNull();
+    // A point of an XZ sketch, 8 mm from the XY plane (which side depends on the XZ axes).
+    const toPoint = { ...base, to: { type: "sketch-point" as const, sketchId: point.id, entityId: point.made } };
+    const reach = extrudeTargetReach(toPoint, ctx);
+    expect(reach).not.toBeNull();
+    expect(Math.abs((reach as { reach: number }).reach)).toBeCloseTo(8, 9);
+    expect(extrudeTargetReach({ ...base, to: { type: "origin-plane", plane: "YZ" } }, ctx)).toEqual({
+      error: "The plane to extrude to is not parallel to the sketch.",
+    });
+    const h = only<LinearHandle>(dialogHandles(toPoint, ctx));
+    expect(h.value).toBeCloseTo((reach as { reach: number }).reach, 9);
+    expect(h.patch(12)).toEqual({ extent: "distance", distance: "12", direction: "positive" });
   });
 });
