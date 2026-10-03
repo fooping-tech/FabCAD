@@ -1,5 +1,11 @@
 import type { BodyGeometry } from "@fabcad/brep";
-import { type CadDocument, type Feature, listFeatures, serializeDocument } from "@fabcad/cad-document";
+import {
+  type CadDocument,
+  type Feature,
+  consumedBodies,
+  listFeatures,
+  serializeDocument,
+} from "@fabcad/cad-document";
 import type { FeatureStatus } from "@fabcad/features";
 
 /**
@@ -38,10 +44,17 @@ export function historyLog(
   });
   lines.push("", "Bodies:");
   const records = Object.values(doc.bodies);
+  const consumed = consumedBodies(doc);
   if (records.length === 0) lines.push("(none)");
   for (const b of records) {
     const g = bodies[b.id]?.geometry;
-    lines.push(`- ${b.name} (${b.id})${b.visible ? "" : " hidden"}: ${g ? describeBody(g) : "no result"}`);
+    const by = consumed.get(b.id);
+    const state = by
+      ? `used up by ${doc.features[by]?.name ?? by}`
+      : g
+        ? describeBody(g)
+        : "no result";
+    lines.push(`- ${b.name} (${b.id})${b.visible ? "" : " hidden"}: ${state}`);
   }
   if (meta.fabrication) lines.push("", "Fabrication (laser):", ...meta.fabrication);
   // Left out where the log is read on screen; the copy carries it.

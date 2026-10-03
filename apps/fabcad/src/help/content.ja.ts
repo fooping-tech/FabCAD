@@ -631,6 +631,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     summary: "Body を結合する、片方から削る、共通部分を残す、のいずれかをします。",
     what: [
       "Tool の Body を、Target の Body に結合、Target から切り取り、または Target との共通部分にします。",
+      "Tool の Body は使い切られ、Browser には結果をもつ Target の Body だけが残ります。履歴のマーカーを Combine より前に戻すと、Tool の Body も戻ります。",
       "結果を確かめます。閉じた正しい立体にならないとき、または操作ではありえない体積になったとき（結合した結果が元の Body より小さいなど）は、壊れた Body を残さずにエラーを出します。",
     ],
     requires: ["Target の Body と、Tool の Body が 1 つ以上。"],

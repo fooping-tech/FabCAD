@@ -1,4 +1,4 @@
-import type { BodyOperation } from "@fabcad/cad-document";
+import { type BodyOperation, listBodies } from "@fabcad/cad-document";
 import type { ReactElement, ReactNode } from "react";
 import { patchDialog } from "../app/actions";
 import type { OperationPick } from "../app/appState";
@@ -82,7 +82,7 @@ export function OperationFields({
   // The body the edited feature made itself is not something it can be joined to.
   const edited = dialog.editing ? doc.features[dialog.editing] : undefined;
   const own = edited && "bodyId" in edited ? edited.bodyId : "";
-  const bodies = Object.values(doc.bodies).filter((b) => b.id !== own);
+  const bodies = listBodies(doc).filter((b) => b.id !== own);
   return (
     <>
       <Field label="Operation" secondary>

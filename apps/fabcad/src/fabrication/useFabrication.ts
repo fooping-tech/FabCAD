@@ -2,6 +2,7 @@ import { type BodyGeometry, type TessellationOptions, isDevelopableSurface } fro
 import type { SolidTopology } from "@fabcad/geometry";
 import type { CadBody, FabricationWarning } from "@fabcad/fabrication-core";
 import { goreTessellation } from "@fabcad/fabrication-laser";
+import { listBodies } from "@fabcad/cad-document";
 import { useEffect, useMemo, useState } from "react";
 import { bodyTopology, modelState, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
@@ -172,8 +173,11 @@ export function useFabrication(): FabricationState {
   const [, setTick] = useState(0);
 
   const settings = settingsFor(doc.extensions[FABRICATION_EXTENSION_KEY]);
-  const docBodies = doc.bodies;
-  const bodies = useMemo(() => chooseBodies({ bodies: docBodies }, settings), [docBodies, settings]);
+  // Bodies used up by Combine are not offered.
+  const bodies = useMemo(
+    () => chooseBodies({ bodies: Object.fromEntries(listBodies(doc).map((b) => [b.id, b])) }, settings),
+    [doc, settings],
+  );
 
   const modelBodies = model.bodies;
   const wanted = useMemo(() => {

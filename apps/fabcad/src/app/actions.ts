@@ -14,6 +14,7 @@ import {
   addShell,
   addSketch,
   evaluateAs,
+  listBodies,
   removeBody,
   removeFeatures,
   updateFeature,
@@ -398,7 +399,7 @@ const selectedBodies = (selection: Selection[]): string[] => [
 function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): SolidDialog {
   const doc = documentStore.document;
   const operation = {
-    operation: Object.keys(doc.bodies).length > 0 ? ("join" as const) : ("new" as const),
+    operation: listBodies(doc).length > 0 ? ("join" as const) : ("new" as const),
     targetBodyIds: defaultTargets(),
   };
   const bodies = selection.some((s) => s.kind === "body");
@@ -541,7 +542,8 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
       );
     }
     case "split": {
-      const only = Object.keys(doc.bodies).length === 1 ? Object.keys(doc.bodies)[0]! : null;
+      const live = listBodies(doc);
+      const only = live.length === 1 ? live[0]!.id : null;
       const body = selection.find((s) => s.kind === "body");
       return preselect<Extract<SolidDialog, { type: "split" }>>(
         {
@@ -638,7 +640,7 @@ export function openDialog(type: Dialog["type"]): void {
           if (regions.length === 1) refs = [profileRefOf(regions[0]!)];
         }
       }
-      const hasBodies = Object.keys(doc.bodies).length > 0;
+      const hasBodies = listBodies(doc).length > 0;
       // A selected planar face is extruded as it is.
       let autoSketch: string | null = null;
       let faceBody: string | null = null;

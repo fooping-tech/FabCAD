@@ -669,6 +669,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Join bodies, cut one from another, or keep what they share.",
     what: [
       "The tool bodies are joined to, cut from or intersected with the target body.",
+      "The tool bodies are used up: the Browser lists only the target body, which holds the result. Moving the history marker before Combine brings them back.",
       "The result is checked: when it is not a closed, valid solid, or has a volume the operation cannot give (a join smaller than one of its bodies), Combine reports an error instead of keeping a broken body.",
     ],
     requires: ["A target body and at least one tool body."],

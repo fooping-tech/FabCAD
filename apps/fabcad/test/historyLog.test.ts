@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type CreatedRef,
   DocumentStore,
+  addBoolean,
   addExtrude,
   addImport,
   addSketch,
@@ -63,5 +64,17 @@ describe("history log", () => {
     expect(log).toContain("fileName part.step");
     expect(log).toContain("data (50000 characters)");
     expect(log.length).toBeLessThan(1000);
+  });
+
+  it("says which step used a body up", () => {
+    const store = new DocumentStore(createDocument());
+    const a: CreatedRef = {};
+    const b: CreatedRef = {};
+    store.execute(addImport({ format: "step", fileName: "a.step", data: "x" }, a));
+    store.execute(addImport({ format: "step", fileName: "b.step", data: "x" }, b));
+    store.execute(addBoolean({ operation: "union", targetBodyId: a.bodyId!, toolBodyIds: [b.bodyId!] }));
+    const log = historyLog(store.document, {}, {}, { version: "", date: new Date(0), project: false });
+    expect(log).toContain(`- b (${b.bodyId}): used up by Combine001`);
+    expect(log).toContain(`- a (${a.bodyId}): no result`);
   });
 });

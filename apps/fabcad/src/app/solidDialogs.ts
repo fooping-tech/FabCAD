@@ -34,6 +34,7 @@ import {
   addSplit,
   addSweep,
   evaluateAs,
+  listBodies,
   updateFeature,
 } from "@fabcad/cad-document";
 import { type OriginPlaneName, type Vec2, curveEnd, curveStart, dist2 } from "@fabcad/geometry";
@@ -226,7 +227,7 @@ export function canRepeatFeature(
 export function holeBody(doc: CadDocument, sketchId: string | null): string | null {
   const plane = sketchOf(doc, sketchId)?.plane;
   if (plane?.type === "face" && doc.bodies[plane.bodyId]) return plane.bodyId;
-  const bodies = Object.values(doc.bodies);
+  const bodies = listBodies(doc);
   const visible = bodies.filter((b) => b.visible);
   if (visible.length === 1) return visible[0]!.id;
   return bodies.length === 1 ? bodies[0]!.id : null;

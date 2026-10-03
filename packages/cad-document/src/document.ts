@@ -1,7 +1,12 @@
 import { type AssemblyModel, createAssembly } from "@fabcad/assembly";
 import type { Sketch } from "@fabcad/sketch";
 import type { Feature, FeatureType, SketchFeature } from "./features";
-import { FEATURE_LABELS, featureCreatedBodies, parseDynamicBodyId } from "./features";
+import {
+  FEATURE_LABELS,
+  featureConsumedBodies,
+  featureCreatedBodies,
+  parseDynamicBodyId,
+} from "./features";
 import type { Parameter } from "./parameters";
 
 export const DOCUMENT_SCHEMA = "fabcad.document";
@@ -129,9 +134,24 @@ export function getSketch(doc: CadDocument, featureId: string): Sketch | undefin
   return f?.type === "sketch" ? f.sketch : undefined;
 }
 
+/**
+ * Bodies that a step before the history marker used up (the tools of Combine), with the step
+ * that did. Their records stay: moved before that step, the marker brings them back.
+ */
+export function consumedBodies(doc: CadDocument): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of activeTimeline(doc)) {
+    if (f.suppressed) continue;
+    for (const id of featureConsumedBodies(f)) out.set(id, f.id);
+  }
+  return out;
+}
+
+/** The bodies there are at the history marker: not those that a step used up. */
 export function listBodies(doc: CadDocument, componentId?: string): BodyRecord[] {
+  const consumed = consumedBodies(doc);
   return Object.values(doc.bodies).filter(
-    (b) => componentId === undefined || b.componentId === componentId,
+    (b) => !consumed.has(b.id) && (componentId === undefined || b.componentId === componentId),
   );
 }
 
