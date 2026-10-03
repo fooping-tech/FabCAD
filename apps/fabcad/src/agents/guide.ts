@@ -42,7 +42,7 @@ const SECTIONS: Section[] = [
           rows: [
             ["Header", "top", "DESIGN / FABRICATION workspace switch, File menu (New, Open, Save, Import, Parameters), Undo / Redo, Commands (the command palette), Save, Export"],
             ["Ribbon", "below the header", "the commands of the workspace, in labelled groups (SKETCH, CREATE, MODIFY, CONSTRAINTS …). Every button has a tooltip with its name and shortcut"],
-            ["Browser", "left, upper half", "the tree of the document: Origin (XY / XZ / YZ planes, axes), Sketches, Bodies, Components. Rows can be clicked to select, and to pick a plane"],
+            ["Browser", "left, upper half", "the tree of the document: Origin (XY / XZ / YZ planes, axes), Sketches, Bodies, Components (definitions, each with its Sketches, Features and Bodies) and Instances. Rows can be clicked to select, and to pick a plane. The component being edited has an ACTIVE badge"],
             ["Properties", "left, lower half", "properties of the selection, and the Parameters of the document"],
             ["View", "centre", "the 3D view. In a sketch, a banner at the top centre shows the sketch name, its constraint status and Finish Sketch"],
             ["View buttons", "top right of the view", "Top, Front, Right, Bottom, Back, Left, Iso, Fit; Persp / Ortho"],
@@ -156,6 +156,7 @@ const SECTIONS: Section[] = [
           "Shortcuts are single letters. They do nothing while a text field has the focus; click the view first if a letter is not taken.",
           "A sketch tool started outside a sketch asks for a plane first (a Browser plane row or a planar face).",
           "Command windows open beside the last click and can be dragged by their title bar if they cover something.",
+          "Components: while a component is active (ACTIVE badge in the Browser), the view shows only that component and new sketches belong to it. Activate Root (ribbon, ASSEMBLE group) shows the whole model again; there an instance is selected as a whole and its faces cannot be picked for a command.",
           "Projected geometry (purple) follows the body it came from and cannot be dragged. It does not cut a closed shape drawn across it: that shape stays one profile.",
         ],
       },
@@ -168,6 +169,7 @@ const GROUPS: { prefix: string; title: string }[] = [
   { prefix: "constraint.", title: "Sketch: constraints" },
   { prefix: "sketch.", title: "Sketch: create and other commands" },
   { prefix: "solid.", title: "Solid: features" },
+  { prefix: "component.", title: "Components" },
   { prefix: "fabrication.", title: "Fabrication" },
   { prefix: "", title: "General" },
 ];

@@ -111,5 +111,9 @@ export function pickedOf(s: Selection): Picked | null {
     case "constraint":
     case "dimension":
       return null;
+    // An instance is a placement, not geometry: features work on the bodies of a definition.
+    case "component":
+    case "instance":
+      return null;
   }
 }

@@ -79,6 +79,8 @@ AI エージェント向けのガイド（`/FabCAD/agents/` と `/FabCAD/llms.tx
 
 スケッチの Offset は、クリックでプレビュー（`appState.sketchOffset`）を出し、窓の OK か Enter で確定する。形の計算は `sketch/offsetGeometry.ts`（純粋な関数）、状態の操作は `sketch/offsetTool.ts`。オプションのあるスケッチのツールは `sketch/toolWindows.ts` の `TOOLS_WITH_WINDOW` に載せ、窓の中身は `panels/SketchToolPanel.tsx` に書く。
 
+コンポーネントは `assembly.components`（定義）と `assembly.instances`（配置。`position` と四元数の `rotation`）。定義が何を持つかは Feature と Body の `componentId` だけで決め、一覧を別に保存しない（`componentContents()`）。タイムラインは 1 本で、定義の Feature は定義の座標で 1 回だけ評価する。インスタンスは Body のメッシュを共有して行列を掛けて描く（`scene.setInstances()`）だけで、履歴も形状もコピーしない。編集中のコンポーネントは `appState.activeComponentId`（null がルート）で、新しいスケッチはそこに属し、ほかの Feature は入力のスケッチや Body から決まる。アクティブなコンポーネントのスケッチ・平面・Body だけを表示して選べるようにし、ルートではインスタンスを丸ごと選ぶだけにする（面や稜線を Feature に渡さない）。異なるコンポーネントの Body を 1 つの Feature で扱うことはコマンド（`commonComponent()`）とダイアログ（`crossComponentProblem()`）で拒否し、所属を黙って変えない。コンポーネントの操作は `app/components.ts`、コマンドは `packages/cad-document/src/components.ts`。
+
 Project で曲面を選ぶと、稜線に加えて輪郭（シルエット）も投影する。輪郭は稜線ではないので、メッシュから `faceSilhouettes()`（`packages/brep/src/query.ts`）で求め、`source: "silhouette"` の投影として面の `TopologyRef` で覚える。
 
 Sketch の Create ツールを足すときは `packages/sketch/src/create.ts` に関数を、`apps/fabcad/src/sketch/createTools.ts` の `CREATE_TOOLS` に定義を 1 つ追加する。

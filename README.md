@@ -32,6 +32,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Pattern / Mirror | Rectangular Pattern（1 方向または 2 方向）、Circular Pattern、Mirror。対象は Feature（Extrude、Revolve、Hole、Sweep、Loft）または Body。個数・間隔・角度を持つ 1 つの Feature として保存し、コピーの集まりにはしません |
 | Move / Align / Split | Move/Copy（`M`。自由移動（X・Y・Z の移動と回転）、移動、回転、点から点、コピー。移動後の形を半透明でプレビューし、矢印とリングのドラッグで位置と角度を調整）、Align（面と面、点と点）、Split Body（原点平面、構成平面、または平らな面（分割する Body 自身の面も可）で分割。両側 / 片側を残す） |
 | Offset Plane | 原点平面・平らな面・ほかの構成平面から、指定した距離だけ離れた平行な構成平面を作ります。距離は正負どちらも指定でき、パラメータ式も使えます。確定する前にビューでプレビューします。タイムラインに残る Feature で、あとから距離と基準を変えられます。スケッチ平面、Mirror の平面、Split Body の平面、別の Offset Plane の基準として使えます |
+| Component | 部品の定義（Component）と、それを配置したインスタンス。リボンの Assemble の **Component** で作ります。Body を選んで作ると、その Body と切り離せない履歴ごと新しいコンポーネントに移り、何も選ばずに作ると空のコンポーネントがアクティブになり、そのあと作るスケッチと Feature はそのコンポーネントに属します。**Instance** で同じ定義をもう 1 つ配置し、インスタンスごとに位置と回転（Move / Rotate、`M`）と表示を変えられます。インスタンスは定義を参照するだけで履歴をコピーしないので、定義を編集するとすべてのインスタンスに反映されます。コンポーネントをアクティブにする（ブラウザでダブルクリック）と、その定義だけを定義の座標で表示して編集します。異なるコンポーネントの Body どうしの Combine などは受け付けません |
 | 複数選択 | `Shift` / `Ctrl` / `Cmd` + クリックで追加・解除。リボンまたは画面下の **Multi-Select** をオンにすると、修飾キーなしのクリック（タップ）で追加・解除できます。稜線・面・Body・スケッチの要素・ブラウザとタイムラインの項目に共通です |
 | ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details · 詳しく見る** で、用途、必要な選択、パラメータ、制限、使用例を表示します。説明は英語と日本語の併記です。ヘルプを開いても、実行中のコマンドと選択は変わりません |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
@@ -247,8 +248,10 @@ Font の一覧の **Load a font file** から、手元の TTF / OTF / WOFF を�
 | スケッチの点 | Hole |
 | スケッチの閉領域・線 | Extrude、Revolve、Edit Sketch、Export Sketch as SVG、Save As DXF |
 | スケッチ中のテキスト | Edit Text、Explode Text、Delete |
-| Body | Move/Copy、Split Body、Mirror、Rectangular / Circular Pattern、Show / Hide、Combine、Delete |
+| Body | Move/Copy、Create Component、Split Body、Mirror、Rectangular / Circular Pattern、Show / Hide、Combine、Delete |
 | タイムライン・ブラウザの項目 | Edit Feature / Edit Sketch、Suppress、Show / Hide、Delete |
+| コンポーネント（ブラウザ） | Activate Component / Activate Root、Create Instance、Rename、Show / Hide（すべてのインスタンス）、Delete |
+| インスタンス | Move / Rotate、Activate Component、Duplicate、Show / Hide、Rename、Delete |
 | スケッチ中の線や円 | Normal / Construction、Move、Copy、Delete |
 | スケッチ中の寸法 | Edit Dimension、Delete |
 | スケッチ中 | Line、Rectangle、Circle、Dimension、Trim、Offset、Project、Finish Sketch |
@@ -318,7 +321,7 @@ SheetGeometry  →  preview / SVG / DXF
 | `packages/typography` | 文字組み。フォントの読み込み、HarfBuzz によるシェーピング、横書き / 縦書き、パスに沿った配置、グリフの輪郭。CAD のドキュメントを知らない独立したモジュールです |
 | `packages/sketch-solver` | 2D 拘束ソルバー（最小ノルム Levenberg–Marquardt）、自由度と冗長・矛盾の判定、ドラッグ。`SketchSolver` インターフェースで差し替え可能 |
 | `packages/cad-document` | Document、Parameters と式、Feature 定義、依存グラフ、Command と Undo / Redo、保存形式 |
-| `packages/assembly` | Component、Instance、Joint、Rigid Group のデータモデル |
+| `packages/assembly` | Component、Instance（位置と回転の四元数）、Joint、Rigid Group のデータモデル |
 | `packages/brep` | `GeometryKernel` インターフェースと Replicad アダプタ |
 | `packages/features` | Feature Engine。Timeline を評価して Body を作り、入力のハッシュで Feature ごとにキャッシュします |
 | `packages/fabrication-core` | 材料、Strategy、`fabricate()`、Analyzer、Kerf 補正、Nesting、Sheet |
@@ -385,7 +388,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | --- | --- |
 | Project | 実装済み。楕円になる投影（斜めから見た円）はスプラインで近似します |
 | Include / Intersect | 未実装 |
-| Assembly | データモデルのみ。Component や Joint を操作する UI はありません |
+| Component | 入れ子のコンポーネント、インスタンスごとのパラメータ、Joint（拘束と動き）、BOM はありません。Feature は 1 つのコンポーネントの中だけで働き、異なるコンポーネントの Body を Combine、Join / Cut、Move/Copy、Pattern することはできません（ダイアログで拒否します）。STEP / STL の書き出しと FABRICATION は、コンポーネントの Body を定義の位置で 1 つずつ扱い、インスタンスの数と配置はまだ反映しません |
 | Draft、Rib、Thread | 未実装 |
 | Hole | ねじ穴、下穴、先端の円錐（ドリル形状）、「指定した面まで」はありません。穴が何も削らない向きのときはエラーになります（Flip で反転） |
 | Pattern / Mirror | Feature を対象にできるのは、材料を足すか削る Feature（Extrude、Revolve、Hole、Sweep、Loft、Pattern）だけです。Fillet、Chamfer、Shell は対象にできません（Body を対象にしてください）。パスに沿った Pattern はありません |

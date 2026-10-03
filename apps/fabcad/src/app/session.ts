@@ -211,6 +211,12 @@ function afterHistoryJump(): void {
     patch.activeSketchId = null;
     patch.tool = "select";
   }
+  if (s.activeComponentId && !doc.assembly.components[s.activeComponentId]) {
+    patch.activeComponentId = null;
+  }
+  if (s.instanceMove && !doc.assembly.instances[s.instanceMove.instanceId]) {
+    patch.instanceMove = null;
+  }
   appState.set(patch);
 }
 
@@ -345,6 +351,8 @@ export function saveProject(): void {
 function resetUi(): void {
   appState.set({
     activeSketchId: null,
+    activeComponentId: null,
+    instanceMove: null,
     tool: "select",
     selection: [],
     hover: null,

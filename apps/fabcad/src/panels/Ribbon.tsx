@@ -17,6 +17,13 @@ import {
   toast,
 } from "../app/appState";
 import { useStore } from "../app/tinyStore";
+import { useDocument } from "../app/session";
+import {
+  activateComponent,
+  newComponent,
+  newInstance,
+  useActiveComponentId,
+} from "../app/components";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS } from "../sketch/createTools";
 import { useHelpTrigger } from "../help/useHelpTrigger";
@@ -340,6 +347,7 @@ function SolidRibbon(): ReactElement {
         <Tool icon="pattern-circular" label="Circular" title="Circular Pattern" active={is("circular-pattern")} help="solid.circular-pattern" onClick={() => openDialog("circular-pattern")} />
         <Tool icon="mirror-3d" label="Mirror" title="Mirror" active={is("mirror")} help="solid.mirror" onClick={() => openDialog("mirror")} />
       </Group>
+      <AssembleGroup />
       <Group label="Insert">
         <Tool icon="import3d" help="solid.import-step" label="STEP" title="Import a STEP file" onClick={() => void importStep()} />
       </Group>
@@ -368,6 +376,54 @@ function SolidRibbon(): ReactElement {
         </div>
       </Group>
     </>
+  );
+}
+
+/** Components: make one, place another instance, and say which one is being edited. */
+function AssembleGroup(): ReactElement {
+  const doc = useDocument();
+  const active = useActiveComponentId();
+  const selection = useStore(appState, (s) => s.selection);
+  const root = doc.assembly.rootComponentId;
+  // The definition an instance would be made of: the selected component or instance.
+  const first = selection[0];
+  const definition =
+    first?.kind === "component"
+      ? first.componentId
+      : first?.kind === "instance"
+        ? doc.assembly.instances[first.instanceId]?.componentId
+        : active !== root
+          ? active
+          : undefined;
+  const activeName = doc.assembly.components[active]?.name ?? "";
+  return (
+    <Group label="Assemble">
+      <Tool
+        icon="new-component"
+        label="Component"
+        title="New Component — from the selected bodies, or an empty one to model in"
+        help="component.new"
+        onClick={newComponent}
+      />
+      <Tool
+        icon="instance"
+        label="Instance"
+        title="Create Instance — place the selected component once more"
+        help="component.instance"
+        disabled={!definition}
+        onClick={() => definition && newInstance(definition)}
+      />
+      {active !== root && (
+        <Tool
+          icon="document"
+          label="Root"
+          title={`Activate Root — finish editing ${activeName}`}
+          help="component.activate"
+          className="on"
+          onClick={() => activateComponent(null)}
+        />
+      )}
+    </Group>
   );
 }
 

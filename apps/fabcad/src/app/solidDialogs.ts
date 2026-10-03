@@ -228,7 +228,8 @@ export function canRepeatFeature(
 export function holeBody(doc: CadDocument, sketchId: string | null): string | null {
   const plane = sketchOf(doc, sketchId)?.plane;
   if (plane?.type === "face" && doc.bodies[plane.bodyId]) return plane.bodyId;
-  const bodies = listBodies(doc);
+  // A hole goes into a body of the sketch's component.
+  const bodies = listBodies(doc, doc.features[sketchId ?? ""]?.componentId);
   const visible = bodies.filter((b) => b.visible);
   if (visible.length === 1) return visible[0]!.id;
   return bodies.length === 1 ? bodies[0]!.id : null;
@@ -1107,7 +1108,12 @@ const targetsOf = (dialog: OperationPick): string[] =>
  * The command that applies a dialog: it adds the feature, or updates the one being edited.
  * Null while the dialog is incomplete (see `solidDialogProblem`).
  */
-export function solidDialogCommand(dialog: SolidDialog, out: CreatedRef = {}): Command | null {
+export function solidDialogCommand(
+  dialog: SolidDialog,
+  out: CreatedRef = {},
+  /** Owner of what has no input to take it from (a plane on an origin plane). */
+  componentId?: string,
+): Command | null {
   const editing = dialog.editing;
   switch (dialog.type) {
     case "hole": {
@@ -1221,7 +1227,7 @@ export function solidDialogCommand(dialog: SolidDialog, out: CreatedRef = {}): C
       const input = { base: dialog.base, offset: dialog.offset };
       return editing
         ? updateFeature<OffsetPlaneFeature>(editing, input, "Edit offset plane")
-        : addOffsetPlane(input, out);
+        : addOffsetPlane(input, out, componentId);
     }
   }
 }

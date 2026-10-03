@@ -15,20 +15,41 @@ export type Transform = [
 
 export const IDENTITY_TRANSFORM: Transform = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
-/** A component owns sketches, features and bodies (they point back through `componentId`). */
+/**
+ * Rigid placement of an instance: turned by the unit quaternion `rotation` ([x, y, z, w]) about
+ * the origin of its component, then moved by `position` (mm).
+ */
+export interface InstanceTransform {
+  position: [number, number, number];
+  rotation: [number, number, number, number];
+}
+
+export const IDENTITY_INSTANCE_TRANSFORM: InstanceTransform = {
+  position: [0, 0, 0],
+  rotation: [0, 0, 0, 1],
+};
+
+/**
+ * A component definition. It owns sketches, features and bodies: they point back through
+ * their `componentId`, so what a definition contains is never stored twice.
+ */
 export interface Component {
   id: string;
   name: string;
 }
 
-/** Placement of a component inside a parent component. */
+/**
+ * Placement of a component definition. Every instance shows the same geometry, the one the
+ * definition's features produce; an instance only adds where it is and whether it is shown.
+ */
 export interface ComponentInstance {
   id: string;
   name: string;
+  /** The definition this is an instance of. */
   componentId: string;
   /** Component that contains this instance; null for the root instance. */
   parentInstanceId: string | null;
-  transform: Transform;
+  transform: InstanceTransform;
   visible: boolean;
 }
 
@@ -83,7 +104,7 @@ export function createAssembly(rootName = "Root"): AssemblyModel {
         name: rootName,
         componentId: ROOT_COMPONENT_ID,
         parentInstanceId: null,
-        transform: IDENTITY_TRANSFORM,
+        transform: IDENTITY_INSTANCE_TRANSFORM,
         visible: true,
       },
     },
@@ -162,13 +183,80 @@ export function transformPoint(t: Transform, p: Vec3): Vec3 {
   };
 }
 
+/** Row-major 4×4 matrix of an instance placement. */
+export function instanceMatrix(t: InstanceTransform): Transform {
+  const [x, y, z, w] = normalizeQuaternion(t.rotation);
+  const [px, py, pz] = t.position;
+  return [
+    1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w), px,
+    2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w), py,
+    2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y), pz,
+    0, 0, 0, 1,
+  ];
+}
+
+/** Placement of a row-major rigid 4×4 matrix (the form instances were stored in before). */
+export function instanceTransformFromMatrix(m: readonly number[]): InstanceTransform {
+  const [m00 = 1, m01 = 0, m02 = 0, px = 0, m10 = 0, m11 = 1, m12 = 0, py = 0, m20 = 0, m21 = 0, m22 = 1, pz = 0] = m;
+  const trace = m00 + m11 + m22;
+  let q: [number, number, number, number];
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2;
+    q = [(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, s / 4];
+  } else if (m00 > m11 && m00 > m22) {
+    const s = Math.sqrt(1 + m00 - m11 - m22) * 2;
+    q = [s / 4, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s];
+  } else if (m11 > m22) {
+    const s = Math.sqrt(1 + m11 - m00 - m22) * 2;
+    q = [(m01 + m10) / s, s / 4, (m12 + m21) / s, (m02 - m20) / s];
+  } else {
+    const s = Math.sqrt(1 + m22 - m00 - m11) * 2;
+    q = [(m02 + m20) / s, (m12 + m21) / s, s / 4, (m10 - m01) / s];
+  }
+  return { position: [px, py, pz], rotation: normalizeQuaternion(q) };
+}
+
+export function normalizeQuaternion(q: readonly number[]): [number, number, number, number] {
+  const [x = 0, y = 0, z = 0, w = 1] = q;
+  const len = Math.hypot(x, y, z, w);
+  return len < 1e-12 ? [0, 0, 0, 1] : [x / len, y / len, z / len, w / len];
+}
+
+const DEG = Math.PI / 180;
+
+/**
+ * Quaternion of a turn about the world X axis by `rx`, then about Y by `ry`, then about Z by
+ * `rz` (degrees, counter-clockwise), the convention of the free Move.
+ */
+export function quaternionFromAngles(rx: number, ry: number, rz: number): [number, number, number, number] {
+  const [cx, sx] = [Math.cos((rx * DEG) / 2), Math.sin((rx * DEG) / 2)];
+  const [cy, sy] = [Math.cos((ry * DEG) / 2), Math.sin((ry * DEG) / 2)];
+  const [cz, sz] = [Math.cos((rz * DEG) / 2), Math.sin((rz * DEG) / 2)];
+  // q = qz · qy · qx
+  return [
+    sx * cy * cz - cx * sy * sz,
+    cx * sy * cz + sx * cy * sz,
+    cx * cy * sz - sx * sy * cz,
+    cx * cy * cz + sx * sy * sz,
+  ];
+}
+
+/** Inverse of `quaternionFromAngles`: degrees about X, Y and Z. */
+export function anglesFromQuaternion(q: readonly number[]): [number, number, number] {
+  const [x, y, z, w] = normalizeQuaternion(q);
+  const rx = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
+  const ry = Math.asin(Math.max(-1, Math.min(1, 2 * (w * y - z * x))));
+  const rz = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+  return [rx / DEG, ry / DEG, rz / DEG];
+}
+
 /** World transform of an instance: product of the transforms along its parent chain. */
 export function instanceWorldTransform(model: AssemblyModel, instanceId: string): Transform {
   let t: Transform = IDENTITY_TRANSFORM;
   let cur: ComponentInstance | undefined = model.instances[instanceId];
   let guard = 0;
   while (cur && guard++ < 1000) {
-    t = multiplyTransforms(cur.transform, t);
+    t = multiplyTransforms(instanceMatrix(cur.transform), t);
     cur = cur.parentInstanceId ? model.instances[cur.parentInstanceId] : undefined;
   }
   return t;

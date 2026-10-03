@@ -8,6 +8,7 @@ import type { HelpEntry, HelpFallback } from "./types";
  * - `sketch.modify.<id>`: Modify tools of the sketch (`SKETCH_MODIFY_TOOLS`)
  * - `constraint.<type>`: sketch constraints (`CONSTRAINT_TOOLS`)
  * - `solid.<dialog type>`: features of the solid environment (`DIALOG_COMMANDS`)
+ * - `component.<id>`: components and their instances (the Assemble group of the ribbon)
  * - `fabrication.<process>`, `select`, `measure`, `selection.multi`
  *
  * The help is shown in two languages: English from here, Japanese from `content.ja.ts`, which
@@ -684,6 +685,9 @@ export const HELP: Record<string, HelpEntry> = {
       { name: "Operation", text: "Join, Cut or Intersect." },
       { name: "Keep tools", text: "Leave the tool bodies in place instead of using them up." },
     ],
+    limitations: [
+      "The bodies have to belong to one component. Bodies of different components, and component instances, are refused: Combine never moves a body from one component to another.",
+    ],
   },
   "solid.move": {
     title: "Move/Copy",
@@ -785,6 +789,63 @@ export const HELP: Record<string, HelpEntry> = {
       "The file is stored in the project, so the project stays complete by itself. The body can be modified with the solid features.",
     ],
     limitations: ["An imported body has no history of its own: there is nothing to edit in it."],
+  },
+  "component.new": {
+    title: "New Component",
+    summary: "Make a component: a definition of a part that can be placed several times.",
+    what: [
+      "A component is a definition: the sketches, features and bodies of one part. It is placed through instances; every instance shows the same geometry at its own position, and a change to the definition shows in all of them.",
+      "With bodies selected (in the root), they move into the new component together with the steps they were made with. Steps and bodies that cannot be separated from them (a Combine that joined two bodies, a sketch on one of their faces) come along, and the message says so. The model stays where it is: the first instance is placed at the origin.",
+      "Without a selection the component starts empty and is activated: the sketches and features you make now belong to it.",
+      "The Browser lists the definitions under Components (with their Sketches, Features and Bodies) and the placed instances under Instances.",
+    ],
+    when: [
+      "For parts that occur more than once (a spacer, a bracket), or to keep the parts of an assembly apart.",
+    ],
+    requires: ["Nothing, or bodies and features of one component, selected while the root is active."],
+    limitations: [
+      "Components are not nested: every component is made at the root.",
+      "Instances have no parameters of their own: they all show the definition as it is.",
+    ],
+    examples: [
+      "New Component with nothing selected, then Create Sketch and Extrude: the body belongs to the new component. Activate Root, then Create Instance and move the new instance aside.",
+    ],
+  },
+  "component.instance": {
+    title: "Create Instance",
+    summary: "Place the selected component once more. The new instance refers to the same definition.",
+    what: [
+      "Adds an instance of the component selected in the Browser (or of the component of the selected instance, or of the active component) and opens Move / Rotate for it.",
+      "Instances refer to their definition and copy nothing of it: editing the definition changes every instance. Duplicate in the context menu of an instance does the same at the place of that instance.",
+      "Deleting instances leaves the definition under Components, also when no instance is left; Create Instance places it again.",
+    ],
+    requires: ["A component or an instance selected, or a component active."],
+  },
+  "component.activate": {
+    title: "Activate Component",
+    summary: "Edit a component: its sketches, features and bodies, shown alone in its own coordinates.",
+    what: [
+      "Double-click a component in the Browser, or choose Activate Component in its context menu (or in that of one of its instances). The view shows only that component, where its definition lies, and what you make belongs to it.",
+      "Activate Root (the ribbon button, the context menu, or a double-click on the document in the Browser) returns to the whole model: the root bodies and every instance in its place.",
+      "With the root active, an instance is selected as a whole. Its faces and edges cannot be picked for a command: activate the component to change it.",
+    ],
+    limitations: [
+      "Features work inside one component. Combine, Join / Cut targets, Move/Copy and patterns refuse bodies of different components: the dialog says so and OK stays disabled.",
+    ],
+  },
+  "component.move-instance": {
+    title: "Move / Rotate Instance",
+    shortcut: "M",
+    summary: "Place an instance: where its origin goes and how it is turned.",
+    what: [
+      "Opens from the context menu of an instance, a double-click on it in the Browser, or M with one instance selected. The instance follows the values as they are typed; OK keeps the placement as one step and Cancel puts it back.",
+      "Only the instance moves. The definition and its other instances stay where they are.",
+    ],
+    requires: ["One instance."],
+    parameters: [
+      { name: "X, Y, Z", text: "Where the origin of the component goes, in world coordinates." },
+      { name: "Rotate X, Rotate Y, Rotate Z", text: "Degrees, counter-clockwise about the world X, then Y, then Z axis through the origin of the component." },
+    ],
   },
   "solid.parameters": {
     title: "Parameters",
