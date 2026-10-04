@@ -384,6 +384,27 @@ function placementOf(doc: CadDocument, componentId: string): InstanceTransform |
   return listInstances(doc, componentId)[0]?.transform ?? null;
 }
 
+/**
+ * Where the geometry of component `from` lies as seen from component `to`, as a placement in
+ * the coordinates of `to`. Each component is seen at its first instance (the root at the
+ * origin); one without instances is taken to be at the origin. This is how a component that is
+ * being edited sees the others, and how a sketch projects edges of another component's bodies.
+ */
+export function relativePlacement(
+  doc: CadDocument,
+  from: string,
+  to: string,
+  /** An instance of `from` to see it at, instead of its first one. */
+  instanceId?: string,
+): InstanceTransform {
+  const instance = instanceId ? doc.assembly.instances[instanceId] : undefined;
+  const at = instance && instance.componentId === from ? instance.transform : undefined;
+  if (from === to && !at) return IDENTITY_INSTANCE_TRANSFORM;
+  const a = at ?? placementOf(doc, from) ?? IDENTITY_INSTANCE_TRANSFORM;
+  const b = placementOf(doc, to) ?? IDENTITY_INSTANCE_TRANSFORM;
+  return composeInstanceTransforms(invertInstanceTransform(b), a);
+}
+
 const round = (v: number): string => String(Math.round(v * 1e6) / 1e6 + 0);
 
 export interface MovedToComponent {

@@ -238,6 +238,8 @@ export interface ProjectionSource {
   index?: number;
   count?: number;
   ref?: TopologyRef;
+  /** Instance of another component the geometry is seen at (see `ProjectedGeometryRef`). */
+  instanceId?: string;
 }
 
 /** Add a projected shape to the sketch. Returns the new reference, or null for a duplicate. */
@@ -287,6 +289,7 @@ export function addProjection(
     entityIds: ids,
   };
   if (from.ref) ref.ref = from.ref;
+  if (from.instanceId) ref.instanceId = from.instanceId;
   if (from.index !== undefined && from.count !== undefined) {
     ref.index = from.index;
     ref.count = from.count;

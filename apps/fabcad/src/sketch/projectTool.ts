@@ -5,6 +5,7 @@ import {
   faceEdges,
   faceSilhouettes,
   polylineMidpoint,
+  transformBodyGeometry,
 } from "@fabcad/brep";
 import { type BodyNames, makeEdgeRef, makeFaceRef, resolveSketchPlane } from "@fabcad/features";
 import type { Plane3, TopologyRef, Vec3 } from "@fabcad/geometry";
@@ -20,10 +21,16 @@ import { appState, toast } from "../app/appState";
 import { documentStore, editSketchSolved, modelState } from "../app/session";
 
 /** What the Project command accepts from the 3D view. */
-export type ProjectPick =
+/**
+ * What the Project command accepts from the 3D view. `placement` (row-major) puts the body where
+ * it was picked: on the ghost of another component, seen from the sketch's component;
+ * `instanceId` is the instance that ghost shows.
+ */
+export type ProjectPick = (
   | { kind: "edge"; bodyId: string; edgeIndex: number }
   | { kind: "face"; bodyId: string; faceIndex: number }
-  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 };
+  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
+) & { placement?: number[]; instanceId?: string };
 
 /** Add the projection of the picked geometry to a sketch. Pure: nothing is committed. */
 export function projectInto(
@@ -67,6 +74,7 @@ export function projectInto(
       index,
       count,
       ...(ref ? { ref } : {}),
+      ...(pick.instanceId ? { instanceId: pick.instanceId } : {}),
     });
     if (!result) return;
     shapes.push(shape);
@@ -96,7 +104,8 @@ export function projectPick(pick: ProjectPick): number {
   const sketchId = appState.get().activeSketchId;
   const feature = sketchId ? documentStore.document.features[sketchId] : undefined;
   const model = modelState.get().bodies[pick.bodyId];
-  const geometry = model?.geometry;
+  const geometry =
+    model && pick.placement ? transformBodyGeometry(model.geometry, pick.placement) : model?.geometry;
   const names = model?.names;
   if (!sketchId || feature?.type !== "sketch" || !geometry) return 0;
   const plane = resolveSketchPlane(feature.sketch.plane);

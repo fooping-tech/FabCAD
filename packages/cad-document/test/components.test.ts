@@ -21,6 +21,7 @@ import {
   moveToComponent,
   type MoveFeature,
   type MovedToComponent,
+  relativePlacement,
   removeComponents,
   separationProblem,
   removeInstances,
@@ -373,5 +374,25 @@ describe("components", () => {
     });
     expect(loaded.assembly.instances.i1!.transform.position).toEqual([5, 6, 7]);
     expect(loaded.bodies["body-9"]!.componentId).toBe(loaded.assembly.rootComponentId);
+  });
+
+  it("places one component as seen from another, at a chosen instance", () => {
+    const store = new DocumentStore(createDocument());
+    const a: CreatedComponent = {};
+    const b: CreatedComponent = {};
+    store.execute(createComponent({ name: "A" }, a));
+    store.execute(createComponent({ name: "B" }, b));
+    store.execute(setInstanceTransform(a.instanceId!, { position: [10, 0, 0], rotation: [0, 0, 0, 1] }));
+    store.execute(setInstanceTransform(b.instanceId!, { position: [0, 50, 0], rotation: [0, 0, 0, 1] }));
+    const second: { id?: string } = {};
+    store.execute(createInstance(b.id!, second, { position: [0, 90, 0], rotation: [0, 0, 0, 1] }));
+    const doc = store.document;
+    const root = doc.assembly.rootComponentId;
+    // B seen from A: B's first instance relative to A's.
+    expect(relativePlacement(doc, b.id!, a.id!).position).toEqual([-10, 50, 0]);
+    expect(relativePlacement(doc, b.id!, a.id!, second.id!).position).toEqual([-10, 90, 0]);
+    // The root is at the origin.
+    expect(relativePlacement(doc, root, a.id!).position).toEqual([-10, 0, 0]);
+    expect(relativePlacement(doc, a.id!, a.id!).position).toEqual([0, 0, 0]);
   });
 });

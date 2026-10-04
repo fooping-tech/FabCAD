@@ -10,7 +10,9 @@ import {
   type TessellationOptions,
   edgePolyline,
   faceSilhouettes,
+  isIdentityMatrix,
   nearestEdge,
+  transformBodyGeometry,
   nearestVertex,
   polylineMidpoint,
 } from "@fabcad/brep";
@@ -32,6 +34,7 @@ import {
 import {
   type BodyOperation,
   type CadDocument,
+  relativePlacement,
   type DynamicBodyId,
   type DynamicBodyInfo,
   type Feature,
@@ -84,6 +87,7 @@ import {
   worldToPlane,
 } from "@fabcad/geometry";
 import {
+  type ProjectedGeometryRef,
   type ProfileRef,
   type Sketch,
   type SketchRegion,
@@ -98,6 +102,7 @@ import {
   updateProjection,
 } from "@fabcad/sketch";
 import type { SketchSolver } from "@fabcad/sketch-solver";
+import { instanceMatrix } from "@fabcad/assembly";
 import { type PlanePatch, facePlanePatch, offsetPlanePatch, originPlanePatch } from "./planes";
 import { extrudeReach } from "./extrudeTo";
 import { freeMoveSteps } from "./move";
@@ -336,7 +341,15 @@ export class FeatureEngine {
       }
       if (feature.type === "sketch") {
         try {
-          const projected = this.reproject(feature.sketch, bodies);
+          const projected = this.reproject(feature.sketch, bodies, (ref) => {
+            // Edges of another component's body are projected from where that body is seen
+            // from the sketch's component: at the instance they were picked on, or else at the
+            // component's first instance.
+            const owner = doc.bodies[ref.bodyId]?.componentId;
+            if (!owner || (owner === feature.componentId && !ref.instanceId)) return null;
+            const m = instanceMatrix(relativePlacement(doc, owner, feature.componentId, ref.instanceId));
+            return isIdentityMatrix(m, 1e-12) ? null : m;
+          });
           const evaluated = this.evaluateSketch(
             projected === feature.sketch ? feature : { ...feature, sketch: projected },
             scope,
@@ -555,13 +568,26 @@ export class FeatureEngine {
    * Project the source geometry of every projection again, from the bodies as they are at this
    * point of the timeline. Returns the same sketch object when nothing moved.
    */
-  private reproject(sketch: Sketch, bodies: Map<string, BodyState>): Sketch {
+  private reproject(
+    sketch: Sketch,
+    bodies: Map<string, BodyState>,
+    /** Placement of a projection's body in the sketch's coordinates, unless the identity. */
+    placementOf: (ref: ProjectedGeometryRef) => number[] | null = () => null,
+  ): Sketch {
     let current = this.followPlane(this.followFace(sketch, bodies));
     if (sketch.projections.length === 0) return current;
     const plane = resolveSketchPlane(current.plane);
+    const placed = new Map<string, BodyState>();
     for (const ref of sketch.projections) {
-      const body = bodies.get(ref.bodyId);
-      if (!body) continue;
+      const source = bodies.get(ref.bodyId);
+      if (!source) continue;
+      let body = source;
+      const m = placementOf(ref);
+      if (m) {
+        const key = `${ref.bodyId}@${ref.instanceId ?? ""}`;
+        body = placed.get(key) ?? { ...source, geometry: transformBodyGeometry(source.geometry, m) };
+        placed.set(key, body);
+      }
       const geometry = body.geometry;
       let points: Vec3[];
       let hint: Vec3;
