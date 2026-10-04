@@ -51,9 +51,10 @@ import {
   evaluateAs,
   listBodies,
   listInstances,
+  relativePlacement,
   validComponentId,
 } from "@fabcad/cad-document";
-import { instanceWorldTransform } from "@fabcad/assembly";
+import { instanceMatrix, instanceWorldTransform } from "@fabcad/assembly";
 import {
   currentScope,
   documentStore,
@@ -126,9 +127,9 @@ function selectionToHighlight(s: Selection): Highlight | null {
     case "body":
       return { kind: "body", bodyId: s.bodyId };
     case "face":
-      return { kind: "face", bodyId: s.bodyId, faceIndex: s.faceIndex };
+      return { kind: "face", bodyId: s.bodyId, faceIndex: s.faceIndex, ...(s.ghost ? { ghost: s.ghost } : {}) };
     case "edge":
-      return { kind: "edge", bodyId: s.bodyId, edgeIndex: s.edgeIndex };
+      return { kind: "edge", bodyId: s.bodyId, edgeIndex: s.edgeIndex, ...(s.ghost ? { ghost: s.ghost } : {}) };
     case "vertex":
       return { kind: "vertex", bodyId: s.bodyId, point: s.point };
     case "origin-plane":
@@ -161,6 +162,9 @@ function transformPatch(patch: PlanePatch, m: number[]): PlanePatch {
     size: patch.size,
   };
 }
+
+/** Id of the ghost of the root bodies; the ghosts of instances have the instance id. */
+const ROOT_GHOST = "ghost:root";
 
 const INSTANCE_PICK_MESSAGE =
   "A component instance cannot be used in a command. Activate the component to edit it.";
@@ -788,7 +792,8 @@ export function Viewport(): ReactElement {
       appState.get().activeSketchId !== null && appState.get().tool === "project";
 
     const projectHover = (x: number, y: number): Selection | null => {
-      const pick = scene.pick(x, y, { faces: true, edges: true, vertices: true });
+      // Edges of other components (their ghosts) can be projected too.
+      const pick = scene.pick(x, y, { faces: true, edges: true, vertices: true, ghosts: true });
       const hover =
         pick && pick.kind !== "origin-plane" && pick.kind !== "plane"
           ? pickToSelection(pick)
@@ -803,13 +808,22 @@ export function Viewport(): ReactElement {
     const projectClick = (x: number, y: number): void => {
       const hover = projectHover(x, y);
       if (!hover) return;
-      if (hover.kind === "edge") projectPick({ kind: "edge", bodyId: hover.bodyId, edgeIndex: hover.edgeIndex });
-      else if (hover.kind === "face") projectPick({ kind: "face", bodyId: hover.bodyId, faceIndex: hover.faceIndex });
+      // On a ghost: the body's geometry placed where the ghost is, and the instance it shows.
+      const ghost = "ghost" in hover ? hover.ghost : undefined;
+      const from = ghost
+        ? {
+            placement: scene.ghostMatrix(ghost),
+            ...(ghost !== ROOT_GHOST ? { instanceId: ghost } : {}),
+          }
+        : {};
+      if (hover.kind === "edge") projectPick({ kind: "edge", bodyId: hover.bodyId, edgeIndex: hover.edgeIndex, ...from });
+      else if (hover.kind === "face") projectPick({ kind: "face", bodyId: hover.bodyId, faceIndex: hover.faceIndex, ...from });
       else if (hover.kind === "vertex") projectPick({
           kind: "vertex",
           bodyId: hover.bodyId,
           vertexIndex: hover.vertexIndex,
           point: hover.point,
+          ...from,
         });
       appState.set({ hover: null });
     };
@@ -1252,6 +1266,31 @@ export function Viewport(): ReactElement {
                 .map((b) => b.id),
             }))
         : [],
+    );
+    // Editing a component, the rest of the model is seen faded where it is relative to the
+    // component (at its first instance), as in Fusion: the root bodies, and every instance of
+    // the other components. Their edges can be projected.
+    const shown = (componentId: string): string[] =>
+      listBodies(doc, componentId)
+        .filter((b) => b.visible && model.bodies[b.id])
+        .map((b) => b.id);
+    scene.setGhosts(
+      rootActive
+        ? []
+        : [
+            {
+              id: ROOT_GHOST,
+              matrix: instanceMatrix(relativePlacement(doc, doc.assembly.rootComponentId, active)),
+              bodyIds: shown(doc.assembly.rootComponentId),
+            },
+            ...listInstances(doc)
+              .filter((i) => i.visible && i.componentId !== active)
+              .map((i) => ({
+                id: i.id,
+                matrix: instanceMatrix(relativePlacement(doc, i.componentId, active, i.id)),
+                bodyIds: shown(i.componentId),
+              })),
+          ].filter((g) => g.bodyIds.length > 0),
     );
     scene.setOriginVisibility(doc.origin.visible, doc.origin.hidden);
     // Frame the model when the first body appears, and whenever it leaves the view.

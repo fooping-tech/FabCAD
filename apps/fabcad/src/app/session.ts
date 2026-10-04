@@ -247,6 +247,8 @@ const geometryChanged = (a: CadDocument | null, b: CadDocument): boolean =>
   a.timeline !== b.timeline ||
   a.timelineCursor !== b.timelineCursor ||
   a.parameters !== b.parameters ||
+  // Projections from another component follow where its instances are.
+  a.assembly !== b.assembly ||
   Object.keys(a.bodies).length !== Object.keys(b.bodies).length;
 
 async function recomputeLoop(): Promise<void> {

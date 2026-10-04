@@ -233,6 +233,12 @@ export interface ProjectedGeometryRef {
   count?: number;
   /** Persistent name of the source edge (or face). Takes precedence over `index` and `hint`. */
   ref?: TopologyRef;
+  /**
+   * The instance of another component the geometry was projected from: the body is placed
+   * where that instance is, seen from the sketch's component. Without it, the component's first
+   * instance (or the origin, for the root).
+   */
+  instanceId?: string;
   entityIds: EntityId[];
 }
 

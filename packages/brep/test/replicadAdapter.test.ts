@@ -297,3 +297,27 @@ describe("pointInBody", () => {
     expect(pointInBody(g, { x: 99.5, y: 0.5, z: 9.5 })).toBe(true);
   });
 });
+
+describe("placed geometry", () => {
+  it("moves a body's display geometry by a rigid placement", async () => {
+    const { transformBodyGeometry, isIdentityMatrix } = await import("../src/placement");
+    const k = await nodeKernel();
+    const box = k.extrude([rect(10, 20)], ORIGIN_PLANES.XY, 0, 5);
+    const g = k.tessellate(box);
+    // A quarter turn about Z, then 100 along X.
+    const m = [0, -1, 0, 100, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    const p = transformBodyGeometry(g, m);
+    expect(p.bounds.min.x).toBeCloseTo(80);
+    expect(p.bounds.max.x).toBeCloseTo(100);
+    expect(p.bounds.min.y).toBeCloseTo(0);
+    expect(p.bounds.max.y).toBeCloseTo(10);
+    expect(p.edges.map((e) => e.edgeIndex)).toEqual(g.edges.map((e) => e.edgeIndex));
+    const e = g.edges[0]!;
+    expect(p.edges[0]!.midpoint.x).toBeCloseTo(100 - e.midpoint.y);
+    expect(p.edges[0]!.midpoint.y).toBeCloseTo(e.midpoint.x);
+    const top = p.faces.find((f) => f.normal.z > 0.9);
+    expect(top).toBeDefined();
+    expect(isIdentityMatrix([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])).toBe(true);
+    expect(isIdentityMatrix(m)).toBe(false);
+  });
+});
