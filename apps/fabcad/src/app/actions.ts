@@ -1285,6 +1285,11 @@ export function toggleSelection(item: Selection): void {
   setSelection(exists ? selection.filter((s) => selectionKey(s) !== key) : [...selection, item]);
 }
 
+/** Export → STEP / STL: a window to choose the bodies and components first. */
+export function openExportModel(format: "step" | "stl"): void {
+  appState.set({ exportModel: { format } });
+}
+
 export async function importStep(): Promise<void> {
   const file = await pickFile(".step,.stp,.STEP,.STP");
   if (!file) return;

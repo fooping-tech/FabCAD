@@ -6,6 +6,7 @@ import {
   beginSketchPlanePick,
   finishSketch,
   importStep,
+  openExportModel,
   openDialog,
   setTool,
   setWorkspace,
@@ -13,7 +14,7 @@ import {
 } from "./actions";
 import type { PaletteEntry } from "./commandSearch";
 import { copyHistoryLog } from "./copyHistoryLog";
-import { exportModel, redo, saveProject, undo } from "./session";
+import { redo, saveProject, undo } from "./session";
 import { applyConstraintToSelection, toggleSelectedConstruction } from "./sketchCommands";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS } from "../sketch/createTools";
@@ -98,8 +99,8 @@ export function paletteCommands(hooks: PaletteHooks): PaletteCommand[] {
       add({ id: `create.${t.id}`, label: `${t.label} (new sketch)`, group: "Sketch: create", detail: t.description, keywords: "draw", run: () => beginSketchPlanePick(t.id) });
     }
     add({ id: "ws.fabrication", label: "Switch to FABRICATION", group: "Workspace", keywords: "laser print svg", run: () => setWorkspace("fabrication") });
-    add({ id: "export.step", label: "Export STEP", group: "Export", keywords: "download file", run: () => void exportModel("step") });
-    add({ id: "export.stl", label: "Export STL", group: "Export", keywords: "download file", run: () => void exportModel("stl") });
+    add({ id: "export.step", label: "Export STEP", group: "Export", keywords: "download file", run: () => openExportModel("step") });
+    add({ id: "export.stl", label: "Export STL", group: "Export", keywords: "download file", run: () => openExportModel("stl") });
     add({ id: "export.sketch-svg", label: "Export SVG — selected sketch", group: "Export", keywords: "download file", run: () => exportSketchSvg() });
     add({ id: "export.sketch-dxf", label: "Export DXF — selected sketch", group: "Export", keywords: "download file", run: () => exportSketchDxf() });
   }

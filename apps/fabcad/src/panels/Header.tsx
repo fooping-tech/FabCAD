@@ -1,9 +1,8 @@
 import { renameDocument } from "@fabcad/cad-document";
 import { type ReactElement, useEffect, useRef, useState } from "react";
-import { importStep, openDialog, setWorkspace } from "../app/actions";
+import { importStep, openDialog, openExportModel, setWorkspace } from "../app/actions";
 import { appState } from "../app/appState";
 import {
-  exportModel,
   newProject,
   openProjectFile,
   pickFile,
@@ -199,8 +198,18 @@ export function Header({
           { label: "DXF — selected sketch", icon: "sketch", onSelect: () => exportSketchDxf() },
           { separator: true },
           { title: "3D model" },
-          { label: "STEP", icon: "body", onSelect: () => void exportModel("step") },
-          { label: "STL", icon: "body", onSelect: () => void exportModel("stl") },
+          {
+            label: "STEP…",
+            icon: "body",
+            help: { id: "export.model", title: "Export 3D Model" },
+            onSelect: () => openExportModel("step"),
+          },
+          {
+            label: "STL…",
+            icon: "body",
+            help: { id: "export.model", title: "Export 3D Model" },
+            onSelect: () => openExportModel("stl"),
+          },
           { separator: true },
           { title: "Project" },
           { label: "FabCAD project (.fabcad.json)", icon: "save", onSelect: saveProject },

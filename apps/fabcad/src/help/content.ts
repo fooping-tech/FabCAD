@@ -791,6 +791,20 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     limitations: ["An imported body has no history of its own: there is nothing to edit in it."],
   },
+  "export.model": {
+    title: "Export 3D Model",
+    summary: "Write the chosen bodies and components to a STEP or STL file.",
+    what: [
+      "Export → STEP… or STL… opens a window that lists the bodies of the root and, for each component, its bodies. Tick what goes into the file; a component's box ticks all its bodies.",
+      "The bodies of a component are written at each of its visible instances, placed where the instance is (in STEP named Instance/Body), or once at the origin, where the definition lies.",
+      "It starts with the selection (bodies, components or instances), or, with nothing selected, with everything that is shown. STL writes all solids into one file.",
+    ],
+    parameters: [
+      { name: "Format", text: "STEP (solids, for other CAD) or STL (triangles, for printing)." },
+      { name: "Placement", text: "For each component: At its instances, or Once, at the origin." },
+    ],
+    limitations: ["The STEP file is a flat list of solids, not an assembly structure."],
+  },
   "component.new": {
     title: "New Component",
     summary: "Make a component: a definition of a part that can be placed several times.",
