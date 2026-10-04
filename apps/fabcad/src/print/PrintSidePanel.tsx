@@ -308,7 +308,7 @@ export function PrintSidePanel({ state }: { state: PrintState }): ReactElement {
               className="btn accent"
               style={{ flex: 1 }}
               disabled={!job || stale}
-              onClick={() => exportPrintJob("3mf", job, documentStore.document.name)}
+              onClick={() => exportPrintJob("3mf", job, documentStore.document.name, included.length)}
             >
               Export 3MF
             </button>
@@ -316,7 +316,7 @@ export function PrintSidePanel({ state }: { state: PrintState }): ReactElement {
               className="btn"
               style={{ flex: 1 }}
               disabled={!job || stale}
-              onClick={() => exportPrintJob("stl", job, documentStore.document.name)}
+              onClick={() => exportPrintJob("stl", job, documentStore.document.name, included.length)}
             >
               Export STL
             </button>

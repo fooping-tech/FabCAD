@@ -936,7 +936,10 @@ export const HELP: Record<string, HelpEntry> = {
       "A body of a component is printed once for each visible instance of the component (the number of instances is the quantity), or once: choose it at the component in the Bodies list. Export → 3MF / STL (parts on the bed) opens a window with the same choice.",
     ],
     requires: ["At least one body."],
-    limitations: ["FabCAD does not slice: the file goes to a slicer."],
+    limitations: [
+      "FabCAD does not slice: the file goes to a slicer.",
+      "A body that is not a closed solid (its surface has gaps) is not printed. The export window marks it and says why; Export → 3D model → STL… writes it without this check, for a slicer that repairs meshes.",
+    ],
   },
 };
 
