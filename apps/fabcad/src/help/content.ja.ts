@@ -604,6 +604,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     limitations: [
       "1 つの Feature で指定できる半径は 1 つ、対象は 1 つの Body の稜線です。",
       "隣の稜線との間に収まらない半径では失敗します。",
+      "結果が閉じた正しい立体にならないときは、壊れた Body を残さずにエラーにします（面が接線で接する稜線にごく小さい半径を付けると起こることがあります）。",
     ],
     examples: ["Multi-Select で箱の縦の稜線を 4 本選び、Fillet、5。"],
   },
@@ -616,7 +617,10 @@ export const HELP_JA: Record<string, HelpEntry> = {
     ],
     requires: ["1 つの Body の稜線。コマンドを開始したときに選択されていた稜線は、そのまま入ります。"],
     parameters: [{ name: "Distance", text: "面取りの幅。両方の面で同じです。" }],
-    limitations: ["両側で距離が同じ面取りだけです。"],
+    limitations: [
+      "両側で距離が同じ面取りだけです。",
+      "結果が閉じた正しい立体にならないときは、壊れた Body を残さずにエラーにします。",
+    ],
   },
   "solid.shell": {
     title: "Shell",

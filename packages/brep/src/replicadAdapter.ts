@@ -84,6 +84,48 @@ export async function createReplicadKernel(
   return new ReplicadKernel();
 }
 
+/**
+ * Gap below which a Boolean treats geometry as touching (mm). Faces that are tangent, or nearly
+ * coincident (a wall drawn on the projected outline of a cylinder), otherwise leave slivers a few
+ * micrometres wide: OpenCASCADE calls the solid valid, but its faces do not close up when meshed.
+ * A hundredth of a micrometre is far below anything a machine makes.
+ */
+const BOOLEAN_FUZZY = 1e-5;
+
+/** `a` op `b` with the fuzzy tolerance; same simplification as replicad's own Booleans. */
+function tolerantBoolean(op: BooleanOp, a: Shape3D, b: Shape3D): Shape3D {
+  const oc = replicad.getOC() as unknown as {
+    BRepAlgoAPI_Fuse: new (a: RawShape, b: RawShape) => FuzzyBuilder;
+    BRepAlgoAPI_Cut: new (a: RawShape, b: RawShape) => FuzzyBuilder;
+    BRepAlgoAPI_Common: new (a: RawShape, b: RawShape) => FuzzyBuilder;
+    Message_ProgressRange: new () => { delete(): void };
+  };
+  const Builder = op === "union" ? oc.BRepAlgoAPI_Fuse : op === "cut" ? oc.BRepAlgoAPI_Cut : oc.BRepAlgoAPI_Common;
+  // The binding has no argument lists: the constructor builds once without the tolerance,
+  // and the operation is built again with it.
+  const builder = new Builder(a.wrapped, b.wrapped);
+  const progress = new oc.Message_ProgressRange();
+  try {
+    builder.SetFuzzyValue(BOOLEAN_FUZZY);
+    builder.Build(progress);
+    builder.SimplifyResult(true, true, 0.001);
+    const shape = replicad.cast(builder.Shape());
+    if (!replicad.isShape3D(shape)) throw new KernelError("The Boolean did not give a solid.");
+    return shape;
+  } finally {
+    progress.delete();
+    builder.delete();
+  }
+}
+
+interface FuzzyBuilder {
+  SetFuzzyValue(value: number): void;
+  Build(progress: unknown): void;
+  SimplifyResult(unifyEdges: boolean, unifyFaces: boolean, angularTolerance: number): void;
+  Shape(): RawShape;
+  delete(): void;
+}
+
 const wrap = (shape: Shape3D): KernelShape => shape as unknown as KernelShape;
 const unwrap = (shape: KernelShape): Shape3D => shape as unknown as Shape3D;
 const tuple = (p: Vec2): [number, number] => [p.x, p.y];
@@ -427,9 +469,7 @@ class ReplicadKernel implements GeometryKernel {
       let result = unwrap(target);
       for (const tool of tools) {
         const t = unwrap(tool);
-        if (op === "union") result = result.fuse(t);
-        else if (op === "cut") result = result.cut(t);
-        else result = result.intersect(t);
+        result = tolerantBoolean(op, result, t);
       }
       this.checkBoolean(op, target, tools, wrap(result));
       return wrap(result);

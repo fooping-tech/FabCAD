@@ -643,6 +643,7 @@ export const HELP: Record<string, HelpEntry> = {
     limitations: [
       "One radius per feature, edges of one body per feature.",
       "Fails when the radius does not fit between neighbouring edges.",
+      "Fails, instead of leaving a broken body, when the result would not be a closed, valid solid (a tiny radius on an edge where faces meet tangentially can do this).",
     ],
     examples: ["Multi-Select, pick the four vertical edges of a box, Fillet, 5."],
   },
@@ -655,7 +656,10 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     requires: ["Edges of one body. Edges that are selected when the command starts are taken over."],
     parameters: [{ name: "Distance", text: "Width of the bevel on both faces." }],
-    limitations: ["Equal distances on both sides only."],
+    limitations: [
+      "Equal distances on both sides only.",
+      "Fails, instead of leaving a broken body, when the result would not be a closed, valid solid.",
+    ],
   },
   "solid.shell": {
     title: "Shell",

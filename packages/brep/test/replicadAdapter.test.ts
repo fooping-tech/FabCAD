@@ -201,6 +201,19 @@ describe("replicad adapter", () => {
     expect(stl.length).toBe(84 + 12 * 50);
   });
 
+  it("joins a box whose walls touch a cylinder tangentially into a closed solid", () => {
+    // A wall drawn on the projected outline of a cylinder: exactly on the tangent, or a few
+    // micrometres off it. Without a tolerance the Boolean leaves a sliver that does not mesh.
+    for (const off of [0, 2.9e-6, -2.9e-6]) {
+      const cylinder = kernel.extrude([{ outer: circleLoop(0, 0, 79), holes: [] }], ORIGIN_PLANES.XY, 0, 27);
+      const box = kernel.extrude([rect(158 + 2 * off, 100, -79 - off, -60)], ORIGIN_PLANES.XY, -13, 62);
+      const union = kernel.boolean("union", box, [cylinder]);
+      expect(kernel.solidProblem(union), `offset ${off}`).toBeNull();
+      const open = kernel.topology(union).edges.filter((e) => e.faces.length !== 2);
+      expect(open, `offset ${off}`).toEqual([]);
+    }
+  });
+
   it("writes several shapes to one STL and leaves them usable", async () => {
     const a = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 10);
     const b = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 20, 30);
