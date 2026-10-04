@@ -296,6 +296,23 @@ export class ViewportScene {
     this.controls.zoomSpeed = touch ? 1 : 1.4;
   }
 
+  /**
+   * Move the view by a number of pixels, as a two-finger swipe on a trackpad does: what is
+   * shown follows the fingers (positive `dx`: the model moves left, positive `dy`: up).
+   */
+  panByPixels(dx: number, dy: number): void {
+    const size = this.pixelSize(fromV3(this.controls.target));
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1);
+    const offset = right.multiplyScalar(dx * size).add(up.multiplyScalar(-dy * size));
+    this.camera.position.add(offset);
+    this.controls.target.add(offset);
+    this.controls.update();
+    this.syncOrthographic();
+    this.invalidate();
+    this.emit();
+  }
+
   /** Suspend camera control while something else owns the pointer (e.g. a manipulator). */
   setControlsEnabled(enabled: boolean): void {
     this.controls.enabled = enabled;

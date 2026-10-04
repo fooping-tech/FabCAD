@@ -4,6 +4,7 @@
  *
  * - Double tap: the context menu of the editor (what a right-click is with a mouse).
  * - Long press: help for a tool icon.
+ * - Two-finger swipe on a trackpad: pan the view (pinch and the mouse wheel zoom).
  *
  * The functions here hold no DOM listeners of their own; they are fed with pointer positions
  * and times, which keeps them testable without a browser.
@@ -135,5 +136,48 @@ export function createLongPress(
       fired = false;
       return was;
     },
+  };
+}
+
+// ------------------------------------------------------------------ trackpad
+
+/** What a wheel event carries that tells a trackpad from a mouse wheel. */
+export interface WheelSample {
+  deltaX: number;
+  deltaY: number;
+  /** 0: pixels, 1: lines, 2: pages. */
+  deltaMode: number;
+  /** Set by browsers for a pinch on a trackpad (and for Ctrl + wheel). */
+  ctrlKey: boolean;
+  /** Non-standard `wheelDeltaY` of Chrome and Safari, when there is one. */
+  wheelDeltaY?: number;
+  /** Milliseconds, e.g. `event.timeStamp`. */
+  time: number;
+}
+
+export type WheelGesture = "pan" | "zoom";
+
+/**
+ * Tells a two-finger swipe on a trackpad (pan the view) from a mouse wheel and a pinch (zoom).
+ *
+ * - A pinch arrives with `ctrlKey`: zoom.
+ * - A mouse wheel moves in lines, or in big integer steps with no sideways part; Chrome and
+ *   Safari report `wheelDeltaY` in steps of 120 for it, but as -3 × `deltaY` for a trackpad.
+ * - A swipe that has been recognised keeps panning while its events keep coming (`gap` ms),
+ *   so that a slow, purely vertical swipe does not turn into zooming halfway.
+ */
+export function createWheelClassifier(gap = 160): (e: WheelSample) => WheelGesture {
+  let last: { gesture: WheelGesture; time: number } | null = null;
+  return (e) => {
+    let gesture: WheelGesture;
+    if (e.ctrlKey) gesture = "zoom";
+    else if (last?.gesture === "pan" && e.time - last.time < gap) gesture = "pan";
+    else if (e.deltaMode !== 0) gesture = "zoom";
+    else if (e.deltaX !== 0) gesture = "pan";
+    else if (e.wheelDeltaY !== undefined && e.wheelDeltaY !== 0) {
+      gesture = e.wheelDeltaY === -3 * e.deltaY ? "pan" : "zoom";
+    } else gesture = Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50 ? "zoom" : "pan";
+    last = { gesture, time: e.time };
+    return gesture;
   };
 }
