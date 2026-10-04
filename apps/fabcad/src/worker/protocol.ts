@@ -1,5 +1,5 @@
 import type { CadDocument } from "@fabcad/cad-document";
-import type { RecomputeResult } from "@fabcad/features";
+import type { ExportItem, RecomputeResult } from "@fabcad/features";
 import type { TessellationOptions } from "@fabcad/brep";
 import type { SolidTopology } from "@fabcad/geometry";
 
@@ -8,8 +8,8 @@ export type WorkerRequest =
   | { type: "init" }
   | { type: "recompute"; document: CadDocument; known: Record<string, string> }
   | { type: "topology"; bodyId: string; options?: TessellationOptions }
-  | { type: "export-step"; bodies: { id: string; name: string }[] }
-  | { type: "export-stl"; bodyIds: string[]; binary: boolean };
+  | { type: "export-step"; bodies: ExportItem[] }
+  | { type: "export-stl"; bodies: ExportItem[]; binary: boolean };
 
 export interface WorkerResponses {
   init: { kernel: string };

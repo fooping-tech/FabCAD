@@ -376,6 +376,8 @@ export interface AppState {
   activeComponentId: string | null;
   /** Browser row (selection key) asked to start renaming, e.g. from the context menu. */
   renaming: string | null;
+  /** The window that chooses what a STEP / STL export of the 3D model contains. */
+  exportModel: { format: "step" | "stl" } | null;
   /** The New Component window, with what was selected when it opened. */
   newComponent: {
     anchor: { x: number; y: number } | null;
@@ -459,6 +461,7 @@ export const appState = new TinyStore<AppState>({
   activeComponentId: null,
   renaming: null,
   newComponent: null,
+  exportModel: null,
   instanceMove: null,
   tool: "select",
   toolOptions: {

@@ -948,12 +948,27 @@ class ReplicadKernel implements GeometryKernel {
   ): Promise<Uint8Array> {
     const blob = guard("STL export", () => {
       const list = shapes.map(unwrap);
-      const shape = list.length === 1 ? list[0]! : replicad.makeCompound(list);
-      return shape.blobSTL({
-        tolerance: options.tolerance ?? 0.02,
-        angularTolerance: options.angularTolerance ?? 0.2,
-        binary: options.binary ?? true,
-      });
+      const stl = (shape: replicad.AnyShape): Blob =>
+        shape.blobSTL({
+          tolerance: options.tolerance ?? 0.02,
+          angularTolerance: options.angularTolerance ?? 0.2,
+          binary: options.binary ?? true,
+        });
+      if (list.length === 1) return stl(list[0]!);
+      // Not `replicad.makeCompound`: it deletes the shapes it is given, and these belong to the
+      // caller (the bodies of the feature engine).
+      const oc = replicad.getOC();
+      const builder = new oc.TopoDS_Builder();
+      const compound = new oc.TopoDS_Compound();
+      builder.MakeCompound(compound);
+      for (const s of list) builder.Add(compound, s.wrapped);
+      builder.delete();
+      const shape = replicad.cast(compound);
+      try {
+        return stl(shape);
+      } finally {
+        shape.delete();
+      }
     });
     return new Uint8Array(await blob.arrayBuffer());
   }

@@ -27,6 +27,7 @@ import { Header, openProject } from "./panels/Header";
 import { ImportDxfDialog } from "./panels/ImportDxfDialog";
 import { InstanceMovePanel } from "./panels/InstanceMovePanel";
 import { NewComponentPanel } from "./panels/NewComponentPanel";
+import { ExportModelPanel } from "./panels/ExportModelPanel";
 import { AboutDialog, ParametersDialog } from "./panels/ParametersDialog";
 import { PropertiesPanel } from "./panels/PropertiesPanel";
 import { Ribbon } from "./panels/Ribbon";
@@ -167,6 +168,7 @@ export function App(): ReactElement {
         exportFabrication={(format) => exportHandler(format)}
         exportPrint={(format) => printExportHandler(format)}
       />
+      <ExportModelPanel />
       <HelpMenu />
       <HelpOverlay />
       {dialog?.type === "parameters" && <ParametersDialog />}

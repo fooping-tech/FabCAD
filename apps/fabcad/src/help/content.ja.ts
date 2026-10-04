@@ -747,6 +747,20 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: ["ファイルはプロジェクトの中に保存するので、プロジェクトだけで完結します。取り込んだ Body は、ほかの Feature で加工できます。"],
     limitations: ["取り込んだ Body には履歴がなく、Body そのものは編集できません。"],
   },
+  "export.model": {
+    title: "Export 3D Model",
+    summary: "選んだ Body とコンポーネントを STEP または STL に書き出します。",
+    what: [
+      "Export → STEP… または STL… で窓が開き、ルートの Body と、コンポーネントごとにその Body が並びます。書き出すものにチェックを入れます。コンポーネントのチェックは、その Body をまとめて切り替えます。",
+      "コンポーネントの Body は、表示中のインスタンスごとに、その位置に置いて書き出す（STEP では Instance/Body という名前）か、定義の位置に 1 つだけ書き出すかを選べます。",
+      "最初は選択しているもの（Body、コンポーネント、インスタンス）が、何も選択していなければ表示しているものすべてが入っています。STL はすべてを 1 つのファイルに書きます。",
+    ],
+    parameters: [
+      { name: "Format", text: "STEP（立体。ほかの CAD 向け）または STL（三角形。3D プリント向け）。" },
+      { name: "Placement", text: "コンポーネントごとに、At its instances（インスタンスの位置）か Once, at the origin（原点に 1 つ）。" },
+    ],
+    limitations: ["STEP はアセンブリの構造をもたない、立体の一覧です。"],
+  },
   "component.new": {
     title: "New Component",
     summary: "コンポーネントを作ります。何度でも配置できる部品の定義です。",

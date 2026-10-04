@@ -599,8 +599,33 @@ describe("feature engine", () => {
     await engine.recompute(store.document);
     const step = await engine.exportSTEP([{ id: bodyId, name: "Body001" }]);
     expect(new TextDecoder().decode(step.slice(0, 16))).toContain("ISO-10303-21");
-    const stl = await engine.exportSTL([bodyId]);
+    const stl = await engine.exportSTL([{ id: bodyId }]);
     expect(stl.length).toBe(84 + 12 * 50);
-    await expect(engine.exportSTL(["missing"])).rejects.toThrow(/no body/);
+    await expect(engine.exportSTL([{ id: "missing" }])).rejects.toThrow(/no geometry/);
+  });
+
+  it("exports placed copies of a body, as the instances of a component", async () => {
+    const store = new DocumentStore(createDocument());
+    const { bodyId } = scenarioA(store);
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    const stl = await engine.exportSTL([
+      { id: bodyId },
+      { id: bodyId, steps: [{ type: "translate", vector: { x: 1000, y: 0, z: 0 } }] },
+    ]);
+    const view = new DataView(stl.buffer, stl.byteOffset, stl.byteLength);
+    const count = view.getUint32(80, true);
+    expect(count).toBe(24);
+    // x of every vertex: the first 12 triangles near the origin, the next 12 a metre away.
+    const xs = (from: number, to: number): number[] => {
+      const out: number[] = [];
+      for (let t = from; t < to; t++) for (let v = 0; v < 3; v++) out.push(view.getFloat32(84 + t * 50 + 12 + v * 12, true));
+      return out;
+    };
+    expect(Math.max(...xs(0, 12))).toBeLessThan(500);
+    expect(Math.min(...xs(12, 24))).toBeGreaterThan(500);
+    // The body itself did not move.
+    const again = await engine.exportSTL([{ id: bodyId }]);
+    expect(again).toEqual(stl.slice(0, 84 + 12 * 50).map((b, i) => (i >= 80 && i < 84 ? again[i]! : b)));
   });
 });

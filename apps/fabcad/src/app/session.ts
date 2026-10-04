@@ -17,6 +17,7 @@ import {
 } from "@fabcad/cad-document";
 import {
   type BodyNames,
+  type ExportItem,
   type FeatureStatus,
   type PlaneResult,
   type SketchSolveInfo,
@@ -394,39 +395,30 @@ export function pickFile(accept: string): Promise<File | null> {
   });
 }
 
-function visibleBodies(doc: CadDocument): { id: string; name: string }[] {
-  const computed = modelState.get().bodies;
-  const selected = appState
-    .get()
-    .selection.flatMap((s) => ("bodyId" in s ? [s.bodyId] : []));
-  const all = Object.values(doc.bodies).filter((b) => computed[b.id]);
-  const chosen = selected.length > 0 ? all.filter((b) => selected.includes(b.id)) : all.filter((b) => b.visible);
-  return chosen.map((b) => ({ id: b.id, name: b.name }));
-}
-
-export async function exportModel(format: "step" | "stl"): Promise<void> {
+/**
+ * Write a STEP or STL file of the 3D model. `items` are the solids (see `app/exportModel.ts`):
+ * a body may come several times, placed at the instances of its component.
+ */
+export async function exportModel(format: "step" | "stl", items: ExportItem[]): Promise<boolean> {
   const doc = documentStore.document;
-  const bodies = visibleBodies(doc);
-  if (bodies.length === 0) {
+  if (items.length === 0) {
     toast("There is no body to export.", "warning");
-    return;
+    return false;
   }
   try {
     const name = safeFileName(doc.name);
     if (format === "step") {
-      const data = await engine().request({ type: "export-step", bodies });
+      const data = await engine().request({ type: "export-step", bodies: items });
       downloadBlob(data as unknown as BlobPart, `${name}.step`, "model/step");
     } else {
-      const data = await engine().request({
-        type: "export-stl",
-        bodyIds: bodies.map((b) => b.id),
-        binary: true,
-      });
+      const data = await engine().request({ type: "export-stl", bodies: items, binary: true });
       downloadBlob(data as unknown as BlobPart, `${name}.stl`, "model/stl");
     }
-    toast(`Exported ${bodies.length} ${bodies.length === 1 ? "body" : "bodies"} as ${format.toUpperCase()}.`);
+    toast(`Exported ${items.length} ${items.length === 1 ? "solid" : "solids"} as ${format.toUpperCase()}.`);
+    return true;
   } catch (err) {
     toast(err instanceof Error ? err.message : String(err), "error");
+    return false;
   }
 }
 

@@ -71,6 +71,10 @@ export function pressEscape(): void {
     cancelNewComponent();
     return;
   }
+  if (state.exportModel) {
+    appState.set({ exportModel: null });
+    return;
+  }
   if (state.measuring) {
     stopMeasure();
     return;

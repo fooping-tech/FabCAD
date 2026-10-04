@@ -477,6 +477,16 @@ table.grid td input { padding: 2px 5px; }
 @keyframes timeline-flash { 50% { box-shadow: 0 0 0 3px #e0a020; } }
 
 /* ------------------------------------------------------------------- dialog */
+.export-model .export-group { border-top: 1px solid var(--line); padding: 6px 0; }
+.export-model .export-group:first-of-type { border-top: 0; }
+.export-model .export-row { display: flex; align-items: center; gap: 7px; min-height: 26px; }
+.export-model .export-row.body { padding-left: 22px; }
+.export-model .export-label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; cursor: pointer; }
+.export-model .export-row.body { cursor: pointer; }
+.export-model .export-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-model .export-name.dim { color: var(--ink-faint); }
+.export-model .export-row.group .export-name { font-weight: 600; }
+.export-model select { font: inherit; font-size: 12px; flex: none; width: auto; max-width: 55%; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 80; background: rgba(29, 43, 56, 0.32); display: grid; place-items: center; }
 .modal { background: #fff; border-radius: 8px; border: 1px solid var(--line-strong); box-shadow: 0 20px 60px rgba(29, 43, 56, 0.3); width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 80px); display: flex; flex-direction: column; }
 .modal-title { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--line); font-weight: 680; font-size: 13px; }

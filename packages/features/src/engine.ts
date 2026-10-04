@@ -149,6 +149,15 @@ export interface PlaneResult extends PlanePatch {
   id: string;
 }
 
+/** A body to export, optionally placed (an instance of a component). */
+export interface ExportItem {
+  id: string;
+  /** Name in the STEP file. */
+  name?: string;
+  /** Rigid placement applied to a copy of the body, for the export only. */
+  steps?: ShapeTransform[];
+}
+
 export interface RecomputeResult {
   bodies: BodyResult[];
   planes: PlaneResult[];
@@ -477,22 +486,44 @@ export class FeatureEngine {
     return this.sketches.get(featureId)?.regions ?? [];
   }
 
-  async exportSTEP(bodies: { id: string; name: string }[]): Promise<Uint8Array> {
-    const shapes = bodies.flatMap((b) => {
-      const s = this.bodies.get(b.id);
-      return s ? [{ shape: s.shape, name: b.name }] : [];
-    });
-    if (shapes.length === 0) throw new Error("There is no body to export.");
-    return this.kernel.exportSTEP(shapes);
+  /**
+   * STEP of bodies. A body may be listed more than once, each time placed by its own `steps`
+   * (the instances of a component); the placed copies exist only for the export.
+   */
+  async exportSTEP(bodies: ExportItem[]): Promise<Uint8Array> {
+    return this.withPlaced(bodies, (shapes) =>
+      this.kernel.exportSTEP(shapes.map((s, i) => ({ shape: s, name: bodies[i]!.name ?? "" }))),
+    );
   }
 
-  async exportSTL(bodyIds: string[], binary = true): Promise<Uint8Array> {
-    const shapes = bodyIds.flatMap((id) => {
-      const s = this.bodies.get(id);
-      return s ? [s.shape] : [];
-    });
-    if (shapes.length === 0) throw new Error("There is no body to export.");
-    return this.kernel.exportSTL(shapes, { binary });
+  /** STL of bodies, placed like `exportSTEP`. */
+  async exportSTL(bodies: ExportItem[], binary = true): Promise<Uint8Array> {
+    return this.withPlaced(bodies, (shapes) => this.kernel.exportSTL(shapes, { binary }));
+  }
+
+  private async withPlaced(
+    items: ExportItem[],
+    write: (shapes: KernelShape[]) => Promise<Uint8Array>,
+  ): Promise<Uint8Array> {
+    const made: KernelShape[] = [];
+    try {
+      const shapes: KernelShape[] = [];
+      for (const item of items) {
+        const s = this.bodies.get(item.id);
+        if (!s) throw new Error(`"${item.name ?? item.id}" has no geometry at the current history position.`);
+        if (item.steps && item.steps.length > 0) {
+          const placed = this.kernel.transform(s.shape, item.steps);
+          made.push(placed);
+          shapes.push(placed);
+        } else {
+          shapes.push(s.shape);
+        }
+      }
+      if (shapes.length === 0) throw new Error("There is no body to export.");
+      return await write(shapes);
+    } finally {
+      for (const shape of made) this.kernel.dispose(shape);
+    }
   }
 
   dispose(): void {

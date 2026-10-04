@@ -201,6 +201,16 @@ describe("replicad adapter", () => {
     expect(stl.length).toBe(84 + 12 * 50);
   });
 
+  it("writes several shapes to one STL and leaves them usable", async () => {
+    const a = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 10);
+    const b = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 20, 30);
+    const stl = await kernel.exportSTL([a, b]);
+    expect(stl.length).toBe(84 + 24 * 50);
+    // The shapes belong to the caller: they still work after the export.
+    expect(kernel.tessellate(a).volume).toBeCloseTo(1000, 3);
+    expect((await kernel.exportSTL([b])).length).toBe(84 + 12 * 50);
+  });
+
   it("reports failures as KernelError", () => {
     const box = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 10);
     expect(() => kernel.fillet(box, [{ point: { x: 0, y: 0, z: 5 } }], 50)).toThrow(/Fillet/);
