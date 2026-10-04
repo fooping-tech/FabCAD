@@ -1,5 +1,6 @@
-import { setExtension } from "@fabcad/cad-document";
-import { type PrintBody, type PrintJob, compilePrintJob } from "@fabcad/fabrication-print";
+import { type CadDocument, setExtension } from "@fabcad/cad-document";
+import { type PrintJob, compilePrintJob } from "@fabcad/fabrication-print";
+import { type PrintBodyChoice, printBodies, printChoices, withCopyOrientations } from "./bodies";
 import { useMemo } from "react";
 import { type BodyModel, documentStore, modelState, run, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
@@ -10,12 +11,7 @@ import {
   toPrintSettings,
 } from "./settingsModel";
 
-export interface PrintBodyChoice {
-  id: string;
-  name: string;
-  visible: boolean;
-  included: boolean;
-}
+export type { PrintBodyChoice };
 
 export interface PrintState {
   settings: PrintWorkspaceSettings;
@@ -33,17 +29,22 @@ export function updatePrintSettings(
   run(setExtension(PRINT_EXTENSION_KEY, { ...current, ...patch }, label));
 }
 
-/** Bodies as the print compiler receives them: tessellated, nothing else. */
-export function printBodies(
-  bodies: PrintBodyChoice[],
+/** The print job of a document: what the preview shows and what the export writes. */
+export function printJobFor(
+  doc: CadDocument,
+  settings: PrintWorkspaceSettings,
+  choices: readonly PrintBodyChoice[],
   models: Record<string, BodyModel>,
-): PrintBody[] {
-  return bodies.flatMap((b) => {
-    const g = models[b.id]?.geometry;
-    return b.included && g
-      ? [{ id: b.id, name: b.name, mesh: { positions: g.positions, indices: g.indices } }]
-      : [];
-  });
+): PrintJob | null {
+  const meshes = Object.fromEntries(Object.entries(models).map(([id, m]) => [id, m.geometry]));
+  const input = printBodies(doc, choices, meshes);
+  if (input.length === 0) return null;
+  try {
+    return compilePrintJob(input, withCopyOrientations(toPrintSettings(settings), input));
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
 }
 
 export function usePrintJob(): PrintState {
@@ -52,26 +53,9 @@ export function usePrintJob(): PrintState {
   const busy = useStore(modelState, (s) => s.busy);
   const settings = useMemo(() => readPrintSettings(doc), [doc.extensions]);
   const bodies = useMemo<PrintBodyChoice[]>(
-    () =>
-      Object.values(doc.bodies)
-        .filter((b) => models[b.id])
-        .map((b) => ({
-          id: b.id,
-          name: b.name,
-          visible: b.visible,
-          included: settings.bodyIds ? settings.bodyIds.includes(b.id) : b.visible,
-        })),
-    [doc.bodies, models, settings.bodyIds],
+    () => printChoices(doc, settings, new Set(Object.keys(models))),
+    [doc.bodies, doc.assembly, doc.features, doc.timeline, models, settings],
   );
-  const job = useMemo(() => {
-    const input = printBodies(bodies, models);
-    if (input.length === 0) return null;
-    try {
-      return compilePrintJob(input, toPrintSettings(settings));
-    } catch (err) {
-      console.error(err);
-      return null;
-    }
-  }, [bodies, models, settings]);
+  const job = useMemo(() => printJobFor(doc, settings, bodies, models), [bodies, models, settings]);
   return { settings, bodies, job, stale: busy };
 }

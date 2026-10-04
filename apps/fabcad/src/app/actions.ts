@@ -46,6 +46,7 @@ import { viewportApi } from "../viewport/api";
 import { edgeRefOf, faceIndexOf, faceRefOf, pickedOf } from "./topology";
 import {
   type Dialog,
+  type ExportFormat,
   type Selection,
   type SolidDialog,
   appState,
@@ -1285,8 +1286,8 @@ export function toggleSelection(item: Selection): void {
   setSelection(exists ? selection.filter((s) => selectionKey(s) !== key) : [...selection, item]);
 }
 
-/** Export → STEP / STL: a window to choose the bodies and components first. */
-export function openExportModel(format: "step" | "stl"): void {
+/** Export → STEP / STL / 3MF: a window to choose the bodies and components first. */
+export function openExportModel(format: ExportFormat): void {
   appState.set({ exportModel: { format } });
 }
 

@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useStore } from "../app/tinyStore";
 import { printUiState, selectPrintPart } from "./uiState";
+import { sourceBodyId } from "./bodies";
 
 const COLORS = {
   background: 0xeef1f4,
@@ -163,7 +164,7 @@ class BedScene {
         const positions = new Float32Array(ix.length * 3);
         const colors = new Float32Array(ix.length * 3);
         const base = new THREE.Color(
-          !part.placed ? COLORS.unplaced : part.bodyId === selected ? COLORS.selected : COLORS.part,
+          !part.placed ? COLORS.unplaced : sourceBodyId(part.bodyId) === selected ? COLORS.selected : COLORS.part,
         );
         const red = new THREE.Color(COLORS.overhang);
         for (let i = 0; i < ix.length; i++) {
@@ -217,7 +218,8 @@ class BedScene {
       if ((o as THREE.Mesh).isMesh) meshes.push(o);
     });
     const hit = ray.intersectObjects(meshes, false)[0];
-    return hit ? (hit.object.userData.bodyId as string) : null;
+    // A copy (an instance of a component) selects the body it is printed from.
+    return hit ? sourceBodyId(hit.object.userData.bodyId as string) : null;
   }
 
   dispose(): void {
