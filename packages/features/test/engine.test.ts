@@ -29,6 +29,7 @@ import {
   createDocument,
   createInstance,
   setInstanceTransform,
+  addOffsetPlane,
   deserializeDocument,
   removeFeatures,
   serializeDocument,
@@ -108,6 +109,57 @@ function scenarioA(store: DocumentStore): { sketchId: string; extrudeId: string;
 }
 
 describe("feature engine", () => {
+  it("keeps a sketch on a face or plane of another component where that component is seen", async () => {
+    const store = new DocumentStore(createDocument());
+    const box = scenarioA(store); // root box, top face at z = 50
+    const plane: CreatedRef = {};
+    store.execute(addOffsetPlane({ base: { type: "origin-plane", plane: "XY" }, offset: "5" }, plane));
+    const frame: { id?: string; instanceId?: string } = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    store.execute(setInstanceTransform(frame.instanceId!, { position: [0, 0, 20], rotation: [0, 0, 0, 1] }));
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    // Seen from Frame (at z = 20), the root lies 20 lower.
+    const seen = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -20, 0, 0, 0, 1];
+    const geometry = transformBodyGeometry(engine.bodyGeometry(box.bodyId)!, seen);
+    const top = geometry.faces.findIndex((f) => f.normal.z > 0.9);
+    const names = engine.bodyNames(box.bodyId)!;
+    const onFace: CreatedRef = {};
+    store.execute(
+      addSketch(
+        {
+          type: "face",
+          bodyId: box.bodyId,
+          hint: geometry.faces[top]!.center,
+          plane: makePlane({ x: 0, y: 0, z: 30 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }),
+          ref: makeFaceRef({ geometry, names }, top)!,
+        },
+        onFace,
+        frame.id,
+      ),
+    );
+    const onPlane: CreatedRef = {};
+    store.execute(
+      addSketch(
+        { type: "plane", featureId: plane.id!, plane: makePlane({ x: 0, y: 0, z: -15 }, { x: 0, y: 0, z: 1 }, { x: 1, y: 0, z: 0 }) },
+        onPlane,
+        frame.id,
+      ),
+    );
+    let result = await engine.recompute(store.document);
+    // Where they were made: nothing to update.
+    expect(result.sketchUpdates).toEqual({});
+    // Frame moves down to z = 10: the root is seen 10 higher, and the sketches follow.
+    store.execute(setInstanceTransform(frame.instanceId!, { position: [0, 0, 10], rotation: [0, 0, 0, 1] }));
+    result = await engine.recompute(store.document);
+    const z = (id: string): number => {
+      const p = result.sketchUpdates[id]!.plane;
+      return p.type === "face" || p.type === "plane" ? p.plane.origin.z : NaN;
+    };
+    expect(z(onFace.id!)).toBeCloseTo(40, 6);
+    expect(z(onPlane.id!)).toBeCloseTo(-5, 6);
+  });
+
   it("projects an edge of another component from where its instance is, and follows it", async () => {
     const store = new DocumentStore(createDocument());
     // A box in component Frame, placed by its instance at x = 100.

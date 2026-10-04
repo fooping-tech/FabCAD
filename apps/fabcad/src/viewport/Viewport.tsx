@@ -30,6 +30,7 @@ import {
   toast,
 } from "../app/appState";
 import { openContextMenu } from "../app/contextMenu";
+import { ROOT_GHOST } from "../app/components";
 import {
   EXTRUDE_TO_WANTS,
   type PickWants,
@@ -116,7 +117,7 @@ function pickToSelection(pick: Pick3D): Selection {
     case "origin-plane":
       return { kind: "origin-plane", plane: pick.plane };
     case "plane":
-      return { kind: "plane", featureId: pick.featureId };
+      return { kind: "plane", featureId: pick.featureId, ...(pick.ghost ? { ghost: pick.ghost } : {}) };
     case "instance":
       return { kind: "instance", instanceId: pick.instanceId };
   }
@@ -162,9 +163,6 @@ function transformPatch(patch: PlanePatch, m: number[]): PlanePatch {
     size: patch.size,
   };
 }
-
-/** Id of the ghost of the root bodies; the ghosts of instances have the instance id. */
-const ROOT_GHOST = "ghost:root";
 
 const INSTANCE_PICK_MESSAGE =
   "A component instance cannot be used in a command. Activate the component to edit it.";
@@ -424,6 +422,8 @@ export function Viewport(): ReactElement {
           edges: filter === "auto" || filter === "edge",
           vertices: filter === "auto" || filter === "vertex",
           originPlanes: dialog?.type === "pick-sketch-plane" || filter === "auto",
+          // A sketch can lie on a face or plane of another component (its ghost).
+          ghosts: dialog?.type === "pick-sketch-plane",
         });
         if (pick) hover = pickToSelection(pick);
       }
@@ -465,9 +465,9 @@ export function Viewport(): ReactElement {
 
       if (dialog?.type === "pick-sketch-plane") {
         if (hover?.kind === "origin-plane") startSketchOnOrigin(hover.plane);
-        else if (hover?.kind === "plane") startSketchOnPlane(hover.featureId);
+        else if (hover?.kind === "plane") startSketchOnPlane(hover.featureId, hover.ghost);
         else if (hover?.kind === "face" && hover.planar) {
-          startSketchOnFace(hover.bodyId, hover.point, hover.normal, hover.faceIndex);
+          startSketchOnFace(hover.bodyId, hover.point, hover.normal, hover.faceIndex, hover.ghost);
         } else if (hover?.kind === "face") {
           toast("Sketches need a planar face.", "warning");
         }
@@ -1322,15 +1322,31 @@ export function Viewport(): ReactElement {
     const active = validComponentId(doc, activeComponent);
     const rootActive = active === doc.assembly.rootComponentId;
     scene.setPlanes(
-      Object.values(model.planes).flatMap((p): { id: string; featureId?: string; patch: PlanePatch; visible: boolean }[] => {
+      Object.values(model.planes).flatMap((p): { id: string; featureId?: string; ghost?: string; patch: PlanePatch; visible: boolean }[] => {
         const f = doc.features[p.id];
         if (f?.type !== "offset-plane") return [];
         // Like the origin planes, construction planes step back while sketching.
         const shown = f.visible && !sketching;
         if (f.componentId === active) return [{ id: p.id, patch: p, visible: shown }];
+        if (!rootActive) {
+          // Editing a component, the planes of the rest of the model are ghosts: faded, where
+          // the ghost of their component is. A sketch can be started on them.
+          const ghosts =
+            f.componentId === doc.assembly.rootComponentId
+              ? [{ id: ROOT_GHOST, transform: relativePlacement(doc, f.componentId, active) }]
+              : listInstances(doc, f.componentId)
+                  .filter((i) => i.visible)
+                  .map((i) => ({ id: i.id, transform: relativePlacement(doc, f.componentId, active, i.id) }));
+          return ghosts.map((g) => ({
+            id: `${p.id}@${g.id}`,
+            featureId: p.id,
+            ghost: g.id,
+            patch: transformPatch(p, instanceMatrix(g.transform)),
+            visible: shown,
+          }));
+        }
         // At the root, the planes of a component are shown where its instances are. Picking
         // one picks the plane of the definition.
-        if (!rootActive) return [];
         return listInstances(doc, f.componentId)
           .filter((i) => i.visible)
           .map((i) => ({

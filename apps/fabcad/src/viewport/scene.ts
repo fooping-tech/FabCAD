@@ -27,7 +27,7 @@ export type Pick3D =
   | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3; ghost?: string }
   | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3; ghost?: string }
   | { kind: "origin-plane"; plane: OriginPlaneName }
-  | { kind: "plane"; featureId: string }
+  | { kind: "plane"; featureId: string; ghost?: string }
   /** An instance of a component, as a whole: its faces and edges are not picked. */
   | { kind: "instance"; instanceId: string };
 
@@ -726,6 +726,8 @@ export class ViewportScene {
       visible: boolean;
       /** Feature a pick returns, when `id` is one of several copies (instances) of it. */
       featureId?: string;
+      /** A plane of another component, on its ghost: picked only when ghosts are asked for. */
+      ghost?: string;
     }[],
   ): void {
     const wanted = new Set(planes.map((p) => p.id));
@@ -741,6 +743,10 @@ export class ViewportScene {
         if (entry) this.disposePlaneMesh(entry.mesh);
         const mesh = this.planeMesh(p.patch, COLORS.constructionPlane, 0.12);
         mesh.userData.planeFeature = p.featureId ?? p.id;
+        if (p.ghost) {
+          mesh.userData.planeGhost = p.ghost;
+          (mesh.material as THREE.MeshBasicMaterial).opacity = 0.06;
+        }
         this.planeRoot.add(mesh);
         entry = { key, mesh };
         this.planes.set(p.id, entry);
@@ -1009,7 +1015,7 @@ export class ViewportScene {
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(PLANE_COLORS[name]);
     }
     for (const { mesh } of this.planes.values()) {
-      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.12;
+      (mesh.material as THREE.MeshBasicMaterial).opacity = mesh.userData.planeGhost ? 0.06 : 0.12;
       (mesh.material as THREE.MeshBasicMaterial).color.setHex(COLORS.constructionPlane);
     }
     for (const b of this.bodies.values()) b.material.color.setHex(COLORS.body);
@@ -1265,14 +1271,15 @@ export class ViewportScene {
       const planes = [
         ...this.originPlanes.values(),
         ...[...this.planes.values()].map((p) => p.mesh),
-      ].filter((m) => m.visible);
+      ].filter((m) => m.visible && (options.ghosts || m.userData.planeGhost === undefined));
       const planeHit = this.raycaster.intersectObjects(planes, false)[0];
       // An origin plane only wins when it is clearly in front: a face lying in the plane
       // (e.g. the bottom of a body on XY) is what the user is pointing at.
       const margin = hit ? Math.max(0.05, hit.distance * 0.004) : 0;
       if (planeHit && (!hit || planeHit.distance < hit.distance - margin)) {
         const featureId = planeHit.object.userData.planeFeature as string | undefined;
-        if (featureId !== undefined) return { kind: "plane", featureId };
+        const ghost = planeHit.object.userData.planeGhost as string | undefined;
+        if (featureId !== undefined) return { kind: "plane", featureId, ...(ghost ? { ghost } : {}) };
         return { kind: "origin-plane", plane: planeHit.object.userData.plane as OriginPlaneName };
       }
     }

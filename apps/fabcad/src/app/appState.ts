@@ -39,8 +39,8 @@ export type Selection =
   | { kind: "profile"; sketchId: string; regionId: string; ref: ProfileRef }
   | { kind: "feature"; featureId: string }
   | { kind: "origin-plane"; plane: OriginPlaneName }
-  /** A construction plane, by the feature that defines it. */
-  | { kind: "plane"; featureId: string }
+  /** A construction plane, by the feature that defines it (`ghost`: of another component). */
+  | { kind: "plane"; featureId: string; ghost?: string }
   /** A component definition (browser). */
   | { kind: "component"; componentId: string }
   /** A placed instance of a component (browser or viewport). */
@@ -71,7 +71,7 @@ export const selectionKey = (s: Selection): string => {
     case "origin-plane":
       return `origin-plane:${s.plane}`;
     case "plane":
-      return `plane:${s.featureId}`;
+      return `plane:${s.featureId}${s.ghost ? `@${s.ghost}` : ""}`;
     case "component":
       return `component:${s.componentId}`;
     case "instance":

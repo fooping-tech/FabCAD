@@ -1,4 +1,4 @@
-import type { InstanceTransform } from "@fabcad/assembly";
+import { type InstanceTransform, instanceMatrix } from "@fabcad/assembly";
 import {
   type CadDocument,
   type CreatedComponent,
@@ -10,6 +10,7 @@ import {
   type MovedToComponent,
   moveToComponent,
   removeComponents,
+  relativePlacement,
   removeInstances,
   type SeparationProblem,
   separationProblem,
@@ -29,6 +30,25 @@ import { useStore } from "./tinyStore";
  * bodies are shown as they are and every component through its instances, each placed by its
  * transform; an instance is picked as a whole, never as faces or edges.
  */
+
+/** Id of the ghost of the root bodies and planes; the ghosts of instances have the instance id. */
+export const ROOT_GHOST = "ghost:root";
+
+/**
+ * Where geometry of component `owner`, picked on a ghost, lies as seen from the active
+ * component: a row-major placement, and the instance the ghost shows (none for the root).
+ */
+export function ghostPlacement(
+  owner: string,
+  ghost: string,
+  doc: CadDocument = documentStore.document,
+): { placement: number[]; instanceId?: string } {
+  const instanceId = ghost !== ROOT_GHOST ? ghost : undefined;
+  return {
+    placement: instanceMatrix(relativePlacement(doc, owner, activeComponentId(doc), instanceId)),
+    ...(instanceId ? { instanceId } : {}),
+  };
+}
 
 /** The component being edited; the root when none is, or when the active one is gone. */
 export function activeComponentId(doc: CadDocument = documentStore.document): string {

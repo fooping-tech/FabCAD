@@ -1,4 +1,4 @@
-import type { Vec3 } from "@fabcad/geometry";
+import type { Plane3, Vec3 } from "@fabcad/geometry";
 import type { BodyGeometry, MeshEdgeGroup, MeshFaceGroup } from "./kernel";
 
 /**
@@ -68,4 +68,24 @@ export function transformBodyGeometry(geometry: BodyGeometry, m: readonly number
 export function isIdentityMatrix(m: readonly number[], tolerance = 1e-12): boolean {
   const id = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
   return id.every((v, i) => Math.abs((m[i] ?? NaN) - v) <= tolerance);
+}
+
+/** A plane moved by a rigid, row-major 4 × 4 placement. */
+export function transformPlane(plane: Plane3, m: readonly number[]): Plane3 {
+  const dir = (d: Vec3): Vec3 => ({
+    x: m[0]! * d.x + m[1]! * d.y + m[2]! * d.z,
+    y: m[4]! * d.x + m[5]! * d.y + m[6]! * d.z,
+    z: m[8]! * d.x + m[9]! * d.y + m[10]! * d.z,
+  });
+  const o = plane.origin;
+  return {
+    origin: {
+      x: m[0]! * o.x + m[1]! * o.y + m[2]! * o.z + m[3]!,
+      y: m[4]! * o.x + m[5]! * o.y + m[6]! * o.z + m[7]!,
+      z: m[8]! * o.x + m[9]! * o.y + m[10]! * o.z + m[11]!,
+    },
+    xDir: dir(plane.xDir),
+    yDir: dir(plane.yDir),
+    normal: dir(plane.normal),
+  };
 }

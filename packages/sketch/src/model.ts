@@ -253,6 +253,11 @@ export type SketchPlaneRef =
       plane: Plane3;
       /** Persistent name of the face: the sketch follows the face when the body changes. */
       ref?: TopologyRef;
+      /**
+       * The face is of another component's body, seen at this instance of it (see
+       * `ProjectedGeometryRef.instanceId`); without it, at the component's first instance.
+       */
+      instanceId?: string;
     }
   | {
       /** A construction plane, by the id of the feature that defines it. */
@@ -260,6 +265,8 @@ export type SketchPlaneRef =
       featureId: string;
       /** The plane when the sketch was last evaluated. */
       plane: Plane3;
+      /** The plane is of another component, seen at this instance of it. */
+      instanceId?: string;
     };
 
 export interface Sketch {
