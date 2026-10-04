@@ -798,6 +798,7 @@ export const HELP: Record<string, HelpEntry> = {
       "Export → STEP… or STL… opens a window that lists the bodies of the root and, for each component, its bodies. Tick what goes into the file; a component's box ticks all its bodies.",
       "The bodies of a component are written at each of its visible instances, placed where the instance is (in STEP named Instance/Body), or once at the origin, where the definition lies.",
       "It starts with the selection (bodies, components or instances), or, with nothing selected, with everything that is shown. STL writes all solids into one file.",
+      "Export → 3MF / STL (parts on the bed) opens the same window for 3D printing: a component gives one copy per instance, or one. The choice is saved as the one of the 3D Print workspace, and the file holds the parts as that workspace lays them out on the bed.",
     ],
     parameters: [
       { name: "Format", text: "STEP (solids, for other CAD) or STL (triangles, for printing)." },
@@ -932,6 +933,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Orient bodies on the build plate, check them and export a mesh for a slicer.",
     what: [
       "Shows the bodies on the build plate, checks size and overhangs, and exports STL or 3MF.",
+      "A body of a component is printed once for each visible instance of the component (the number of instances is the quantity), or once: choose it at the component in the Bodies list. Export → 3MF / STL (parts on the bed) opens a window with the same choice.",
     ],
     requires: ["At least one body."],
     limitations: ["FabCAD does not slice: the file goes to a slicer."],

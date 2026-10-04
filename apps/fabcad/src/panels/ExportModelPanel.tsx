@@ -1,6 +1,11 @@
 import { listComponents, listInstances } from "@fabcad/cad-document";
 import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
-import { appState } from "../app/appState";
+import { type ExportFormat, appState } from "../app/appState";
+import { documentStore } from "../app/session";
+import { printChoices } from "../print/bodies";
+import { exportPrintJob } from "../print/exportPrint";
+import { readPrintSettings } from "../print/settingsModel";
+import { printJobFor, updatePrintSettings } from "../print/usePrintJob";
 import {
   type ExportChoice,
   defaultExportChoice,
@@ -40,23 +45,50 @@ function TriCheck({
   );
 }
 
+const FORMATS: Record<"model" | "print", { id: ExportFormat; label: string }[]> = {
+  model: [
+    { id: "step", label: "STEP" },
+    { id: "stl", label: "STL" },
+  ],
+  print: [
+    { id: "3mf", label: "3MF" },
+    { id: "print-stl", label: "STL" },
+  ],
+};
+
+const familyOf = (f: ExportFormat): "model" | "print" => (f === "3mf" || f === "print-stl" ? "print" : "model");
+
 /**
- * Export → STEP… / STL…: which bodies and components go into the file, and whether the bodies
- * of a component are written at each of its instances or once, where the definition lies.
+ * Export of the 3D model (STEP / STL) or of the 3D Print job (3MF / STL, the parts laid out on
+ * the bed): which bodies and components go into the file, and how the bodies of a component are
+ * written. For the model: at each instance, or once where the definition lies. For printing: one
+ * copy per instance, or one. The print choice is the one of the 3D Print workspace: what is
+ * chosen here is saved there, and the file is the job that workspace shows.
  */
 export function ExportModelPanel(): ReactElement | null {
   const request = useStore(appState, (s) => s.exportModel);
   const doc = useDocument();
   const computed = useStore(modelState, (s) => s.bodies);
   const computedIds = useMemo(() => new Set(Object.keys(computed)), [computed]);
-  const [format, setFormat] = useState<"step" | "stl">("step");
+  const [format, setFormat] = useState<ExportFormat>("step");
   const [choice, setChoice] = useState<ExportChoice>({ bodyIds: [], placement: {} });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!request) return;
     setFormat(request.format);
-    setChoice(defaultExportChoice(doc, appState.get().selection, computedIds));
+    if (familyOf(request.format) === "print") {
+      const settings = readPrintSettings(doc);
+      const choices = printChoices(doc, settings, computedIds);
+      setChoice({
+        bodyIds: choices.filter((c) => c.included).map((c) => c.id),
+        placement: Object.fromEntries(
+          listComponents(doc).map((c) => [c.id, settings.copies[c.id] === "once" ? "origin" : "instances"]),
+        ),
+      });
+    } else {
+      setChoice(defaultExportChoice(doc, appState.get().selection, computedIds));
+    }
     // Only when the window opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request]);
@@ -73,6 +105,8 @@ export function ExportModelPanel(): ReactElement | null {
       bodies: bodies.filter((b) => b.componentId === c.id),
     })),
   ].filter((g) => g.bodies.length > 0);
+  const family = familyOf(request.format);
+  const printing = family === "print";
   const items = exportItems(doc, choice);
 
   const setBodies = (ids: string[], on: boolean): void =>
@@ -86,26 +120,44 @@ export function ExportModelPanel(): ReactElement | null {
     });
 
   const run = async (): Promise<void> => {
+    if (printing) {
+      // Saved as the choice of the 3D Print workspace, then the job it shows is written.
+      updatePrintSettings(
+        {
+          bodyIds: choice.bodyIds,
+          copies: Object.fromEntries(
+            Object.entries(choice.placement).map(([id, p]) => [id, p === "origin" ? "once" : "instances"]),
+          ),
+        },
+        "Choose bodies to print",
+      );
+      const after = documentStore.document;
+      const settings = readPrintSettings(after);
+      const job = printJobFor(after, settings, printChoices(after, settings, computedIds), computed);
+      exportPrintJob(format === "3mf" ? "3mf" : "stl", job, after.name);
+      close();
+      return;
+    }
     setBusy(true);
-    const ok = await exportModel(format, items);
+    const ok = await exportModel(format === "step" ? "step" : "stl", items);
     setBusy(false);
     if (ok) close();
   };
 
   return (
     <div className="modal-backdrop" onPointerDown={(e) => e.target === e.currentTarget && close()}>
-      <div className="modal export-model" role="dialog" aria-label="Export 3D model" style={{ width: 480 }}>
+      <div className="modal export-model" role="dialog" aria-label={printing ? "Export for 3D printing" : "Export 3D model"} style={{ width: 480 }}>
         <div className="modal-title">
-          <span>Export 3D Model</span>
+          <span>{printing ? "Export for 3D Printing" : "Export 3D Model"}</span>
           <button className="icon-btn" aria-label="Close" onClick={close}>
             <Icon name="close" size={14} />
           </button>
         </div>
         <div className="modal-body">
           <div className="segmented" role="radiogroup" aria-label="Format" style={{ marginBottom: 10 }}>
-            {(["step", "stl"] as const).map((f) => (
-              <button key={f} role="radio" aria-checked={format === f} className={format === f ? "on" : ""} onClick={() => setFormat(f)}>
-                {f.toUpperCase()}
+            {FORMATS[family].map((f) => (
+              <button key={f.id} role="radio" aria-checked={format === f.id} className={format === f.id ? "on" : ""} onClick={() => setFormat(f.id)}>
+                {f.label}
               </button>
             ))}
           </div>
@@ -139,9 +191,11 @@ export function ExportModelPanel(): ReactElement | null {
                       }
                     >
                       <option value="instances">
-                        At its {instances.length} {instances.length === 1 ? "instance" : "instances"}
+                        {printing
+                          ? `×${instances.length} (one per instance)`
+                          : `At its ${instances.length} ${instances.length === 1 ? "instance" : "instances"}`}
                       </option>
-                      <option value="origin">Once, at the origin</option>
+                      <option value="origin">{printing ? "×1" : "Once, at the origin"}</option>
                     </select>
                   )}
                 </div>
@@ -163,14 +217,15 @@ export function ExportModelPanel(): ReactElement | null {
         </div>
         <div className="modal-footer">
           <span className="field-hint" style={{ marginRight: "auto" }}>
-            {items.length} {items.length === 1 ? "solid" : "solids"}
-            {format === "stl" && items.length > 1 ? " in one STL file" : ""}
+            {printing
+              ? `${items.length} ${items.length === 1 ? "part" : "parts"}, laid out on the bed`
+              : `${items.length} ${items.length === 1 ? "solid" : "solids"}${format === "stl" && items.length > 1 ? " in one STL file" : ""}`}
           </span>
           <button className="btn" onClick={close}>
             Cancel
           </button>
           <button className="btn primary" disabled={items.length === 0 || busy} onClick={() => void run()}>
-            {busy ? "Exporting…" : `Export ${format.toUpperCase()}`}
+            {busy ? "Exporting…" : `Export ${FORMATS[family].find((f) => f.id === format)?.label ?? ""}`}
           </button>
         </div>
       </div>

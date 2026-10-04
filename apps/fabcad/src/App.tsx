@@ -34,7 +34,8 @@ import { Ribbon } from "./panels/Ribbon";
 import { StatusBar } from "./panels/StatusBar";
 import { Timeline } from "./panels/Timeline";
 import { Toasts } from "./panels/Toasts";
-import { PrintSidePanel, PrintView, exportPrintJob, usePrintJob } from "./print";
+import { PrintSidePanel, PrintView, usePrintJob } from "./print";
+import { openExportModel } from "./app/actions";
 import { TextDialog } from "./text/TextDialog";
 import { TouchBar } from "./viewport/TouchBar";
 import { Viewport } from "./viewport/Viewport";
@@ -81,10 +82,9 @@ const registerExport = (fn: (format: "svg" | "dxf") => void): void => {
   exportHandler = fn;
 };
 
-let printExportHandler: (format: "stl" | "3mf") => void = () => undefined;
-const registerPrintExport = (fn: (format: "stl" | "3mf") => void): void => {
-  printExportHandler = fn;
-};
+/** 3MF / STL of the 3D Print job: a window chooses the bodies and components first. */
+const openPrintExport = (format: "stl" | "3mf"): void =>
+  openExportModel(format === "3mf" ? "3mf" : "print-stl");
 
 export function App(): ReactElement {
   const workspace = useStore(appState, (s) => s.workspace);
@@ -103,17 +103,11 @@ export function App(): ReactElement {
   const printing = fabrication && process === "print";
   const showViewport = !fabrication || (!printing && fabricationTab === "model");
 
-  useEffect(() => {
-    registerPrintExport((format) =>
-      exportPrintJob(format, print.job, documentStore.document.name),
-    );
-  }, [print.job]);
-
   return (
     <div className={`app${fabrication ? " no-timeline" : ""}`}>
       <Header
         onExportFabrication={(format) => exportHandler(format)}
-        onExportPrint={(format) => printExportHandler(format)}
+        onExportPrint={openPrintExport}
       />
       <Ribbon />
       {sidePanelOpen && (
@@ -166,7 +160,7 @@ export function App(): ReactElement {
       <HistoryLogPanel />
       <CommandPalette
         exportFabrication={(format) => exportHandler(format)}
-        exportPrint={(format) => printExportHandler(format)}
+        exportPrint={openPrintExport}
       />
       <ExportModelPanel />
       <HelpMenu />

@@ -27,6 +27,11 @@ export interface PrintWorkspaceSettings {
   /** null = all visible bodies. */
   bodyIds: string[] | null;
   orientations: Record<string, Orientation>;
+  /**
+   * How many copies of a component's bodies are printed, by component id: one per visible
+   * instance ("instances", the default) or one ("once").
+   */
+  copies: Record<string, "instances" | "once">;
 }
 
 export function defaultPrintWorkspaceSettings(): PrintWorkspaceSettings {
@@ -41,6 +46,7 @@ export function defaultPrintWorkspaceSettings(): PrintWorkspaceSettings {
     gap: 5,
     bodyIds: null,
     orientations: {},
+    copies: {},
   };
 }
 
@@ -100,6 +106,13 @@ export function normalizePrintSettings(input: unknown): PrintWorkspaceSettings {
       ? input.bodyIds.filter((id): id is string => typeof id === "string")
       : null,
     orientations,
+    copies: isRecord(input.copies)
+      ? Object.fromEntries(
+          Object.entries(input.copies).filter(
+            (e): e is [string, "instances" | "once"] => e[1] === "instances" || e[1] === "once",
+          ),
+        )
+      : {},
   };
 }
 
