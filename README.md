@@ -63,7 +63,8 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | チェック | 造形範囲に収まるか、オーバーハング（サポートが必要な面を赤で表示）、接地面積、閉じた立体かどうか |
 | 見積もり | 樹脂の体積、重さ、フィラメントの長さ、レイヤー数。体積と表面積からの概算です |
 | 材料 | PLA、PETG、ABS、ASA、TPU |
-| Export | 3MF（単位 mm と部品名を保持）、STL。ベッドに置いた向きと位置で書き出します |
+| Export | 3MF（単位 mm と部品名を保持）、STL。ベッドに置いた向きと位置で書き出します。Export メニューから書き出すときは、印刷する Body とコンポーネントを窓で選べます |
+| コンポーネント | コンポーネントの Body は、表示中のインスタンスの数だけ（または 1 つだけ）印刷します |
 
 ## 使い方
 
@@ -391,7 +392,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | --- | --- |
 | Project | 実装済み。楕円になる投影（斜めから見た円）はスプラインで近似します |
 | Include / Intersect | 未実装 |
-| Component | 入れ子のコンポーネント、インスタンスごとのパラメータ、Joint（拘束と動き）、BOM はありません。Feature は 1 つのコンポーネントの中だけで働き、異なるコンポーネントの Body を Combine、Join / Cut、Move/Copy、Pattern することはできません（ダイアログで拒否します）。FABRICATION は、コンポーネントの Body を定義の位置で 1 つずつ扱い、インスタンスの数と配置はまだ反映しません（STEP / STL の書き出しでは、インスタンスごとに配置して書けます） |
+| Component | 入れ子のコンポーネント、インスタンスごとのパラメータ、Joint（拘束と動き）、BOM はありません。Feature は 1 つのコンポーネントの中だけで働き、異なるコンポーネントの Body を Combine、Join / Cut、Move/Copy、Pattern することはできません（ダイアログで拒否します）。FABRICATION の Laser は、コンポーネントの Body を定義の位置で 1 つずつ扱い、インスタンスの数はまだ反映しません（3D Print はインスタンスの数だけ印刷し、STEP / STL の書き出しはインスタンスごとに配置して書けます） |
 | Draft、Rib、Thread | 未実装 |
 | Hole | ねじ穴、下穴、先端の円錐（ドリル形状）、「指定した面まで」はありません。穴が何も削らない向きのときはエラーになります（Flip で反転） |
 | Pattern / Mirror | Feature を対象にできるのは、材料を足すか削る Feature（Extrude、Revolve、Hole、Sweep、Loft、Pattern）だけです。Fillet、Chamfer、Shell は対象にできません（Body を対象にしてください）。パスに沿った Pattern はありません |

@@ -352,6 +352,9 @@ import type { SketchTransform } from "../sketch/transformDialog";
 
 export type FabricationProcess = "laser" | "print";
 
+/** STEP / STL of the 3D model, or 3MF / STL of the 3D Print job (parts on the bed). */
+export type ExportFormat = "step" | "stl" | "3mf" | "print-stl";
+
 /** Sketch Offset waiting for OK: the chain, and the distance and side previewed. */
 export interface SketchOffset {
   sketchId: string;
@@ -377,7 +380,7 @@ export interface AppState {
   /** Browser row (selection key) asked to start renaming, e.g. from the context menu. */
   renaming: string | null;
   /** The window that chooses what a STEP / STL export of the 3D model contains. */
-  exportModel: { format: "step" | "stl" } | null;
+  exportModel: { format: ExportFormat } | null;
   /** The New Component window, with what was selected when it opened. */
   newComponent: {
     anchor: { x: number; y: number } | null;

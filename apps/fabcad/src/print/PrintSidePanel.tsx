@@ -1,5 +1,7 @@
 import { type Orientation, PRINT_MATERIALS } from "@fabcad/fabrication-print";
-import type { ReactElement } from "react";
+import { listInstances } from "@fabcad/cad-document";
+import { Fragment, type ReactElement } from "react";
+import { Icon } from "../ui/Icon";
 import { documentStore } from "../app/session";
 import { CheckField, NumberField, Section, SegmentedField } from "../fabrication/fields";
 import "../fabrication/fabrication.css";
@@ -54,44 +56,69 @@ export function PrintSidePanel({ state }: { state: PrintState }): ReactElement {
         {bodies.length === 0 ? (
           <p className="empty">Design a body in the DESIGN workspace first.</p>
         ) : (
-          bodies.map((b) => {
+          bodies.map((b, index) => {
             const part = job?.parts.find((p) => p.bodyId === b.id);
+            const doc = documentStore.document;
+            const component =
+              b.componentId !== doc.assembly.rootComponentId ? doc.assembly.components[b.componentId] : undefined;
+            const firstOfComponent = component && bodies[index - 1]?.componentId !== b.componentId;
+            const instances = component ? listInstances(doc, component.id).filter((i) => i.visible).length : 0;
             return (
-              <div
-                key={b.id}
-                className={`print-body${selected === b.id ? " selected" : ""}`}
-                onClick={() => selectPrintPart(b.id)}
-              >
-                <CheckField
-                  label={b.visible ? b.name : `${b.name} (hidden)`}
-                  checked={b.included}
-                  onChange={(on) => toggleBody(b.id, on)}
-                />
-                {b.included && (
-                  <div className="field">
-                    <label htmlFor={`orient-${b.id}`}>Lay down</label>
+              <Fragment key={b.id}>
+                {firstOfComponent && (
+                  <div className="print-component">
+                    <Icon name="component" size={13} />
+                    <span className="print-component-name">{component.name}</span>
                     <select
-                      id={`orient-${b.id}`}
-                      value={orientationValue(b.id)}
-                      onChange={(e) => setOrientation(b.id, e.target.value)}
+                      aria-label={`Copies of ${component.name}`}
+                      value={settings.copies[component.id] ?? "instances"}
+                      onChange={(e) =>
+                        updatePrintSettings(
+                          { copies: { ...settings.copies, [component.id]: e.target.value as "instances" | "once" } },
+                          "Change print copies",
+                        )
+                      }
                     >
-                      {ORIENTATIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                      {orientationValue(b.id) === "custom" && <option value="custom">Custom</option>}
+                      <option value="instances">×{instances} (one per instance)</option>
+                      <option value="once">×1</option>
                     </select>
                   </div>
                 )}
-                {part && (
-                  <div className="field-hint" style={{ gridColumn: "1 / -1", marginTop: 2 }}>
-                    {fmt(part.size.x)} × {fmt(part.size.y)} × {fmt(part.size.z)} mm ·{" "}
-                    {fmt(part.estimate.mass)} g
-                    {part.overhangArea > 1 ? ` · overhang ${fmt(part.overhangArea, 0)} mm²` : ""}
-                  </div>
-                )}
-              </div>
+                <div
+                  className={`print-body${selected === b.id ? " selected" : ""}`}
+                  onClick={() => selectPrintPart(b.id)}
+                >
+                  <CheckField
+                    label={`${b.visible ? b.name : `${b.name} (hidden)`}${b.copies !== 1 ? ` ×${b.copies}` : ""}`}
+                    checked={b.included}
+                    onChange={(on) => toggleBody(b.id, on)}
+                  />
+                  {b.included && (
+                    <div className="field">
+                      <label htmlFor={`orient-${b.id}`}>Lay down</label>
+                      <select
+                        id={`orient-${b.id}`}
+                        value={orientationValue(b.id)}
+                        onChange={(e) => setOrientation(b.id, e.target.value)}
+                      >
+                        {ORIENTATIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                        {orientationValue(b.id) === "custom" && <option value="custom">Custom</option>}
+                      </select>
+                    </div>
+                  )}
+                  {part && (
+                    <div className="field-hint" style={{ gridColumn: "1 / -1", marginTop: 2 }}>
+                      {fmt(part.size.x)} × {fmt(part.size.y)} × {fmt(part.size.z)} mm ·{" "}
+                      {fmt(part.estimate.mass)} g
+                      {part.overhangArea > 1 ? ` · overhang ${fmt(part.overhangArea, 0)} mm²` : ""}
+                    </div>
+                  )}
+                </div>
+              </Fragment>
             );
           })
         )}
