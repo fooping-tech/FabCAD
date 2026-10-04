@@ -16,6 +16,7 @@ import { compilePrintJob } from "@fabcad/fabrication-print";
 import { createRectangle2Point, detectProfiles, editSketch, profileRefOf } from "@fabcad/sketch";
 import { describe, expect, it } from "vitest";
 import { copyId, printBodies, printChoices, sourceBodyId, withCopyOrientations } from "../src/print/bodies";
+import { nothingToPrint, refusedBodies } from "../src/print/exportPrint";
 import { defaultPrintWorkspaceSettings, toPrintSettings } from "../src/print/settingsModel";
 
 function box(store: DocumentStore, componentId?: string): string {
@@ -86,5 +87,42 @@ describe("3D printing of components", () => {
     // The job lays out every copy.
     const job = compilePrintJob(bodies, printSettings);
     expect(job.parts.map((p) => p.bodyId)).toEqual(bodies.map((b) => b.id));
+  });
+});
+
+describe("what the print export says when it cannot write", () => {
+  const cube = (): { positions: Float32Array; indices: Uint32Array } => {
+    const p = [0, 0, 0, 10, 0, 0, 10, 10, 0, 0, 10, 0, 0, 0, 5, 10, 0, 5, 10, 10, 5, 0, 10, 5];
+    const f = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7];
+    return { positions: new Float32Array(p), indices: new Uint32Array(f) };
+  };
+  /** The cube without its top: an open surface, like a body that is not a closed solid. */
+  const open = (): { positions: Float32Array; indices: Uint32Array } => {
+    const c = cube();
+    return { positions: c.positions, indices: new Uint32Array([...c.indices.slice(0, 6), ...c.indices.slice(12)]) };
+  };
+  const settings = toPrintSettings(defaultPrintWorkspaceSettings());
+
+  it("names the body that is not a closed solid instead of asking for a body", () => {
+    const job = compilePrintJob([{ id: "body-25", name: "Body002", mesh: open() }], settings);
+    expect(refusedBodies(job)).toEqual([{ bodyId: "body-25", message: expect.stringContaining('"Body002" is not a closed solid') }]);
+    const problem = nothingToPrint(job, 1)!;
+    expect(problem).toMatch(/^Nothing can be printed\. "Body002" is not a closed solid/);
+    expect(problem).toContain("Export → 3D model → STL…");
+  });
+
+  it("tells nothing chosen from nothing designed, and is quiet when there are parts", () => {
+    expect(nothingToPrint(null, 0)).toBe("No body is chosen for printing.");
+    expect(nothingToPrint(null, 1)).toBe("There is nothing to export. Design a body first.");
+    const job = compilePrintJob(
+      [
+        { id: "a", name: "A", mesh: cube() },
+        { id: "b#2", name: "B", mesh: open() },
+      ],
+      settings,
+    );
+    expect(nothingToPrint(job, 2)).toBeNull();
+    // A refused copy counts for its body.
+    expect(refusedBodies(job).map((r) => r.bodyId)).toEqual(["b"]);
   });
 });

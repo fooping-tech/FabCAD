@@ -3,8 +3,8 @@ import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { type ExportFormat, appState } from "../app/appState";
 import { documentStore } from "../app/session";
 import { printChoices } from "../print/bodies";
-import { exportPrintJob } from "../print/exportPrint";
-import { readPrintSettings } from "../print/settingsModel";
+import { exportPrintJob, nothingToPrint, refusedBodies } from "../print/exportPrint";
+import { type PrintWorkspaceSettings, readPrintSettings } from "../print/settingsModel";
 import { printJobFor, updatePrintSettings } from "../print/usePrintJob";
 import {
   type ExportChoice,
@@ -55,6 +55,17 @@ const FORMATS: Record<"model" | "print", { id: ExportFormat; label: string }[]> 
     { id: "print-stl", label: "STL" },
   ],
 };
+
+/** Print settings with the bodies and copies of an export choice. */
+function withChoice(settings: PrintWorkspaceSettings, choice: ExportChoice): PrintWorkspaceSettings {
+  return {
+    ...settings,
+    bodyIds: choice.bodyIds,
+    copies: Object.fromEntries(
+      Object.entries(choice.placement).map(([id, p]) => [id, p === "origin" ? ("once" as const) : ("instances" as const)]),
+    ),
+  };
+}
 
 const familyOf = (f: ExportFormat): "model" | "print" => (f === "3mf" || f === "print-stl" ? "print" : "model");
 
@@ -108,6 +119,15 @@ export function ExportModelPanel(): ReactElement | null {
   const family = familyOf(request.format);
   const printing = family === "print";
   const items = exportItems(doc, choice);
+  // For printing, the job as it would be with this choice: what it refuses is said before.
+  const printSettings = printing ? withChoice(readPrintSettings(doc), choice) : null;
+  const preview = printSettings
+    ? printJobFor(doc, printSettings, printChoices(doc, printSettings, computedIds), computed)
+    : null;
+  const refused = printing ? refusedBodies(preview) : [];
+  const refusedIds = new Set(refused.map((r) => r.bodyId));
+  const blocked = printing ? nothingToPrint(preview, choice.bodyIds.length) : null;
+  const placed = preview?.parts.filter((p) => p.placed).length ?? 0;
 
   const setBodies = (ids: string[], on: boolean): void =>
     setChoice((c) => {
@@ -122,19 +142,12 @@ export function ExportModelPanel(): ReactElement | null {
   const run = async (): Promise<void> => {
     if (printing) {
       // Saved as the choice of the 3D Print workspace, then the job it shows is written.
-      updatePrintSettings(
-        {
-          bodyIds: choice.bodyIds,
-          copies: Object.fromEntries(
-            Object.entries(choice.placement).map(([id, p]) => [id, p === "origin" ? "once" : "instances"]),
-          ),
-        },
-        "Choose bodies to print",
-      );
+      const next = withChoice(readPrintSettings(doc), choice);
+      updatePrintSettings({ bodyIds: next.bodyIds, copies: next.copies }, "Choose bodies to print");
       const after = documentStore.document;
       const settings = readPrintSettings(after);
       const job = printJobFor(after, settings, printChoices(after, settings, computedIds), computed);
-      exportPrintJob(format === "3mf" ? "3mf" : "stl", job, after.name);
+      exportPrintJob(format === "3mf" ? "3mf" : "stl", job, after.name, choice.bodyIds.length);
       close();
       return;
     }
@@ -209,22 +222,47 @@ export function ExportModelPanel(): ReactElement | null {
                     />
                     <Icon name="body" size={14} />
                     <span className={`export-name${b.visible ? "" : " dim"}`}>{b.name}</span>
+                    {refusedIds.has(b.id) && chosen.has(b.id) && (
+                      <span className="export-refused" title={refused.find((r) => r.bodyId === b.id)?.message}>
+                        <Icon name="warning" size={13} /> cannot be printed
+                      </span>
+                    )}
                   </label>
                 ))}
               </div>
             );
           })}
+          {refused.some((r) => chosen.has(r.bodyId)) && (
+            <div className="export-problems" role="alert">
+              {refused
+                .filter((r) => chosen.has(r.bodyId))
+                .map((r) => (
+                  <p key={r.bodyId}>{r.message}</p>
+                ))}
+              <p className="field-hint">
+                These bodies are left out. Export → 3D model → STL… writes them without this check,
+                for a slicer that repairs meshes.
+              </p>
+            </div>
+          )}
         </div>
         <div className="modal-footer">
           <span className="field-hint" style={{ marginRight: "auto" }}>
-            {printing
-              ? `${items.length} ${items.length === 1 ? "part" : "parts"}, laid out on the bed`
+            {printing && blocked && refused.length === 0
+              ? blocked
+              : printing
+              ? `${placed} ${placed === 1 ? "part" : "parts"}, laid out on the bed`
               : `${items.length} ${items.length === 1 ? "solid" : "solids"}${format === "stl" && items.length > 1 ? " in one STL file" : ""}`}
           </span>
           <button className="btn" onClick={close}>
             Cancel
           </button>
-          <button className="btn primary" disabled={items.length === 0 || busy} onClick={() => void run()}>
+          <button
+            className="btn primary"
+            disabled={items.length === 0 || busy || blocked !== null}
+            title={blocked ?? undefined}
+            onClick={() => void run()}
+          >
             {busy ? "Exporting…" : `Export ${FORMATS[family].find((f) => f.id === format)?.label ?? ""}`}
           </button>
         </div>
