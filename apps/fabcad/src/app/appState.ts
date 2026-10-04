@@ -28,9 +28,10 @@ export type Projection = "perspective" | "orthographic";
 
 export type Selection =
   | { kind: "body"; bodyId: string }
-  | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean }
-  | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
-  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
+  /** `ghost`: on a ghost of another component (see `ViewportScene.setGhosts`). */
+  | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean; ghost?: string }
+  | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3; ghost?: string }
+  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3; ghost?: string }
   | { kind: "entity"; sketchId: string; entityId: string }
   | { kind: "text"; sketchId: string; textId: string }
   | { kind: "constraint"; sketchId: string; id: string }
@@ -50,11 +51,11 @@ export const selectionKey = (s: Selection): string => {
     case "body":
       return `body:${s.bodyId}`;
     case "face":
-      return `face:${s.bodyId}:${s.faceIndex}`;
+      return `face:${s.bodyId}:${s.faceIndex}${s.ghost ? `@${s.ghost}` : ""}`;
     case "edge":
-      return `edge:${s.bodyId}:${s.edgeIndex}`;
+      return `edge:${s.bodyId}:${s.edgeIndex}${s.ghost ? `@${s.ghost}` : ""}`;
     case "vertex":
-      return `vertex:${s.bodyId}:${s.vertexIndex}`;
+      return `vertex:${s.bodyId}:${s.vertexIndex}${s.ghost ? `@${s.ghost}` : ""}`;
     case "entity":
       return `entity:${s.sketchId}:${s.entityId}`;
     case "text":

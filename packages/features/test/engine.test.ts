@@ -1,5 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { type GeometryKernel, edgePolyline, faceEdges, faceSilhouettes, polylineMidpoint } from "@fabcad/brep";
+import {
+  type GeometryKernel,
+  edgePolyline,
+  faceEdges,
+  faceSilhouettes,
+  polylineMidpoint,
+  transformBodyGeometry,
+} from "@fabcad/brep";
+import { instanceMatrix } from "@fabcad/assembly";
 import { ORIGIN_PLANES, makePlane } from "@fabcad/geometry";
 import {
   type CadDocument,
@@ -17,7 +25,10 @@ import {
   addShell,
   addSketch,
   command,
+  createComponent,
   createDocument,
+  createInstance,
+  setInstanceTransform,
   deserializeDocument,
   removeFeatures,
   serializeDocument,
@@ -97,6 +108,86 @@ function scenarioA(store: DocumentStore): { sketchId: string; extrudeId: string;
 }
 
 describe("feature engine", () => {
+  it("projects an edge of another component from where its instance is, and follows it", async () => {
+    const store = new DocumentStore(createDocument());
+    // A box in component Frame, placed by its instance at x = 100.
+    const frame: { id?: string; instanceId?: string } = {};
+    store.execute(createComponent({ name: "Frame" }, frame));
+    const box = scenarioA(store);
+    // scenarioA works at the root; move what it made into Frame.
+    store.execute(
+      command("Into Frame", (doc) => {
+        const features = { ...doc.features };
+        for (const id of [box.sketchId, box.extrudeId]) features[id] = { ...features[id]!, componentId: frame.id! };
+        return { ...doc, features, bodies: { ...doc.bodies, [box.bodyId]: { ...doc.bodies[box.bodyId]!, componentId: frame.id! } } };
+      }),
+    );
+    store.execute(setInstanceTransform(frame.instanceId!, { position: [100, 0, 0], rotation: [0, 0, 0, 1] }));
+    const engine = new FeatureEngine(kernel, solver);
+    await engine.recompute(store.document);
+    // A sketch of the root on XY projects the far top edge of Frame's box, as the ghost shows it.
+    const placement = instanceMatrix(store.document.assembly.instances[frame.instanceId!]!.transform);
+    const geometry = transformBodyGeometry(engine.bodyGeometry(box.bodyId)!, placement);
+    // The far top edge: along X at the largest y, at the top. The box spans x 3 … 103, y 2 … 82.
+    const { max } = geometry.bounds;
+    const edge = geometry.edges.find(
+      (g) => g.curve === "line" && Math.abs(g.midpoint.y - max.y) < 1e-6 && Math.abs(g.midpoint.z - max.z) < 1e-6,
+    )!;
+    const p: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, p));
+    store.execute(
+      updateSketch(p.id!, "Project", (sk) => {
+        const shape = projectPolyline(ORIGIN_PLANES.XY, edgePolyline(geometry, edge))!;
+        return addProjection(sk, shape, {
+          bodyId: box.bodyId,
+          source: "edge",
+          hint: edge.midpoint,
+          index: edge.edgeIndex,
+          count: geometry.edges.length,
+          instanceId: frame.instanceId!,
+        })!.sketch;
+      }),
+    );
+    const xs = (doc: CadDocument): number[] => {
+      const sk = sketchOf(doc, p.id!);
+      return sk.projections[0]!.entityIds.flatMap((id) => {
+        const ent = sk.entities[id]!;
+        return ent.type === "point" ? [ent.x] : [];
+      });
+    };
+    let result = await engine.recompute(store.document);
+    // Where it was projected: nothing to update.
+    expect(result.sketchUpdates).toEqual({});
+    expect(Math.min(...xs(store.document))).toBeCloseTo(103, 6);
+    // The instance moves: the projection follows.
+    store.execute(setInstanceTransform(frame.instanceId!, { position: [250, 0, 0], rotation: [0, 0, 0, 1] }));
+    result = await engine.recompute(store.document);
+    const updated = result.sketchUpdates[p.id!]!;
+    expect(updated).toBeDefined();
+    store.amend((doc) => ({
+      ...doc,
+      features: { ...doc.features, [p.id!]: { ...(doc.features[p.id!] as SketchFeature), sketch: updated } },
+    }));
+    expect(Math.min(...xs(store.document))).toBeCloseTo(253, 6);
+    expect(Math.max(...xs(store.document))).toBeCloseTo(353, 6);
+    // A second instance, projected from: its own placement counts, not the first one's.
+    const second: { id?: string } = {};
+    store.execute(createInstance(frame.id!, second, { position: [0, 500, 0], rotation: [0, 0, 0, 1] }));
+    store.execute(
+      updateSketch(p.id!, "Re-pick", (sk) => ({
+        ...sk,
+        projections: sk.projections.map((r) => ({ ...r, instanceId: second.id! })),
+      })),
+    );
+    result = await engine.recompute(store.document);
+    const again = result.sketchUpdates[p.id!]!;
+    const ys = again.projections[0]!.entityIds.flatMap((id) => {
+      const ent = again.entities[id]!;
+      return ent.type === "point" ? [ent.y] : [];
+    });
+    expect(Math.min(...ys)).toBeCloseTo(582, 6);
+  });
+
   it("Scenario A: sketch → constraints → dimensions → extrude → body", async () => {
     const store = new DocumentStore(createDocument());
     const { sketchId, extrudeId, bodyId } = scenarioA(store);

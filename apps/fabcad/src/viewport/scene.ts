@@ -18,10 +18,14 @@ import { COLORS } from "./theme";
 
 export type ViewName = "front" | "back" | "left" | "right" | "top" | "bottom" | "iso";
 
+/**
+ * `ghost`: picked on a ghost (another component, seen from the one being edited); points and
+ * normals are where the ghost is drawn, indices those of the body.
+ */
 export type Pick3D =
-  | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean }
-  | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3 }
-  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3 }
+  | { kind: "face"; bodyId: string; faceIndex: number; point: Vec3; normal: Vec3; planar: boolean; ghost?: string }
+  | { kind: "edge"; bodyId: string; edgeIndex: number; point: Vec3; ghost?: string }
+  | { kind: "vertex"; bodyId: string; vertexIndex: number; point: Vec3; ghost?: string }
   | { kind: "origin-plane"; plane: OriginPlaneName }
   | { kind: "plane"; featureId: string }
   /** An instance of a component, as a whole: its faces and edges are not picked. */
@@ -35,6 +39,8 @@ export interface PickOptions {
   originPlanes?: boolean;
   /** Component instances (on by default). They hide what lies behind them either way. */
   instances?: boolean;
+  /** Ghosts (off by default): faces, edges and vertices of the other components. */
+  ghosts?: boolean;
 }
 
 /** A placed component: the bodies of its definition, shown at `matrix`. */
@@ -47,8 +53,8 @@ export interface InstanceView {
 
 export type Highlight =
   | { kind: "body"; bodyId: string }
-  | { kind: "face"; bodyId: string; faceIndex: number }
-  | { kind: "edge"; bodyId: string; edgeIndex: number }
+  | { kind: "face"; bodyId: string; faceIndex: number; ghost?: string }
+  | { kind: "edge"; bodyId: string; edgeIndex: number; ghost?: string }
   | { kind: "vertex"; bodyId: string; point: Vec3 }
   | { kind: "origin-plane"; plane: OriginPlaneName }
   | { kind: "plane"; featureId: string }
@@ -103,6 +109,8 @@ export class ViewportScene {
   private bodyRoot = new THREE.Group();
   private instanceRoot = new THREE.Group();
   private instances = new Map<string, InstanceEntry>();
+  private ghostRoot = new THREE.Group();
+  private ghosts = new Map<string, InstanceEntry & { matrix: THREE.Matrix4; bodyIds: string[] }>();
   private transparent = false;
   private originRoot = new THREE.Group();
   private highlightRoot = new THREE.Group();
@@ -166,7 +174,7 @@ export class ViewportScene {
     this.scene.add(hemi, rig);
     this.lightRig = rig;
 
-    this.scene.add(this.originRoot, this.planeRoot, this.bodyRoot, this.instanceRoot, this.highlightRoot);
+    this.scene.add(this.originRoot, this.planeRoot, this.bodyRoot, this.instanceRoot, this.ghostRoot, this.highlightRoot);
     this.buildOrigin();
     this.loop();
   }
@@ -218,6 +226,7 @@ export class ViewportScene {
     cancelAnimationFrame(this.frame);
     this.controls.dispose();
     this.setInstances([]);
+    this.setGhosts([]);
     for (const id of [...this.bodies.keys()]) this.removeBody(id);
     this.renderer.dispose();
     this.listeners.clear();
@@ -895,6 +904,87 @@ export class ViewportScene {
     return `${view.matrix.join(",")}|${bodies.join(",")}`;
   }
 
+  /**
+   * Show exactly these ghosts: what is not being edited, seen from the component that is
+   * (the root bodies and the instances of other components), faded. They hide nothing and are
+   * picked only when a pick asks for them (`PickOptions.ghosts`).
+   */
+  setGhosts(views: InstanceView[]): void {
+    const wanted = new Map(views.map((v) => [v.id, v]));
+    for (const [id, entry] of this.ghosts) {
+      const view = wanted.get(id);
+      if (view && this.instanceKey(view) === entry.key) continue;
+      this.ghostRoot.remove(entry.group);
+      entry.material.dispose();
+      entry.edgeMaterial.dispose();
+      this.ghosts.delete(id);
+    }
+    for (const view of views) {
+      if (this.ghosts.has(view.id)) continue;
+      const material = new THREE.MeshStandardMaterial({
+        color: COLORS.body,
+        metalness: 0,
+        roughness: 0.8,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const edgeMaterial = new THREE.LineBasicMaterial({ color: COLORS.edge, transparent: true, opacity: 0.35 });
+      const group = new THREE.Group();
+      group.matrixAutoUpdate = false;
+      const matrix = new THREE.Matrix4().set(...(view.matrix as Parameters<THREE.Matrix4["set"]>));
+      group.matrix.copy(matrix);
+      const meshes: THREE.Mesh[] = [];
+      for (const bodyId of view.bodyIds) {
+        const body = this.bodies.get(bodyId);
+        if (!body) continue;
+        const mesh = new THREE.Mesh(body.mesh.geometry, material);
+        mesh.userData.bodyId = bodyId;
+        mesh.userData.ghostId = view.id;
+        mesh.renderOrder = 2;
+        const edges = new THREE.LineSegments(body.edges.geometry, edgeMaterial);
+        edges.raycast = () => {};
+        group.add(mesh, edges);
+        meshes.push(mesh);
+      }
+      this.ghostRoot.add(group);
+      this.ghosts.set(view.id, {
+        key: this.instanceKey(view),
+        group,
+        meshes,
+        material,
+        edgeMaterial,
+        matrix,
+        bodyIds: view.bodyIds,
+      });
+    }
+    this.ghostRoot.updateMatrixWorld(true);
+    this.invalidate();
+  }
+
+  /** Row-major placement of a ghost, for turning what was picked on it into its geometry. */
+  ghostMatrix(id: string): number[] | undefined {
+    const m = this.ghosts.get(id)?.matrix;
+    // `elements` is column-major.
+    return m ? new THREE.Matrix4().copy(m).transpose().toArray() : undefined;
+  }
+
+  /** Bodies to pick from: the visible ones, and the ghosts when asked for. */
+  private pickSources(ghosts: boolean): { id: string; geometry: BodyGeometry; matrix?: THREE.Matrix4; ghost?: string }[] {
+    const out: { id: string; geometry: BodyGeometry; matrix?: THREE.Matrix4; ghost?: string }[] = [];
+    for (const b of this.bodies.values()) if (b.group.visible) out.push({ id: b.id, geometry: b.geometry });
+    if (ghosts) {
+      for (const [ghostId, g] of this.ghosts) {
+        for (const bodyId of g.bodyIds) {
+          const body = this.bodies.get(bodyId);
+          if (body) out.push({ id: bodyId, geometry: body.geometry, matrix: g.matrix, ghost: ghostId });
+        }
+      }
+    }
+    return out;
+  }
+
   /** Meshes that hide what lies behind them: visible bodies and instances. */
   private occluders(): THREE.Mesh[] {
     return [
@@ -955,12 +1045,15 @@ export class ViewportScene {
         continue;
       }
       const body = this.bodies.get(h.bodyId);
-      if (!body || !body.group.visible) continue;
+      // A ghost shows the body where the body itself is hidden.
+      const onGhost = (h.kind === "face" || h.kind === "edge") && h.ghost !== undefined;
+      if (!body || (!body.group.visible && !onGhost)) continue;
       if (h.kind === "body") {
         body.material.color.setHex(mode === "selected" ? 0x9cc3e0 : COLORS.bodyHover);
       } else if (h.kind === "face") {
         const face = body.geometry.faces[h.faceIndex];
         if (!face) continue;
+        const ghostMatrix = h.ghost ? this.ghosts.get(h.ghost)?.matrix : undefined;
         const g = new THREE.BufferGeometry();
         g.setAttribute("position", body.mesh.geometry.getAttribute("position"));
         g.setIndex(
@@ -979,7 +1072,9 @@ export class ViewportScene {
           polygonOffsetFactor: -1,
           polygonOffsetUnits: -1,
         });
-        this.highlightRoot.add(new THREE.Mesh(g, m));
+        const highlight = new THREE.Mesh(g, m);
+        if (ghostMatrix) highlight.applyMatrix4(ghostMatrix);
+        this.highlightRoot.add(highlight);
       } else if (h.kind === "edge") {
         const edge = body.geometry.edges[h.edgeIndex];
         if (!edge) continue;
@@ -987,7 +1082,10 @@ export class ViewportScene {
           edge.start * 3,
           (edge.start + edge.count) * 3,
         );
-        this.highlightRoot.add(this.thickLines(positions, color));
+        const lines = this.thickLines(positions, color);
+        const ghostMatrix = h.ghost ? this.ghosts.get(h.ghost)?.matrix : undefined;
+        if (ghostMatrix) lines.applyMatrix4(ghostMatrix);
+        this.highlightRoot.add(lines);
       } else {
         const g = new THREE.BufferGeometry().setFromPoints([toV3(h.point)]);
         const m = new THREE.PointsMaterial({
@@ -1063,8 +1161,11 @@ export class ViewportScene {
     const wantEdges = options.edges ?? true;
     const wantVertices = options.vertices ?? true;
     this.setRay(x, y);
-    const hit = this.raycaster.intersectObjects(this.occluders(), false)[0];
+    const ghostMeshes = options.ghosts ? [...this.ghosts.values()].flatMap((g) => g.meshes) : [];
+    const hit = this.raycaster.intersectObjects([...this.occluders(), ...ghostMeshes], false)[0];
     const hitDistance = hit ? hit.distance : Infinity;
+    const sources = this.pickSources(options.ghosts === true);
+    const placed = (p: THREE.Vector3, m?: THREE.Matrix4): THREE.Vector3 => (m ? p.applyMatrix4(m) : p);
     // Anything more than this far behind the first surface hit is considered hidden.
     const slack = hit ? Math.max(0.05, hitDistance * 0.004) : Infinity;
     const cameraPos = this.camera.position;
@@ -1077,17 +1178,16 @@ export class ViewportScene {
     if (wantVertices) {
       let best: Pick3D | null = null;
       let bestD = 9;
-      for (const b of this.bodies.values()) {
-        if (!b.group.visible) continue;
+      for (const b of sources) {
         const v = b.geometry.vertices;
         for (let i = 0; i < v.length; i += 3) {
-          const p = new THREE.Vector3(v[i], v[i + 1], v[i + 2]);
+          const p = placed(new THREE.Vector3(v[i], v[i + 1], v[i + 2]), b.matrix);
           const s = this.project(fromV3(p));
           if (!s.visible) continue;
           const d = Math.hypot(s.x - x, s.y - y);
           if (d < bestD && isVisible(p)) {
             bestD = d;
-            best = { kind: "vertex", bodyId: b.id, vertexIndex: i / 3, point: fromV3(p) };
+            best = { kind: "vertex", bodyId: b.id, vertexIndex: i / 3, point: fromV3(p), ...(b.ghost ? { ghost: b.ghost } : {}) };
           }
         }
       }
@@ -1099,13 +1199,12 @@ export class ViewportScene {
       let bestD = 7;
       const a = new THREE.Vector3();
       const c = new THREE.Vector3();
-      for (const b of this.bodies.values()) {
-        if (!b.group.visible) continue;
+      for (const b of sources) {
         const pos = b.geometry.edgePositions;
         for (const edge of b.geometry.edges) {
           for (let k = edge.start; k + 1 < edge.start + edge.count; k += 2) {
-            a.set(pos[k * 3]!, pos[k * 3 + 1]!, pos[k * 3 + 2]!);
-            c.set(pos[k * 3 + 3]!, pos[k * 3 + 4]!, pos[k * 3 + 5]!);
+            placed(a.set(pos[k * 3]!, pos[k * 3 + 1]!, pos[k * 3 + 2]!), b.matrix);
+            placed(c.set(pos[k * 3 + 3]!, pos[k * 3 + 4]!, pos[k * 3 + 5]!), b.matrix);
             const sa = this.project(fromV3(a));
             const sc = this.project(fromV3(c));
             if (!sa.visible || !sc.visible) continue;
@@ -1122,7 +1221,13 @@ export class ViewportScene {
             this.raycaster.ray.distanceSqToSegment(a, c, undefined, p);
             if (!isVisible(p)) continue;
             bestD = d;
-            best = { kind: "edge", bodyId: b.id, edgeIndex: edge.edgeIndex, point: edge.midpoint };
+            best = {
+              kind: "edge",
+              bodyId: b.id,
+              edgeIndex: edge.edgeIndex,
+              point: fromV3(placed(toV3(edge.midpoint), b.matrix)),
+              ...(b.ghost ? { ghost: b.ghost } : {}),
+            };
           }
         }
       }
@@ -1136,18 +1241,21 @@ export class ViewportScene {
 
     if (wantFaces && hit && hit.faceIndex !== undefined && hit.faceIndex !== null) {
       const bodyId = hit.object.userData.bodyId as string;
+      const ghost = hit.object.userData.ghostId as string | undefined;
       const body = this.bodies.get(bodyId);
       if (body) {
         const offset = hit.faceIndex * 3;
         const face = body.geometry.faces.find((f) => offset >= f.start && offset < f.start + f.count);
         if (face) {
+          const m = ghost ? this.ghosts.get(ghost)?.matrix : undefined;
           return {
             kind: "face",
             bodyId,
             faceIndex: face.faceIndex,
-            point: face.center,
-            normal: face.normal,
+            point: m ? fromV3(toV3(face.center).applyMatrix4(m)) : face.center,
+            normal: m ? fromV3(toV3(face.normal).transformDirection(m)) : face.normal,
             planar: face.surface === "plane",
+            ...(ghost ? { ghost } : {}),
           };
         }
       }
