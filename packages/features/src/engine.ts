@@ -1430,6 +1430,14 @@ export class FeatureEngine {
             ? kernel.fillet(body.shape, edges, size)
             : kernel.chamfer(body.shape, edges, size);
         entry.owned.push(result);
+        // A valid body must not come out broken: OpenCASCADE may return a fillet that does not
+        // close up (a tiny radius where faces meet tangentially) without reporting it.
+        if (kernel.solidProblem(body.shape) === null && kernel.solidProblem(result) !== null) {
+          const what = feature.type === "fillet" ? "fillet" : "chamfer";
+          throw new Error(
+            `The ${what} gives a broken solid. Try another size, or leave out edges along which faces meet tangentially.`,
+          );
+        }
         const indices = edges.map((e) => e.index);
         entry.outputs.set(
           feature.bodyId,
