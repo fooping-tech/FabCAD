@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LONG_PRESS_MS, createDoubleTapDetector, createLongPress } from "../src/ui/gestures";
+import {
+  LONG_PRESS_MS,
+  type WheelSample,
+  createDoubleTapDetector,
+  createLongPress,
+  createWheelClassifier,
+} from "../src/ui/gestures";
 
 const tap = (x: number, y: number, at: number, held = 60) => ({
   down: { x, y, time: at },
@@ -129,5 +135,40 @@ describe("long press", () => {
     press.onPointerDown({ pointerType: "mouse", clientX: 0, clientY: 0 });
     vi.advanceTimersByTime(2000);
     expect(fire).not.toHaveBeenCalled();
+  });
+});
+
+describe("wheel classifier", () => {
+  const sample = (s: Partial<WheelSample>): WheelSample => ({
+    deltaX: 0,
+    deltaY: 0,
+    deltaMode: 0,
+    ctrlKey: false,
+    time: 0,
+    ...s,
+  });
+
+  it("pans for a two-finger swipe and zooms for a pinch or a mouse wheel", () => {
+    const classify = createWheelClassifier();
+    expect(classify(sample({ deltaX: 3, deltaY: 1, time: 0 }))).toBe("pan");
+    expect(classify(sample({ deltaY: 2, ctrlKey: true, time: 1000 }))).toBe("zoom");
+    // Chrome / Safari: a trackpad reports wheelDeltaY = -3 × deltaY, a mouse steps of 120.
+    expect(classify(sample({ deltaY: 4, wheelDeltaY: -12, time: 2000 }))).toBe("pan");
+    expect(classify(sample({ deltaY: 100, wheelDeltaY: -120, time: 3000 }))).toBe("zoom");
+    // Firefox: a mouse wheel moves in lines.
+    expect(classify(sample({ deltaY: 3, deltaMode: 1, time: 4000 }))).toBe("zoom");
+    expect(classify(sample({ deltaY: 100, time: 5000 }))).toBe("zoom");
+    expect(classify(sample({ deltaY: 2.5, time: 6000 }))).toBe("pan");
+  });
+
+  it("keeps panning while the events of one swipe keep coming", () => {
+    const classify = createWheelClassifier();
+    expect(classify(sample({ deltaX: 5, time: 0 }))).toBe("pan");
+    // A purely vertical step of the same swipe that alone would look like a wheel.
+    expect(classify(sample({ deltaY: 60, time: 50 }))).toBe("pan");
+    expect(classify(sample({ deltaY: 60, time: 400 }))).toBe("zoom");
+    // A pinch always zooms.
+    expect(classify(sample({ deltaX: 5, time: 500 }))).toBe("pan");
+    expect(classify(sample({ deltaY: 1, ctrlKey: true, time: 520 }))).toBe("zoom");
   });
 });
