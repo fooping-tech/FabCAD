@@ -67,7 +67,7 @@ import { useNumericKeypad } from "../panels/ExpressionInput";
 import { projectPick } from "../sketch/projectTool";
 import { type HoverProfile, SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
-import { createDoubleTapDetector } from "../ui/gestures";
+import { createDoubleTapDetector, createWheelClassifier } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
 import { PointEntry } from "../panels/PointEntry";
@@ -271,6 +271,25 @@ export function Viewport(): ReactElement {
       scene.resize(r.width, r.height);
       controller.resize(r.width, r.height);
     };
+    // Two fingers on a trackpad: a swipe pans, a pinch zooms. The mouse wheel keeps zooming
+    // (OrbitControls). Caught on the way down, so that it works over the sketch overlay too.
+    const classifyWheel = createWheelClassifier();
+    const onWheel = (e: WheelEvent): void => {
+      const gesture = classifyWheel({
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        deltaMode: e.deltaMode,
+        ctrlKey: e.ctrlKey,
+        wheelDeltaY: (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY,
+        time: e.timeStamp,
+      });
+      if (gesture !== "pan" || !scene.controls.enabled) return;
+      e.preventDefault();
+      e.stopPropagation();
+      scene.panByPixels(e.deltaX, e.deltaY);
+    };
+    host.addEventListener("wheel", onWheel, { capture: true, passive: false });
+
     const observer = new ResizeObserver(resize);
     observer.observe(host);
     resize();
@@ -1187,6 +1206,7 @@ export function Viewport(): ReactElement {
     return () => {
       off();
       observer.disconnect();
+      host.removeEventListener("wheel", onWheel, { capture: true });
       webgl.removeEventListener("pointerdown", onPointerDown, { capture: true });
       webgl.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);

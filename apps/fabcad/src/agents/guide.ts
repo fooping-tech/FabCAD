@@ -152,7 +152,7 @@ const SECTIONS: Section[] = [
       {
         list: [
           "Esc works in steps: first it closes the Point box or the dimension window, or drops the picks of the command; then it ends the command; then it clears the selection.",
-          "In a sketch with the Select tool, dragging moves geometry. Outside a sketch, left-drag orbits the view; right-drag orbits too, middle-drag pans, the wheel zooms. F6 (or Fit) brings everything into view.",
+          "In a sketch with the Select tool, dragging moves geometry. Outside a sketch, left-drag orbits the view; right-drag orbits too, middle-drag pans, the wheel zooms. On a trackpad, a two-finger swipe pans and a pinch zooms. F6 (or Fit) brings everything into view.",
           "Shortcuts are single letters. They do nothing while a text field has the focus; click the view first if a letter is not taken.",
           "A sketch tool started outside a sketch asks for a plane first (a Browser plane row or a planar face).",
           "Command windows open beside the last click and can be dragged by their title bar if they cover something.",

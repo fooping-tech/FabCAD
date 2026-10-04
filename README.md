@@ -37,7 +37,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details · 詳しく見る** で、用途、必要な選択、パラメータ、制限、使用例を表示します。説明は英語と日本語の併記です。ヘルプを開いても、実行中のコマンドと選択は変わりません |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
-| 入出力 | STEP import / export、STL export、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
+| 入出力 | STEP import / export、STL export（書き出す Body とコンポーネントを選べます。コンポーネントはインスタンスの位置ごと、または原点に 1 つ）、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
 
 ### FABRICATION ワークスペース（Laser）
 
@@ -264,6 +264,8 @@ Fusion 360 の円形のマーキングメニューではなく、一覧形式の
 | --- | --- |
 | ホイール | ズーム |
 | 中ボタンドラッグ | パン |
+| トラックパッドの 2 本指スワイプ | パン（上下左右に移動。指の動きに表示が付いてきます） |
+| トラックパッドのピンチ | ズーム |
 | 右ドラッグ（3D では左ドラッグも） | オービット |
 | `Ctrl/Cmd` を押しながらクリック | スナップを無効化（スケッチ）、追加選択 |
 | Extrude の矢印をドラッグ | 距離を変更。`Alt` を押している間は刻みなし |
@@ -389,7 +391,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 | --- | --- |
 | Project | 実装済み。楕円になる投影（斜めから見た円）はスプラインで近似します |
 | Include / Intersect | 未実装 |
-| Component | 入れ子のコンポーネント、インスタンスごとのパラメータ、Joint（拘束と動き）、BOM はありません。Feature は 1 つのコンポーネントの中だけで働き、異なるコンポーネントの Body を Combine、Join / Cut、Move/Copy、Pattern することはできません（ダイアログで拒否します）。STEP / STL の書き出しと FABRICATION は、コンポーネントの Body を定義の位置で 1 つずつ扱い、インスタンスの数と配置はまだ反映しません |
+| Component | 入れ子のコンポーネント、インスタンスごとのパラメータ、Joint（拘束と動き）、BOM はありません。Feature は 1 つのコンポーネントの中だけで働き、異なるコンポーネントの Body を Combine、Join / Cut、Move/Copy、Pattern することはできません（ダイアログで拒否します）。FABRICATION は、コンポーネントの Body を定義の位置で 1 つずつ扱い、インスタンスの数と配置はまだ反映しません（STEP / STL の書き出しでは、インスタンスごとに配置して書けます） |
 | Draft、Rib、Thread | 未実装 |
 | Hole | ねじ穴、下穴、先端の円錐（ドリル形状）、「指定した面まで」はありません。穴が何も削らない向きのときはエラーになります（Flip で反転） |
 | Pattern / Mirror | Feature を対象にできるのは、材料を足すか削る Feature（Extrude、Revolve、Hole、Sweep、Loft、Pattern）だけです。Fillet、Chamfer、Shell は対象にできません（Body を対象にしてください）。パスに沿った Pattern はありません |

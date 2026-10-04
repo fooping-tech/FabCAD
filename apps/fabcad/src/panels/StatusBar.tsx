@@ -15,9 +15,9 @@ export function StatusBar(): ReactElement {
 
   let hint = app.hint;
   if (!app.activeSketchId && !app.dialog && app.workspace === "design") {
-    hint = "Left-drag or right-drag: orbit · Middle-drag: pan · Wheel: zoom · Click: select";
+    hint = "Left-drag or right-drag: orbit · Middle-drag or two-finger swipe: pan · Wheel or pinch: zoom · Click: select";
   } else if (app.activeSketchId && !hint) {
-    hint = "Right-drag: orbit · Middle-drag: pan · Wheel: zoom";
+    hint = "Right-drag: orbit · Middle-drag or two-finger swipe: pan · Wheel or pinch: zoom";
   }
 
   return (

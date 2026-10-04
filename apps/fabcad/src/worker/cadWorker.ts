@@ -62,7 +62,7 @@ async function handle(request: WorkerRequest): Promise<{ result: unknown; transf
       return { result: data, transfer: [data.buffer] };
     }
     case "export-stl": {
-      const data = await e.exportSTL(request.bodyIds, request.binary);
+      const data = await e.exportSTL(request.bodies, request.binary);
       return { result: data, transfer: [data.buffer] };
     }
   }
