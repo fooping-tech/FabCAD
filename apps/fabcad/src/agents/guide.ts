@@ -157,7 +157,7 @@ const SECTIONS: Section[] = [
           "A sketch tool started outside a sketch asks for a plane first (a Browser plane row or a planar face).",
           "Command windows open beside the last click and can be dragged by their title bar if they cover something.",
           "Components: while a component is active (ACTIVE badge in the Browser), the view shows only that component and new sketches belong to it. Activate Root (ribbon, ASSEMBLE group) shows the whole model again; there an instance is selected as a whole and its faces cannot be picked for a command.",
-          "Projected geometry (purple) follows the body it came from and cannot be dragged. It does not cut a closed shape drawn across it: that shape stays one profile.",
+          "Projected geometry (purple) follows the body it came from and cannot be dragged. It does not cut a closed shape drawn across it: that shape stays one profile. A projected outline inside a drawn shape that does not touch it does cut it (the frame between them becomes a profile).",
         ],
       },
     ],
