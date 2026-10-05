@@ -276,7 +276,7 @@ export function drawSketchGeometry(
         flattenCurve(c, tolerance).map((p) => projector.toScreen(p)),
       );
     }
-    if (e.type === "spline" && state.active && e.kind === "control") {
+    if (e.type === "spline" && state.active && e.kind === "control" && !state.projected?.has(e.id)) {
       // Control polygon.
       ctx.setLineDash([2, 3]);
       ctx.lineWidth = 1;
@@ -296,9 +296,22 @@ export function drawSketchGeometry(
   for (const e of Object.values(sketch.entities)) {
     if (e.type === "circle" || e.type === "arc" || e.type === "ellipse") centres.add(e.center);
   }
+  // A projected curve shows its ends only: not the control points of its Bézier spans, nor
+  // where the spans of a chain meet.
+  const inner = new Set<string>();
+  for (const ref of sketch.projections) {
+    const splines = ref.entityIds.map((id) => sketch.entities[id]).filter((c) => c?.type === "spline");
+    splines.forEach((c, i) => {
+      if (c?.type !== "spline" || c.kind !== "control") return;
+      c.points.forEach((id, k) => {
+        if ((k > 0 || i > 0) && (k < c.points.length - 1 || i < splines.length - 1)) inner.add(id);
+      });
+    });
+  }
   for (const e of Object.values(sketch.entities)) {
     if (e.type !== "point") continue;
     const highlighted = state.selectedEntities.has(e.id) || state.hoverEntity === e.id;
+    if (inner.has(e.id) && !highlighted) continue;
     if (!state.active && shown !== "all" && !highlighted && !shown?.has(e.id)) continue;
     const s = projector.toScreen(e);
     if (e.id === sketch.originId) {

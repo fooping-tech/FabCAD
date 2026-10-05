@@ -502,6 +502,12 @@ export class FeatureEngine {
     return topology;
   }
 
+  /** A body tessellated anew, finer or coarser than its display geometry. Not cached. */
+  bodyMesh(bodyId: string, options: TessellationOptions): BodyGeometry | null {
+    const state = this.bodies.get(bodyId);
+    return state ? this.kernel.tessellate(state.shape, options) : null;
+  }
+
   bodyGeometry(bodyId: string): BodyGeometry | null {
     return this.bodies.get(bodyId)?.geometry ?? null;
   }

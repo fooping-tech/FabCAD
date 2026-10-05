@@ -52,6 +52,7 @@ export function transformBodyGeometry(geometry: BodyGeometry, m: readonly number
     ...(e.center ? { center: point(e.center) } : {}),
     ...(e.axis ? { axis: dir(e.axis) } : {}),
     ...(e.bezier ? { bezier: e.bezier.map(point) } : {}),
+    ...(e.cubics ? { cubics: e.cubics.map(point) } : {}),
   }));
   return {
     ...geometry,

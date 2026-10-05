@@ -244,6 +244,78 @@ function sampleBSpline(
   return out;
 }
 
+/** How closely `hermiteChain` follows a curve (mm). */
+const CHAIN_TOLERANCE = 1e-6;
+const CHAIN_MAX_SPANS = 512;
+
+/**
+ * A curve as cubic Béziers end to end, 3·n + 1 points for n spans: each span takes its ends and
+ * end tangents from the curve (cubic Hermite) and is halved until it is within
+ * `CHAIN_TOLERANCE` of the curve. `breaks` are the parameters where the curve may bend
+ * sharply (the knots of a B-spline); no span crosses one. A polynomial piece of degree three
+ * or less comes out as one span, exactly. Null when the curve cannot be followed that closely.
+ */
+export function hermiteChain(f: (u: number) => Vec2, breaks: readonly number[]): Vec2[] | null {
+  // The derivative from inside [a, b], to second order, so that a corner at a break is not
+  // smoothed over.
+  const derivative = (u: number, a: number, b: number): Vec2 => {
+    const h = 1e-4 * (b - a);
+    const sign = u + 2 * h <= b ? 1 : -1;
+    const p0 = f(u);
+    const p1 = f(u + sign * h);
+    const p2 = f(u + 2 * sign * h);
+    return {
+      x: (sign * (-3 * p0.x + 4 * p1.x - p2.x)) / (2 * h),
+      y: (sign * (-3 * p0.y + 4 * p1.y - p2.y)) / (2 * h),
+    };
+  };
+  const bezierAt = (c: Vec2[], t: number): Vec2 => {
+    const s = 1 - t;
+    const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+    return {
+      x: w[0]! * c[0]!.x + w[1]! * c[1]!.x + w[2]! * c[2]!.x + w[3]! * c[3]!.x,
+      y: w[0]! * c[0]!.y + w[1]! * c[1]!.y + w[2]! * c[2]!.y + w[3]! * c[3]!.y,
+    };
+  };
+  const out: Vec2[] = [];
+  let spans = 0;
+  let tries = 0;
+  const span = (a: number, b: number, lo: number, hi: number, pa: Vec2, pb: Vec2, depth: number): boolean => {
+    if (++tries > 4 * CHAIN_MAX_SPANS) return false;
+    const h = (b - a) / 3;
+    const da = derivative(a, lo, hi);
+    const db = derivative(b, lo, hi);
+    const cubic = [pa, { x: pa.x + da.x * h, y: pa.y + da.y * h }, { x: pb.x - db.x * h, y: pb.y - db.y * h }, pb];
+    let ok = true;
+    for (const t of [0.2, 0.5, 0.8]) {
+      const q = f(a + (b - a) * t);
+      const p = bezierAt(cubic, t);
+      if (Math.hypot(p.x - q.x, p.y - q.y) > CHAIN_TOLERANCE) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok && depth < 20 && spans < CHAIN_MAX_SPANS) {
+      const m = (a + b) / 2;
+      const pm = f(m);
+      return span(a, m, lo, hi, pa, pm, depth + 1) && span(m, b, lo, hi, pm, pb, depth + 1);
+    }
+    if (!ok) return false;
+    out.push(cubic[1]!, cubic[2]!, pb);
+    spans++;
+    return true;
+  };
+  const cuts = breaks.filter((u, i) => i === 0 || u - breaks[i - 1]! > 1e-12);
+  if (cuts.length < 2) return null;
+  out.push(f(cuts[0]!));
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const a = cuts[i]!;
+    const b = cuts[i + 1]!;
+    if (!span(a, b, a, b, out[out.length - 1]!, f(b), 0)) return null;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------------------------
 
 interface Counters {
@@ -351,6 +423,23 @@ export function importDxfIntoSketch(
     created.push(id);
     layerOf[id] = layer;
     return true;
+  };
+
+  /** Cubic Béziers end to end (see `hermiteChain`) as control splines that share their ends. */
+  const addChain = (chain: readonly Vec2[], layer: string, construction: boolean): boolean => {
+    if (chain.length < 4 || (chain.length - 1) % 3 !== 0 || !finitePoints(chain)) return false;
+    const ids = chain.map((p, i) => (i % 3 === 0 ? pool.shared(p).id : builder.point(p.x, p.y)));
+    let added = 0;
+    for (let i = 0; i + 3 < ids.length; i += 3) {
+      const span = chain.slice(i, i + 4);
+      const size = Math.max(...span.map((p) => Math.hypot(p.x - span[0]!.x, p.y - span[0]!.y)));
+      if (size < MIN_SIZE) continue;
+      const id = builder.spline("control", ids.slice(i, i + 4), false, construction);
+      created.push(id);
+      layerOf[id] = layer;
+      added++;
+    }
+    return added > 0;
   };
 
   const convert = (e: DxfEntity): void => {
@@ -469,8 +558,19 @@ export function importDxfIntoSketch(
           layerOf[id] = e.layer;
           return;
         }
-        // The sketch has no elliptical arc: a fit spline through points of the arc replaces it.
+        // The sketch has no elliptical arc: control splines within 1e-6 mm of it replace it, or
+        // failing that, a fit spline through points of the arc.
         const sweep = normalizeAngle(end - start);
+        const along = (t: number): Vec2 => ({
+          x: center.x + Math.cos(t) * major.x - Math.sin(t) * major.y * ratio,
+          y: center.y + Math.cos(t) * major.y + Math.sin(t) * major.x * ratio,
+        });
+        const quarters = Math.max(1, Math.ceil(sweep / (Math.PI / 2)));
+        const chain = hermiteChain(
+          along,
+          Array.from({ length: quarters + 1 }, (_, i) => start + (sweep * i) / quarters),
+        );
+        if (chain && addChain(chain, e.layer, construction)) return;
         const steps = Math.max(12, Math.ceil((sweep / TWO_PI) * ELLIPSE_SAMPLES_PER_TURN));
         const samples: Vec2[] = [];
         for (let i = 0; i <= steps; i++) {
@@ -488,14 +588,40 @@ export function importDxfIntoSketch(
       }
       case "spline": {
         const fit = e.fitPoints.map(map);
-        if (fit.length >= 2) {
-          if (!addFitSpline(fit, e.closed, e.layer, construction)) counters.degenerate++;
-          return;
-        }
         const control = e.controlPoints.map(map);
         const n = control.length;
         const degree = e.degree;
-        if (n < 2 || degree < 1 || n < degree + 1 || !finitePoints(control)) {
+        // The control points describe the curve itself; the fit points only what it was drawn
+        // through, and another program interpolates them its own way. Control points that do
+        // not pass through the fit points (left over by some programs) are not the curve.
+        const usable = n >= 2 && degree >= 1 && n >= degree + 1 && finitePoints(control);
+        const matches = (): boolean => {
+          if (fit.length < 2) return true;
+          const knotsOk = e.knots.length === n + degree + 1 && isNonDecreasing(e.knots) && finite(...e.knots);
+          const curve = sampleBSpline(degree, knotsOk ? e.knots : clampedUniformKnots(n, degree), control, e.weights);
+          // Placeholders are far off; a chord of the samples is close to the curve.
+          const xs = curve.map((p) => p.x);
+          const ys = curve.map((p) => p.y);
+          const extent = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+          const slack = Math.max(1e-3, 10 * tolerance, 1e-3 * extent);
+          // Within a chord of the samples: the distance to the nearest segment.
+          const near = (p: Vec2): boolean =>
+            curve.some((a, i) => {
+              const b = curve[i + 1];
+              if (!b) return Math.hypot(p.x - a.x, p.y - a.y) <= slack;
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const len2 = dx * dx + dy * dy;
+              const t = len2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+              return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t)) <= slack;
+            });
+          return fit.every(near);
+        };
+        if (!usable || !matches()) {
+          if (fit.length >= 2) {
+            if (!addFitSpline(fit, e.closed, e.layer, construction)) counters.degenerate++;
+            return;
+          }
           counters.degenerate++;
           return;
         }
@@ -537,6 +663,11 @@ export function importDxfIntoSketch(
           layerOf[id] = e.layer;
           return;
         }
+        // Anything else (other knots, weights, other degrees, a closed curve) as control splines
+        // within 1e-6 mm of it, span by span between the knots.
+        const domain = knots.slice(degree, n + 1);
+        const chain = hermiteChain((u) => evaluateBSpline(degree, knots, control, weights, u), domain);
+        if (chain && addChain(chain, e.layer, construction)) return;
         const samples = sampleBSpline(degree, knots, control, weights);
         const a = samples[0];
         const b = samples[samples.length - 1];

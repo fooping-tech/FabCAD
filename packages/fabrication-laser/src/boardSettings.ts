@@ -47,3 +47,14 @@ export function defaultBoardSettings(material: MaterialProfile): BoardSettings {
     kerfCompensation: true,
   };
 }
+
+/**
+ * How a body made from boards is facetted. The cut follows the facets of the faces it goes
+ * around (the walls of a hole, a rounded outline), so the chords may stray from the true curve
+ * by at most `tolerance` (0.01 mm, about a tenth of a laser's kerf) instead of the kernel's
+ * default 0.1 mm. Passed to the geometry kernel when the topology is made.
+ */
+export const BOARD_TESSELLATION: { tolerance: number; angularTolerance: number } = {
+  tolerance: 0.01,
+  angularTolerance: Math.PI / 12,
+};

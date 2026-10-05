@@ -70,6 +70,11 @@ export interface MeshEdgeGroup {
    * of the projected control points: exact, unlike anything fitted to the tessellation.
    */
   bezier?: Vec3[];
+  /**
+   * Any other curve (B-splines, ellipses, …): a chain of cubic Béziers within 1e-6 mm of it,
+   * 3·n + 1 points for n spans, in the direction of the curve. Projects like `bezier`.
+   */
+  cubics?: Vec3[];
 }
 
 /** Display geometry of one body. All arrays are transferable between threads. */

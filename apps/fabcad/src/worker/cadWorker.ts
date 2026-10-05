@@ -57,6 +57,11 @@ async function handle(request: WorkerRequest): Promise<{ result: unknown; transf
     }
     case "topology":
       return { result: e.bodyTopology(request.bodyId, request.options), transfer: [] };
+    case "mesh": {
+      const g = e.bodyMesh(request.bodyId, request.options);
+      const transfer = g ? [g.positions.buffer, g.normals.buffer, g.indices.buffer, g.edgePositions.buffer, g.vertices.buffer] : [];
+      return { result: g, transfer };
+    }
     case "export-step": {
       const data = await e.exportSTEP(request.bodies);
       return { result: data, transfer: [data.buffer] };

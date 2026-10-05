@@ -2,10 +2,10 @@ import { type Orientation, PRINT_MATERIALS } from "@fabcad/fabrication-print";
 import { listInstances } from "@fabcad/cad-document";
 import { Fragment, type ReactElement } from "react";
 import { Icon } from "../ui/Icon";
-import { documentStore } from "../app/session";
+import { documentStore, modelState } from "../app/session";
 import { CheckField, NumberField, Section, SegmentedField } from "../fabrication/fields";
 import "../fabrication/fabrication.css";
-import { exportPrintJob } from "./exportPrint";
+import { exportPrintFile } from "./exportPrint";
 import { printUiState, selectPrintPart } from "./uiState";
 import { type PrintState, updatePrintSettings } from "./usePrintJob";
 import { useStore } from "../app/tinyStore";
@@ -308,7 +308,9 @@ export function PrintSidePanel({ state }: { state: PrintState }): ReactElement {
               className="btn accent"
               style={{ flex: 1 }}
               disabled={!job || stale}
-              onClick={() => exportPrintJob("3mf", job, documentStore.document.name, included.length)}
+              onClick={() =>
+                void exportPrintFile("3mf", documentStore.document, settings, bodies, modelState.get().bodies, included.length)
+              }
             >
               Export 3MF
             </button>
@@ -316,7 +318,9 @@ export function PrintSidePanel({ state }: { state: PrintState }): ReactElement {
               className="btn"
               style={{ flex: 1 }}
               disabled={!job || stale}
-              onClick={() => exportPrintJob("stl", job, documentStore.document.name, included.length)}
+              onClick={() =>
+                void exportPrintFile("stl", documentStore.document, settings, bodies, modelState.get().bodies, included.length)
+              }
             >
               Export STL
             </button>

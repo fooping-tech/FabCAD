@@ -25,7 +25,12 @@ export type ProjectedShape =
   /** Counter-clockwise from `start` to `end`. */
   | { type: "arc"; center: Vec2; start: Vec2; end: Vec2 }
   /** A fit spline through `points`, or with `kind: "control"` the control polygon of a Bézier. */
-  | { type: "spline"; points: Vec2[]; closed: boolean; kind?: "control" };
+  | { type: "spline"; points: Vec2[]; closed: boolean; kind?: "control" }
+  /**
+   * Cubic Béziers end to end: 3·n + 1 points for n spans, held as n control splines of four
+   * points that share their ends. The first and last point are the same for a closed curve.
+   */
+  | { type: "chain"; points: Vec2[] };
 
 const TOL = 1e-6;
 
@@ -133,6 +138,8 @@ export interface ExactEdge {
   radius?: number;
   /** For circles: the normal of the circle's plane. */
   axis?: Vec3;
+  /** Any other curve as a chain of cubic Béziers (see `MeshEdgeGroup.cubics`). */
+  cubics?: readonly Vec3[];
 }
 
 /**
@@ -149,58 +156,138 @@ export function projectCurve(
   bezier?: readonly Vec3[],
   exact?: ExactEdge,
 ): ProjectedShape | null {
-  const shape = projectSampled(plane, points, bezier);
+  // A circle seen at a slant is an ellipse, which the sketch holds as a chain of Béziers.
+  const slanted =
+    exact?.curve === "circle" && exact.axis && !bezier
+      ? Math.abs(dot3(exact.axis, plane.normal)) < 1 - 1e-9 && Math.abs(dot3(exact.axis, plane.normal)) > 1e-9
+      : false;
+  const cubics = exact?.cubics ?? (slanted && exact ? circleChain(exact, points) : null);
+  const shape = cubics && !bezier ? projectChain(plane, points, cubics) : projectSampled(plane, points, bezier);
   return shape && exact ? snapToExact(plane, shape, exact, points) : shape;
+}
+
+/**
+ * A circular edge in its own plane: `e1` towards the start, `e2` a quarter turn on about the
+ * axis, the way the edge runs (`ccw`, told by the samples: the second one is a little way on
+ * from the start), how far it runs (`sweep`) and where a point is along it (`turn`).
+ */
+interface ArcFrame {
+  c: Vec3;
+  r: number;
+  axis: Vec3;
+  e1: Vec3;
+  e2: Vec3;
+  sweep: number;
+  closed: boolean;
+  /** Angle of a point from the start, the way the edge runs, in [0, 2π). */
+  turn(p: Vec3): number;
+  /** The point at an angle from the start, the way the edge runs, and the tangent there. */
+  at(t: number): { p: Vec3; d: Vec3 };
+}
+
+const dot3 = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+const cross3v = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+});
+
+function arcFrame(edge: ExactEdge, points: readonly Vec3[]): ArcFrame | null {
+  const { center: c, radius: r, axis } = edge;
+  if (!c || r === undefined || !axis) return null;
+  const rel = (p: Vec3): Vec3 => ({ x: p.x - c.x, y: p.y - c.y, z: p.z - c.z });
+  const f = rel(edge.from);
+  const fl = Math.hypot(f.x, f.y, f.z);
+  if (fl < 1e-12) return null;
+  const e1 = { x: f.x / fl, y: f.y / fl, z: f.z / fl };
+  const e2 = cross3v(axis, e1);
+  const angle = (p: Vec3): number => {
+    const v = rel(p);
+    const a = Math.atan2(dot3(v, e2), dot3(v, e1));
+    return a < 0 ? a + 2 * Math.PI : a;
+  };
+  const second = points.length > 1 ? angle(points[1]!) : 0;
+  const ccw = second < Math.PI;
+  const turn = (p: Vec3): number => {
+    const a = angle(p);
+    return ccw ? a : (2 * Math.PI - a) % (2 * Math.PI);
+  };
+  const closed = Math.hypot(edge.from.x - edge.to.x, edge.from.y - edge.to.y, edge.from.z - edge.to.z) < 1e-9;
+  const sweep = closed ? 2 * Math.PI : turn(edge.to);
+  const s = ccw ? 1 : -1;
+  const at = (t: number): { p: Vec3; d: Vec3 } => {
+    const cos = Math.cos(t);
+    const sin = s * Math.sin(t);
+    return {
+      p: {
+        x: c.x + r * (cos * e1.x + sin * e2.x),
+        y: c.y + r * (cos * e1.y + sin * e2.y),
+        z: c.z + r * (cos * e1.z + sin * e2.z),
+      },
+      // d/dt, per radian.
+      d: {
+        x: r * (-Math.sin(t) * e1.x + s * Math.cos(t) * e2.x),
+        y: r * (-Math.sin(t) * e1.y + s * Math.cos(t) * e2.y),
+        z: r * (-Math.sin(t) * e1.z + s * Math.cos(t) * e2.z),
+      },
+    };
+  };
+  return { c, r, axis, e1, e2, sweep, closed, turn, at };
 }
 
 /**
  * The points of a circle standing upright on the sketch (its plane contains the sketch normal)
  * that lie on the edge and are extremes along its edge-on projection: the ends of the edge,
- * and the two points of the circle farthest to either side where the edge passes them. The
- * samples tell which way round the edge runs. Null for a circle that does not stand upright.
+ * and the two points of the circle farthest to either side where the edge passes them. Null
+ * for a circle that does not stand upright.
  */
 function uprightExtremes(plane: Plane3, edge: ExactEdge, points: readonly Vec3[]): Vec2[] | null {
-  const { center: c, radius: r, axis } = edge;
-  if (!c || r === undefined || !axis) return null;
+  const frame = arcFrame(edge, points);
+  if (!frame) return null;
+  const { c, r, axis } = frame;
   const n = plane.normal;
-  if (Math.abs(n.x * axis.x + n.y * axis.y + n.z * axis.z) > 1e-9) return null;
+  if (Math.abs(dot3(n, axis)) > 1e-9) return null;
   const at = (p: Vec3): Vec2 => {
     const q = worldToPlane(plane, p);
     return { x: tidy(q.x), y: tidy(q.y) };
   };
-  // In the circle's plane: e1 towards the start, e2 a quarter turn on.
-  const rel = (p: Vec3): Vec3 => ({ x: p.x - c.x, y: p.y - c.y, z: p.z - c.z });
-  const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
-  const crossV = (a: Vec3, b: Vec3): Vec3 => ({
-    x: a.y * b.z - a.z * b.y,
-    y: a.z * b.x - a.x * b.z,
-    z: a.x * b.y - a.y * b.x,
-  });
-  const f = rel(edge.from);
-  const fl = Math.hypot(f.x, f.y, f.z);
-  if (fl < 1e-12) return null;
-  const e1 = { x: f.x / fl, y: f.y / fl, z: f.z / fl };
-  const e2 = crossV(axis, e1);
-  const angle = (p: Vec3): number => {
-    const v = rel(p);
-    const a = Math.atan2(dot(v, e2), dot(v, e1));
-    return a < 0 ? a + 2 * Math.PI : a;
-  };
-  // Which way round: the second sample is a little way on from the start.
-  const second = points.length > 1 ? angle(points[1]!) : 0;
-  const ccw = second < Math.PI;
-  const turn = (a: number): number => (ccw ? a : (2 * Math.PI - a) % (2 * Math.PI));
-  const closed = Math.hypot(edge.from.x - edge.to.x, edge.from.y - edge.to.y, edge.from.z - edge.to.z) < 1e-9;
-  const sweep = closed ? 2 * Math.PI : turn(angle(edge.to));
   // The direction in the circle's plane that is parallel to the sketch.
-  const u = crossV(n, axis);
+  const u = cross3v(n, axis);
   const ul = Math.hypot(u.x, u.y, u.z);
-  const out: Vec2[] = closed ? [] : [at(edge.from), at(edge.to)];
+  const out: Vec2[] = frame.closed ? [] : [at(edge.from), at(edge.to)];
   for (const s of [1, -1]) {
     const p = { x: c.x + (s * r * u.x) / ul, y: c.y + (s * r * u.y) / ul, z: c.z + (s * r * u.z) / ul };
-    if (turn(angle(p)) <= sweep + 1e-12) out.push(at(p));
+    if (frame.turn(p) <= frame.sweep + 1e-12) out.push(at(p));
   }
   return out.length > 0 ? out : null;
+}
+
+/**
+ * A circular edge as cubic Béziers end to end, 3·n + 1 points, within 1e-6 mm of the circle:
+ * the usual arc spans (control points at 4/3·tan(θ/4) along the tangents), short enough that
+ * r · (θ/4)⁶ · 4/27 stays below the tolerance. Seen at a slant, a circle is an ellipse; this
+ * chain projects onto the sketch as exactly as it follows the circle.
+ */
+function circleChain(edge: ExactEdge, points: readonly Vec3[]): Vec3[] | null {
+  const frame = arcFrame(edge, points);
+  if (!frame || !(frame.sweep > 0)) return null;
+  const step = Math.min(Math.PI / 2, 4 * Math.pow(1e-6 / ((4 / 27) * Math.max(frame.r, 1e-9)), 1 / 6));
+  const n = Math.max(1, Math.ceil(frame.sweep / step));
+  const theta = frame.sweep / n;
+  const k = (4 / 3) * Math.tan(theta / 4);
+  const out: Vec3[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = frame.at(i * theta);
+    const b = frame.at((i + 1) * theta);
+    const pb = i === n - 1 ? (frame.closed ? out[0]! : edge.to) : b.p;
+    if (i === 0) out.push(edge.from);
+    out.push(
+      { x: a.p.x + a.d.x * k, y: a.p.y + a.d.y * k, z: a.p.z + a.d.z * k },
+      { x: b.p.x - b.d.x * k, y: b.p.y - b.d.y * k, z: b.p.z - b.d.z * k },
+      pb,
+    );
+  }
+  return out;
 }
 
 /** Normalise exact values: drop the last bits of rounding noise and negative zero. */
@@ -273,8 +360,26 @@ function snapToExact(
       const [start, end] = ends(shape.start, shape.end);
       return { type: "arc", center, start, end };
     }
+    case "chain": {
+      // The ends come from the curve already; the vertices of the B-Rep may differ by its
+      // tolerance.
+      const points = shape.points.slice();
+      const a = points[0]!;
+      const b = points[points.length - 1]!;
+      if (dist2(a, b) <= 1e-9) {
+        if (!near(a, from)) return shape;
+        points[0] = from;
+        points[points.length - 1] = from;
+      } else {
+        if (!near(a, from) && !near(a, to)) return shape;
+        const [first, last] = ends(a, b);
+        points[0] = first;
+        points[points.length - 1] = last;
+      }
+      return { type: "chain", points };
+    }
     case "spline": {
-      if (shape.closed || shape.kind === "control" || shape.points.length < 2) return shape;
+      if (shape.closed || shape.points.length < 2) return shape;
       const points = shape.points.slice();
       const [first, last] = ends(points[0]!, points[points.length - 1]!);
       points[0] = first;
@@ -284,6 +389,29 @@ function snapToExact(
     default:
       return shape;
   }
+}
+
+/**
+ * The projection of a chain of cubic Béziers: the chain of the projected points, which is
+ * exact. Seen edge-on it is a line, which the samples give with its extent.
+ */
+function projectChain(plane: Plane3, points: readonly Vec3[], cubics: readonly Vec3[]): ProjectedShape | null {
+  if (cubics.length < 4 || (cubics.length - 1) % 3 !== 0) return projectPolyline(plane, points);
+  const pts = cubics.map((p) => {
+    const q = worldToPlane(plane, p);
+    return { x: q.x, y: q.y };
+  });
+  const first = pts[0]!;
+  // Edge-on: every point on one line (the line through the first and the farthest point).
+  const far = pts.reduce((a, b) => (dist2(b, first) > dist2(a, first) ? b : a));
+  const size = dist2(far, first);
+  if (size < 1e-9) return projectPolyline(plane, points);
+  const flat = pts.every((p) => Math.abs(cross2(sub2(far, first), sub2(p, first))) <= 1e-9 * Math.max(1, size * size));
+  if (flat) return projectPolyline(plane, points);
+  if (pts.length === 4 && dist2(first, pts[3]!) > 1e-9) {
+    return { type: "spline", kind: "control", points: pts, closed: false };
+  }
+  return { type: "chain", points: pts };
 }
 
 function projectSampled(
@@ -365,6 +493,16 @@ export function addProjection(
     case "spline":
       ids.push(b.spline(shape.kind ?? "fit", shape.points.map(point), shape.closed));
       break;
+    case "chain": {
+      const pts = shape.points;
+      const closed = dist2(pts[0]!, pts[pts.length - 1]!) <= 1e-9;
+      const pointIds = (closed ? pts.slice(0, -1) : pts).map(point);
+      if (closed) pointIds.push(pointIds[0]!);
+      for (let i = 0; i + 3 < pointIds.length; i += 3) {
+        ids.push(b.spline("control", pointIds.slice(i, i + 4), false));
+      }
+      break;
+    }
   }
   const built = b.build();
   const ref: ProjectedGeometryRef = {
@@ -400,7 +538,8 @@ export function updateProjection(
 ): Sketch | null {
   const entities = ref.entityIds.map((id) => sketch.entities[id]);
   if (entities.some((e) => !e)) return null;
-  const curve = entities.find((e) => e && e.type !== "point");
+  const curves = entities.filter((e) => e && e.type !== "point");
+  const curve = curves[0];
   const pointIds = ref.entityIds.filter((id) => sketch.entities[id]?.type === "point");
 
   let targets: Vec2[];
@@ -424,10 +563,19 @@ export function updateProjection(
       targets = [shape.center, shape.start, shape.end];
       break;
     case "spline":
+      if (curves.length !== 1) return null;
       if (curve?.type !== "spline" || curve.points.length !== shape.points.length) return null;
       if (curve.kind !== (shape.kind ?? "fit")) return null;
       targets = shape.points;
       break;
+    case "chain": {
+      const spans = (shape.points.length - 1) / 3;
+      if (curves.length !== spans) return null;
+      if (!curves.every((c) => c?.type === "spline" && c.kind === "control" && c.points.length === 4)) return null;
+      const closed = dist2(shape.points[0]!, shape.points[shape.points.length - 1]!) <= 1e-9;
+      targets = closed ? shape.points.slice(0, -1) : shape.points;
+      break;
+    }
   }
   if (targets.length !== pointIds.length) return null;
 
@@ -469,6 +617,10 @@ export function sameProjectedShape(a: ProjectedShape, b: ProjectedShape, toleran
   if (a.type === "arc" && b.type === "arc") {
     return near(a.center, b.center) && near(a.start, b.start) && near(a.end, b.end);
   }
+  if (a.type === "chain" && b.type === "chain" && a.points.length === b.points.length) {
+    const same = (p: Vec2[], q: Vec2[]): boolean => p.every((x, i) => near(x, q[i]!));
+    return same(a.points, b.points) || same(a.points, [...b.points].reverse());
+  }
   if (a.type === "spline" && b.type === "spline" && a.points.length === b.points.length) {
     const same = (p: Vec2[], q: Vec2[]): boolean => p.every((x, i) => near(x, q[i]!));
     return (a.kind ?? "fit") === (b.kind ?? "fit") && (same(a.points, b.points) || same(a.points, [...b.points].reverse()));
@@ -484,8 +636,16 @@ export function projectedShapes(sketch: Sketch): ProjectedShape[] {
   };
   const out: ProjectedShape[] = [];
   for (const ref of sketch.projections) {
-    const curve = ref.entityIds.map((id) => sketch.entities[id]).find((e) => e && e.type !== "point");
-    if (!curve) {
+    const curves = ref.entityIds.map((id) => sketch.entities[id]).filter((e) => e && e.type !== "point");
+    const curve = curves[0];
+    if (curves.length > 1) {
+      // A chain: the four points of the first span, then three of each next one.
+      const points: (Vec2 | null)[] = [];
+      curves.forEach((c, i) => {
+        if (c?.type === "spline") points.push(...c.points.slice(i === 0 ? 0 : 1).map(at));
+      });
+      if (points.every((p) => p !== null)) out.push({ type: "chain", points: points as Vec2[] });
+    } else if (!curve) {
       const p = ref.entityIds[0] ? at(ref.entityIds[0]) : null;
       if (p) out.push({ type: "point", at: p });
     } else if (curve.type === "line") {

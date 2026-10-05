@@ -1,7 +1,16 @@
+import type { CadDocument } from "@fabcad/cad-document";
 import { type PrintJob, write3mf, writeBinaryStl } from "@fabcad/fabrication-print";
 import { toast } from "../app/appState";
-import { downloadBlob, safeFileName } from "../app/session";
-import { sourceBodyId } from "./bodies";
+import { type BodyModel, bodyMesh, downloadBlob, safeFileName } from "../app/session";
+import { type PrintBodyChoice, sourceBodyId } from "./bodies";
+import type { PrintWorkspaceSettings } from "./settingsModel";
+import { printJobFor } from "./usePrintJob";
+
+/**
+ * How finely the bodies are tessellated for the file: as for an STL of the model (0.02 mm),
+ * finer than the display (0.05 mm), which the preview of the bed uses.
+ */
+export const PRINT_TESSELLATION = { tolerance: 0.02, angularTolerance: 0.2 };
 
 /** Bodies the job refused, with why (one entry per body, not per copy). */
 export function refusedBodies(job: PrintJob | null): { bodyId: string; message: string }[] {
@@ -30,6 +39,36 @@ export function nothingToPrint(job: PrintJob | null, chosen: number): string | n
   }
   if (job && job.parts.length > 0) return "Nothing fits on the bed: make the bed larger or the parts smaller.";
   return "There is nothing to export. Design a body first.";
+}
+
+/**
+ * Export the print job of the chosen bodies with the finer tessellation of
+ * `PRINT_TESSELLATION`. The job is compiled again from those meshes; the parts are the same
+ * as in the preview, only their facets follow the curved faces more closely.
+ */
+export async function exportPrintFile(
+  format: "stl" | "3mf",
+  doc: CadDocument,
+  settings: PrintWorkspaceSettings,
+  choices: readonly PrintBodyChoice[],
+  models: Record<string, BodyModel>,
+  chosen: number,
+): Promise<void> {
+  const fine: Record<string, BodyModel> = { ...models };
+  try {
+    await Promise.all(
+      choices
+        .filter((c) => c.included && models[c.id])
+        .map(async (c) => {
+          const geometry = await bodyMesh(c.id, PRINT_TESSELLATION);
+          if (geometry) fine[c.id] = { ...models[c.id]!, geometry };
+        }),
+    );
+  } catch (err) {
+    // The display meshes still make a file.
+    console.error(err);
+  }
+  exportPrintJob(format, printJobFor(doc, settings, choices, fine), doc.name, chosen);
 }
 
 /** Export the parts as they lie on the bed, in millimetres. */

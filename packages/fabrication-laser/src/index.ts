@@ -24,6 +24,7 @@ export {
   BOARD_SUPPORT_TEXT,
   classifyBoardBody,
 } from "./boardClassifier";
+export { BOARD_TESSELLATION } from "./boardSettings";
 export { compileFlatPart } from "./flatPart";
 export { compileRectangularBox } from "./rectangularBox";
 export {

@@ -339,3 +339,36 @@ describe("exact edge and vertex data", () => {
     }
   });
 });
+
+describe("cubic chains of other curves", () => {
+  it("follows the ellipse where a tilted plane cuts a cylinder to 1e-6 mm", () => {
+    const cylinder = kernel.extrude([circle(10)], ORIGIN_PLANES.XY, 0, 40);
+    // Everything above the plane z = 20 + y · tan 30° goes.
+    const block = kernel.transform(kernel.extrude([rect(60, 60, -30, -30)], planeAt(20), 0, 60), [
+      { type: "rotate", origin: { x: 0, y: 0, z: 20 }, axis: { x: 1, y: 0, z: 0 }, angle: 30 },
+    ]);
+    const g = kernel.tessellate(kernel.boolean("cut", cylinder, [block]));
+    const ellipses = g.edges.filter((e) => e.cubics);
+    expect(ellipses.length).toBeGreaterThan(0);
+    const t30 = Math.tan(Math.PI / 6);
+    for (const e of ellipses) {
+      const c = e.cubics!;
+      expect((c.length - 1) % 3).toBe(0);
+      expect(c.length).toBeLessThanOrEqual(3 * 64 + 1);
+      for (let i = 0; i + 3 < c.length; i += 3) {
+        for (const t of [0, 0.1, 0.3, 0.5, 0.7, 0.9]) {
+          const s = 1 - t;
+          const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+          const p = { x: 0, y: 0, z: 0 };
+          for (let k = 0; k < 4; k++) {
+            p.x += w[k]! * c[i + k]!.x;
+            p.y += w[k]! * c[i + k]!.y;
+            p.z += w[k]! * c[i + k]!.z;
+          }
+          expect(Math.abs(Math.hypot(p.x, p.y) - 10)).toBeLessThan(2e-6);
+          expect(Math.abs(p.z - (20 + p.y * t30))).toBeLessThan(2e-6);
+        }
+      }
+    }
+  });
+});
