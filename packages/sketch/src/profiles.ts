@@ -495,9 +495,24 @@ function detectCurveProfiles(
       : [];
   // Every face of the whole arrangement lies either inside one drawn region or outside all of
   // them, since the drawn curves are part of it: keep the ones outside.
+  //
+  // Inside a drawn region, projected curves cut it only where they stay clear of the drawn
+  // curves: a projected outline that lies within a drawn shape without touching it (a face
+  // outline with a rectangle offset around it) gives the frame between the two and the inside
+  // as separate regions. Projected curves that run into the drawn ones do not cut them.
+  const pure = (ids: EntityId[]): boolean =>
+    ids.every((id) => projected.has(id)) || !ids.some((id) => projected.has(id));
   const regions =
     drawn.length > 0
-      ? [...drawn, ...all.filter((r) => !drawn.some((d) => containsPoint(d, r.interiorPoint)))]
+      ? [
+          ...drawn.flatMap((d) => {
+            const inside = all.filter((r) => containsPoint(d, r.interiorPoint));
+            const clear =
+              inside.length > 1 && inside.every((r) => pure(r.entityIds) && r.holeEntityIds.every(pure));
+            return clear ? inside : [d];
+          }),
+          ...all.filter((r) => !drawn.some((d) => containsPoint(d, r.interiorPoint))),
+        ]
       : all;
 
   const compare = (a: SketchRegion, b: SketchRegion): number =>

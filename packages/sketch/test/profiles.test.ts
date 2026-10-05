@@ -415,6 +415,29 @@ describe("projected geometry", () => {
     expect(regions[0]!.area).toBeCloseTo(200, 3);
   });
 
+  it("cuts a drawn shape along a projected outline that lies inside it untouched", () => {
+    // The outline of a 20 × 20 face, and a rectangle offset 3 mm around it.
+    const drawn = build((b) => createRectangle2Point(b, v(-3, -3), v(23, 23)));
+    const sketch = [
+      [v(0, 0), v(20, 0)],
+      [v(20, 0), v(20, 20)],
+      [v(20, 20), v(0, 20)],
+      [v(0, 20), v(0, 0)],
+    ].reduce(
+      (current, [a, b], i) =>
+        addProjection(current, { type: "line", a: a!, b: b! }, { ...from, hint: { x: i, y: 1, z: 0 } })!
+          .sketch,
+      drawn.sketch,
+    );
+    const regions = detectProfiles(sketch);
+    expect(regions).toHaveLength(2);
+    const frame = regionAtPoint(regions, v(-1.5, 10))!;
+    expect(frame.area).toBeCloseTo(26 * 26 - 20 * 20, 6);
+    expect(frame.entityIds.sort()).toEqual([...drawn.out.entities].sort());
+    expect(frame.holeEntityIds).toHaveLength(1);
+    expect(regionAtPoint(regions, v(10, 10))!.area).toBeCloseTo(400, 6);
+  });
+
   it("closes regions with drawn curves that end on the projection", () => {
     const base = build((b) => createLine(b, v(0, -20), v(0, 20)));
     const sketch = [
