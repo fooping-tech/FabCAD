@@ -69,6 +69,8 @@ npm run build
 
 構成平面（Offset Plane）は `offset-plane` という Feature で、基準（原点平面・平らな面・ほかの構成平面）と距離の式を持つ。評価結果（平面と、画面に出す四角形）は Feature Engine が `RecomputeResult.planes` で返し、`modelState.planes` に入る。平面を参照するもの（`PlaneReference` の `{ type: "plane" }`、スケッチの `{ type: "plane" }`）は Feature の ID で参照し、依存は `featureInputPlanes()` で取る。構成平面の上のスケッチは、平面が動くと `sketchUpdates` で追従する。
 
+読み込みを速くするため、再計算の結果（Body のメッシュと名前、構成平面、Feature とスケッチの状態）を `app/resultCache.ts` で IndexedDB にドキュメントごとに保存する。同じドキュメント（形に関わる部分のハッシュ `geometryKey()` が一致するもの）を開くと、エンジンの再計算を待たずにそれを表示し（`modelState.cached`）、再計算が終わったら差し替える。表示中はエンジンが Body を持っていないので、Worker に Body を問い合わせる処理（Fabrication のトポロジー、書き出し）は `cached` の間は待つ。
+
 キーボードショートカットは `app/shortcuts.ts`。日本語入力がオンだと `key` が `Process` になるので、`code` から文字を求めている。
 
 テキストの輪郭は派生データで、`SketchText.outline` にキャッシュする。`outline.key` が入力（文字列、フォント、評価済みの数値、パスの形）と一致しなくなったら、`refreshTexts()` が作り直して `documentStore.amend()` で差し替える（履歴は増えない）。テキストのダイアログは `documentStore.begin()` のトランザクションの中でドキュメントを直接書き換え、OK で 1 つの履歴にまとめる。
