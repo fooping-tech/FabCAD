@@ -18,8 +18,8 @@ export function transformBodyGeometry(geometry: BodyGeometry, m: readonly number
     y: m[4]! * d.x + m[5]! * d.y + m[6]! * d.z,
     z: m[8]! * d.x + m[9]! * d.y + m[10]! * d.z,
   });
-  const points = (a: Float32Array, apply: (v: Vec3) => Vec3): Float32Array => {
-    const out = new Float32Array(a.length);
+  const points = <T extends Float32Array | Float64Array>(a: T, apply: (v: Vec3) => Vec3): T => {
+    const out = new (a.constructor as new (n: number) => T)(a.length);
     for (let i = 0; i < a.length; i += 3) {
       const v = apply({ x: a[i]!, y: a[i + 1]!, z: a[i + 2]! });
       out[i] = v.x;
@@ -50,6 +50,7 @@ export function transformBodyGeometry(geometry: BodyGeometry, m: readonly number
     from: point(e.from),
     to: point(e.to),
     ...(e.center ? { center: point(e.center) } : {}),
+    ...(e.axis ? { axis: dir(e.axis) } : {}),
     ...(e.bezier ? { bezier: e.bezier.map(point) } : {}),
   }));
   return {

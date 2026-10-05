@@ -324,7 +324,7 @@ export function trimBezier(poles: Vec3[], u0: number, u1: number): Vec3[] {
 }
 
 /** Circle through three points in space. */
-function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: number } | null {
+function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: number; axis: Vec3 } | null {
   const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
   const ac = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
   const n = {
@@ -348,6 +348,7 @@ function circleThrough(a: Vec3, b: Vec3, c: Vec3): { center: Vec3; radius: numbe
   return {
     center: { x: a.x + o.x, y: a.y + o.y, z: a.z + o.z },
     radius: Math.hypot(o.x, o.y, o.z),
+    axis: { x: n.x / Math.sqrt(n2), y: n.y / Math.sqrt(n2), z: n.z / Math.sqrt(n2) },
   };
 }
 
@@ -941,6 +942,7 @@ class ReplicadKernel implements GeometryKernel {
           if (circle) {
             group.radius = circle.radius;
             group.center = circle.center;
+            group.axis = circle.axis;
           }
         }
         return group;
@@ -965,7 +967,7 @@ class ReplicadKernel implements GeometryKernel {
         faces,
         edgePositions: Float32Array.from(edgeMesh.lines),
         edges: edgeGroups,
-        vertices: Float32Array.from(vertices),
+        vertices: Float64Array.from(vertices),
         bounds: {
           min: { x: box[0][0], y: box[0][1], z: box[0][2] },
           max: { x: box[1][0], y: box[1][1], z: box[1][2] },

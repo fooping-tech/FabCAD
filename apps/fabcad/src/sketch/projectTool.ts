@@ -10,6 +10,7 @@ import {
 import { type BodyNames, makeEdgeRef, makeFaceRef, resolveSketchPlane } from "@fabcad/features";
 import type { Plane3, TopologyRef, Vec3 } from "@fabcad/geometry";
 import {
+  type ExactEdge,
   type ProjectedShape,
   type Sketch,
   addProjection,
@@ -62,7 +63,7 @@ export function projectInto(
     hint: Vec3,
     index: number,
     count: number,
-    edge?: MeshEdgeGroup,
+    edge?: ExactEdge & Pick<MeshEdgeGroup, "bezier">,
   ): void => {
     const shape = projectCurve(plane, points, edge?.bezier, edge);
     if (!shape || shapes.some((s) => sameProjectedShape(s, shape))) return;
@@ -82,7 +83,9 @@ export function projectInto(
     added += 1;
   };
   if (pick.kind === "vertex") {
-    add([pick.point], "vertex", pick.point, pick.vertexIndex, geometry.vertices.length / 3);
+    // The vertex is exact (double precision): the projection keeps it as it is.
+    const exact = { curve: "other" as const, from: pick.point, to: pick.point };
+    add([pick.point], "vertex", pick.point, pick.vertexIndex, geometry.vertices.length / 3, exact);
   }
   for (const e of edges) {
     add(edgePolyline(geometry, e), "edge", e.midpoint, e.edgeIndex, geometry.edges.length, e);
