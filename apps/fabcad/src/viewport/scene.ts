@@ -306,6 +306,47 @@ export class ViewportScene {
   }
 
   /**
+   * Zoom by `factor` (> 1: closer) about the point under the pixel (x, y): that point stays
+   * where it is on screen, so a pinch follows the fingers. Applied at once, without easing.
+   */
+  zoomAt(x: number, y: number, factor: number): void {
+    if (!(factor > 0) || !Number.isFinite(factor) || Math.abs(factor - 1) < 1e-9) return;
+    const target = this.controls.target;
+    const camera = this.camera;
+    // The point under the pointer, on the plane through the target facing the camera.
+    const ray = this.setRay(x, y).clone();
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    const denom = ray.direction.dot(forward);
+    const t = Math.abs(denom) < 1e-9 ? 0 : target.clone().sub(ray.origin).dot(forward) / denom;
+    const anchor = ray.origin.clone().addScaledVector(ray.direction, t);
+    if (camera === this.perspective) {
+      // Scaling camera and target about the anchor keeps the anchor on the same pixel.
+      const distance = camera.position.distanceTo(target) / factor;
+      if (distance < 0.05 || distance > 50000) return;
+      camera.position.sub(anchor).divideScalar(factor).add(anchor);
+      target.sub(anchor).divideScalar(factor).add(anchor);
+    } else {
+      const zoom = this.orthographic.zoom * factor;
+      if (zoom < 1e-4 || zoom > 1e5) return;
+      this.orthographic.zoom = zoom;
+      this.orthographic.updateProjectionMatrix();
+      // Shift so that the anchor is under the pointer again.
+      const after = this.setRay(x, y).clone();
+      const t2 = Math.abs(after.direction.dot(forward)) < 1e-9 ? 0 : target.clone().sub(after.origin).dot(forward) / after.direction.dot(forward);
+      const moved = after.origin.clone().addScaledVector(after.direction, t2);
+      const shift = anchor.clone().sub(moved);
+      camera.position.add(shift);
+      target.add(shift);
+    }
+    this.animation = null;
+    this.controls.update();
+    this.syncOrthographic();
+    this.invalidate();
+    this.emit();
+  }
+
+  /**
    * Move the view by a number of pixels, as a two-finger swipe on a trackpad does: what is
    * shown follows the fingers (positive `dx`: the model moves left, positive `dy`: up).
    */

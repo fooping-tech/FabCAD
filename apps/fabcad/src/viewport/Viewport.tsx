@@ -276,7 +276,24 @@ export function Viewport(): ReactElement {
     // Two fingers on a trackpad: a swipe pans, a pinch zooms. The mouse wheel keeps zooming
     // (OrbitControls). Caught on the way down, so that it works over the sketch overlay too.
     const classifyWheel = createWheelClassifier();
+    const local = (e: { clientX: number; clientY: number }) => {
+      const r = webgl.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    // A pinch follows the fingers: the view scales by what the fingers did, about the point
+    // between them. Chrome and Edge send it as wheel events with ctrlKey (deltaY ≈ -100 ln s);
+    // Safari as gesture events with the scale itself.
+    let pinch: number | null = null;
     const onWheel = (e: WheelEvent): void => {
+      if (e.ctrlKey && scene.controls.enabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (pinch !== null) return;
+        const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1;
+        const p = local(e);
+        scene.zoomAt(p.x, p.y, Math.exp((-e.deltaY * lines) / 100));
+        return;
+      }
       const gesture = classifyWheel({
         deltaX: e.deltaX,
         deltaY: e.deltaY,
@@ -291,6 +308,28 @@ export function Viewport(): ReactElement {
       scene.panByPixels(e.deltaX, e.deltaY);
     };
     host.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    // Safari's trackpad pinch. On a touch screen the fingers are handled by OrbitControls.
+    type GestureLike = Event & { scale: number; clientX: number; clientY: number };
+    const onGestureStart = (e: Event): void => {
+      e.preventDefault();
+      // Fingers on a touch screen: OrbitControls follows them already.
+      pinch = touches.size > 0 ? null : 1;
+    };
+    const onGestureChange = (e: Event): void => {
+      e.preventDefault();
+      const g = e as GestureLike;
+      if (pinch === null || !scene.controls.enabled || !(g.scale > 0)) return;
+      const p = local(g);
+      scene.zoomAt(p.x, p.y, g.scale / pinch);
+      pinch = g.scale;
+    };
+    const onGestureEnd = (e: Event): void => {
+      e.preventDefault();
+      pinch = null;
+    };
+    host.addEventListener("gesturestart", onGestureStart);
+    host.addEventListener("gesturechange", onGestureChange);
+    host.addEventListener("gestureend", onGestureEnd);
 
     const observer = new ResizeObserver(resize);
     observer.observe(host);
@@ -1221,6 +1260,9 @@ export function Viewport(): ReactElement {
       off();
       observer.disconnect();
       host.removeEventListener("wheel", onWheel, { capture: true });
+      host.removeEventListener("gesturestart", onGestureStart);
+      host.removeEventListener("gesturechange", onGestureChange);
+      host.removeEventListener("gestureend", onGestureEnd);
       webgl.removeEventListener("pointerdown", onPointerDown, { capture: true });
       webgl.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
