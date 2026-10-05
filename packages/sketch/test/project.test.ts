@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ORIGIN_PLANES, type Vec3 } from "@fabcad/geometry";
 import { createSketch } from "../src/model";
+import { detectProfiles } from "../src/profiles";
 import { editSketch } from "../src/edit";
 import {
   addProjection,
@@ -267,8 +268,8 @@ describe("projectCurve with the exact edge", () => {
     expect(arc(1, -0.5)).toEqual([x(1), 19.645678]);
   });
 
-  it("leaves a tilted circle, which projects to an ellipse, to the samples", () => {
-    // Turned 60° about the x axis: seen from above it is an ellipse.
+  it("projects a tilted circle, an ellipse on the sketch, as a chain within 1e-6 mm", () => {
+    // Turned 60° about the x axis: seen from above it is an ellipse with half axes 8 and 4.
     const tilted = circle3d(8, 0).map((p) => ({ x: p.x, y: 5 + (p.y - 5) * 0.5, z: 5 + (p.y - 5) * Math.sin(Math.PI / 3) }));
     const shape = projectCurve(XY, tilted, undefined, {
       curve: "circle",
@@ -276,9 +277,89 @@ describe("projectCurve with the exact edge", () => {
       to: tilted[0]!,
       center: { x: 10, y: 5, z: 5 },
       radius: 8,
+      axis: { x: 0, y: -Math.sin(Math.PI / 3), z: 0.5 },
     });
-    expect(shape).toMatchObject({ type: "spline", closed: true });
+    expect(shape?.type).toBe("chain");
+    const pts = shape?.type === "chain" ? shape.points : [];
+    expect(pts[0]).toEqual(pts[pts.length - 1]);
+    for (let i = 0; i + 3 < pts.length; i += 3) {
+      for (const t of [0, 0.25, 0.5, 0.75]) {
+        const s = 1 - t;
+        const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+        const x = w.reduce((m, wk, k) => m + wk * pts[i + k]!.x, 0);
+        const y = w.reduce((m, wk, k) => m + wk * pts[i + k]!.y, 0);
+        // Distance to the ellipse, to first order.
+        const g = Math.hypot((2 * (x - 10)) / 64, (2 * (y - 5)) / 16);
+        expect(Math.abs(((x - 10) / 8) ** 2 + ((y - 5) / 4) ** 2 - 1) / g).toBeLessThan(1e-6);
+      }
+    }
   });
 });
 
 const v0 = { x: 0, y: 0 };
+
+describe("chains of cubic Béziers", () => {
+  // A circle of radius 10 about (3, 4), tilted 60° about the x axis, as 8 Hermite spans.
+  const tilted = (u: number): Vec3 => ({ x: 3 + 10 * Math.cos(u), y: 4 + 5 * Math.sin(u), z: 7 + 10 * Math.sin(u) * Math.sin(Math.PI / 3) });
+  const d = (u: number): Vec3 => ({ x: -10 * Math.sin(u), y: 5 * Math.cos(u), z: 10 * Math.cos(u) * Math.sin(Math.PI / 3) });
+  const n = 8;
+  const cubics: Vec3[] = [tilted(0)];
+  for (let i = 0; i < n; i++) {
+    const a = (2 * Math.PI * i) / n;
+    const b = (2 * Math.PI * (i + 1)) / n;
+    const h = (b - a) / 3;
+    const pa = tilted(a);
+    const pb = i === n - 1 ? cubics[0]! : tilted(b);
+    cubics.push(
+      { x: pa.x + d(a).x * h, y: pa.y + d(a).y * h, z: pa.z + d(a).z * h },
+      { x: pb.x - d(b).x * h, y: pb.y - d(b).y * h, z: pb.z - d(b).z * h },
+      pb,
+    );
+  }
+  const samples = Array.from({ length: 65 }, (_, i) => tilted((2 * Math.PI * i) / 64));
+  const exact = { curve: "other" as const, from: tilted(0), to: tilted(0), cubics };
+  const source = { bodyId: "body-1", source: "edge" as const, hint: tilted(1) };
+  const base = createSketch("s", "Sketch", { type: "origin", plane: "XY" });
+
+  it("projects the chain point by point", () => {
+    const shape = projectCurve(XY, samples, undefined, exact);
+    expect(shape?.type).toBe("chain");
+    const pts = shape?.type === "chain" ? shape.points : [];
+    expect(pts).toHaveLength(3 * n + 1);
+    expect(pts[0]).toEqual(pts[pts.length - 1]);
+    pts.forEach((p, i) => {
+      expect(p.x).toBeCloseTo(cubics[i]!.x, 9);
+      expect(p.y).toBeCloseTo(cubics[i]!.y, 9);
+    });
+  });
+
+  it("is held as control splines that close into one region, and follows the source", () => {
+    const shape = projectCurve(XY, samples, undefined, exact)!;
+    const { sketch, ref } = addProjection(base, shape, source)!;
+    const splines = ref.entityIds.filter((id) => sketch.entities[id]!.type === "spline");
+    expect(splines).toHaveLength(n);
+    // One shared point where the spans meet, and where the chain closes.
+    expect(ref.entityIds.filter((id) => sketch.entities[id]!.type === "point")).toHaveLength(3 * n);
+    const regions = detectProfiles(sketch);
+    expect(regions).toHaveLength(1);
+    // An ellipse with half axes 10 and 5 (the area of the region is measured on a polygon).
+    expect(regions[0]!.area).toBeCloseTo(Math.PI * 50, 0);
+    expect(projectedShapes(sketch)).toEqual([shape]);
+    expect(sameProjectedShape(projectedShapes(sketch)[0]!, shape)).toBe(true);
+    expect(updateProjection(sketch, ref, shape, source.hint)).toBe(sketch);
+    const moved = { type: "chain" as const, points: (shape as { points: { x: number; y: number }[] }).points.map((p) => ({ x: p.x + 1, y: p.y })) };
+    const next = updateProjection(sketch, ref, moved, source.hint)!;
+    expect(projectedShapes(next)).toEqual([moved]);
+  });
+
+  it("is a line when seen edge-on", () => {
+    // The same curve squashed into the upright plane x = 3.
+    const shape = projectCurve(XY, samples.map((p) => ({ ...p, x: 3 })), undefined, {
+      ...exact,
+      from: { ...exact.from, x: 3 },
+      to: { ...exact.to, x: 3 },
+      cubics: cubics.map((p) => ({ ...p, x: 3 })),
+    });
+    expect(shape?.type).toBe("line");
+  });
+});

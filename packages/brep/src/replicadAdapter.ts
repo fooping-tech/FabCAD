@@ -274,6 +274,84 @@ interface CurveAdaptorLike {
   Bezier(): BezierLike;
   FirstParameter(): number;
   LastParameter(): number;
+  Value(u: number): { X(): number; Y(): number; Z(): number; delete(): void };
+  DN(u: number, n: number): { X(): number; Y(): number; Z(): number; delete(): void };
+}
+
+/** How closely `cubicChain` follows a curve (mm). */
+const CHAIN_TOLERANCE = 1e-6;
+const CHAIN_MAX_SPANS = 256;
+
+/**
+ * A curve that is neither a line, a circle nor a polynomial Bézier (a B-spline of a fillet,
+ * loft or sweep, an ellipse, an offset curve …) as a chain of cubic Béziers: the points of
+ * the chain, 3·n + 1 for n spans, in the direction of the curve. Each span takes its ends and
+ * end tangents from the curve itself (cubic Hermite), and spans are halved until the chain is
+ * within `CHAIN_TOLERANCE` of the curve everywhere it is checked. A Bézier projects exactly to
+ * the Bézier of its projected points, so the projection of the chain is as close to the
+ * projection of the curve as the chain is to the curve. Null when it cannot be made.
+ */
+function cubicChain(edge: replicad.Edge): Vec3[] | null {
+  let curve: replicad.Curve | null = null;
+  try {
+    curve = edge.curve;
+    const adaptor = curve.wrapped as unknown as CurveAdaptorLike;
+    const read = (v: { X(): number; Y(): number; Z(): number; delete(): void }): Vec3 => {
+      const out = { x: v.X(), y: v.Y(), z: v.Z() };
+      v.delete();
+      return out;
+    };
+    const point = (u: number): Vec3 => read(adaptor.Value(u));
+    const tangent = (u: number): Vec3 => read(adaptor.DN(u, 1));
+    const u0 = adaptor.FirstParameter();
+    const u1 = adaptor.LastParameter();
+    if (!(u1 > u0)) return null;
+    const lerp = (p: Vec3, d: Vec3, s: number): Vec3 => ({ x: p.x + d.x * s, y: p.y + d.y * s, z: p.z + d.z * s });
+    const bezierAt = (b: Vec3[], t: number): Vec3 => {
+      const s = 1 - t;
+      const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
+      return {
+        x: w[0]! * b[0]!.x + w[1]! * b[1]!.x + w[2]! * b[2]!.x + w[3]! * b[3]!.x,
+        y: w[0]! * b[0]!.y + w[1]! * b[1]!.y + w[2]! * b[2]!.y + w[3]! * b[3]!.y,
+        z: w[0]! * b[0]!.z + w[1]! * b[1]!.z + w[2]! * b[2]!.z + w[3]! * b[3]!.z,
+      };
+    };
+    const chain: Vec3[] = [point(u0)];
+    let spans = 0;
+    let tries = 0;
+    // Depth first, left to right, so the chain is built in order.
+    const span = (a: number, b: number, pa: Vec3, pb: Vec3, depth: number): boolean => {
+      if (++tries > 4 * CHAIN_MAX_SPANS) return false;
+      const h = (b - a) / 3;
+      const cubic = [pa, lerp(pa, tangent(a), h), lerp(pb, tangent(b), -h), pb];
+      let ok = true;
+      // The error of a Hermite span peaks near a quarter in from either end.
+      for (const t of [0.2, 0.5, 0.8]) {
+        if (dist3(bezierAt(cubic, t), point(a + (b - a) * t)) > CHAIN_TOLERANCE) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok && depth < 16 && spans < CHAIN_MAX_SPANS) {
+        const m = (a + b) / 2;
+        const pm = point(m);
+        return span(a, m, pa, pm, depth + 1) && span(m, b, pm, pb, depth + 1);
+      }
+      if (!ok) return false;
+      chain.push(cubic[1]!, cubic[2]!, pb);
+      spans += 1;
+      return true;
+    };
+    // Four spans to begin with: one span cannot tell a closed curve from a point.
+    const cuts = [0, 0.25, 0.5, 0.75, 1].map((t) => u0 + (u1 - u0) * t);
+    const pts = cuts.map(point);
+    for (let i = 0; i < 4; i++) if (!span(cuts[i]!, cuts[i + 1]!, pts[i]!, pts[i + 1]!, 0)) return null;
+    return chain;
+  } catch {
+    return null;
+  } finally {
+    curve?.delete();
+  }
 }
 
 /** Control points of a polynomial Bézier edge, cut down to the part the edge uses. */
@@ -935,6 +1013,10 @@ class ReplicadKernel implements GeometryKernel {
         if (edge && type === "BEZIER_CURVE") {
           const poles = bezierPoles(edge);
           if (poles) group.bezier = poles;
+        }
+        if (edge && type !== "LINE" && type !== "CIRCLE" && !group.bezier) {
+          const chain = cubicChain(edge);
+          if (chain) group.cubics = chain;
         }
         if (edge && type === "CIRCLE") {
           // Three points on the curve give the circle exactly.

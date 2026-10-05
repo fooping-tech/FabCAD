@@ -1,7 +1,7 @@
 import { type BodyGeometry, type TessellationOptions, isDevelopableSurface } from "@fabcad/brep";
 import type { SolidTopology } from "@fabcad/geometry";
 import type { CadBody, FabricationWarning } from "@fabcad/fabrication-core";
-import { goreTessellation } from "@fabcad/fabrication-laser";
+import { BOARD_TESSELLATION, goreTessellation } from "@fabcad/fabrication-laser";
 import { listBodies } from "@fabcad/cad-document";
 import { useEffect, useMemo, useState } from "react";
 import { bodyTopology, modelState, useDocument } from "../app/session";
@@ -103,11 +103,12 @@ const keyOf = (w: WantedBody): string => topologyKey(w.id, w.hash, w.facets);
  * Gores are the facets of the body: when faces curved in two directions are to be made from
  * gores, the body is facetted as coarsely as there are gores to a full turn. A body whose
  * faces are all known to lie flat (planes, cylinders, cones, extruded outlines) has no gores
- * and keeps the kernel's default facets, which follow its outline closely.
+ * and keeps the kernel's default facets, which follow its outline closely. Boards are cut
+ * around the facets of their curved walls: finer facets keep the cut on the curve.
  */
 function facetsFor(settings: LaserFabricationSettings, geometry: BodyGeometry): Facets {
   const material = currentMaterial(settings);
-  if (material.category !== "paper") return undefined;
+  if (material.category !== "paper") return BOARD_TESSELLATION;
   const paper = resolvePaperSettings(material, settings.paper);
   if (paper.doublyCurved !== "gores" || !paper.foldCurvedFacets) return undefined;
   if (geometry.faces.every((f) => isDevelopableSurface(f.surface))) return undefined;

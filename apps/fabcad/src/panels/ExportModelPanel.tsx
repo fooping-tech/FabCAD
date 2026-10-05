@@ -3,7 +3,7 @@ import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
 import { type ExportFormat, appState } from "../app/appState";
 import { documentStore } from "../app/session";
 import { printChoices } from "../print/bodies";
-import { exportPrintJob, nothingToPrint, refusedBodies } from "../print/exportPrint";
+import { exportPrintFile, nothingToPrint, refusedBodies } from "../print/exportPrint";
 import { type PrintWorkspaceSettings, readPrintSettings } from "../print/settingsModel";
 import { printJobFor, updatePrintSettings } from "../print/usePrintJob";
 import {
@@ -146,8 +146,16 @@ export function ExportModelPanel(): ReactElement | null {
       updatePrintSettings({ bodyIds: next.bodyIds, copies: next.copies }, "Choose bodies to print");
       const after = documentStore.document;
       const settings = readPrintSettings(after);
-      const job = printJobFor(after, settings, printChoices(after, settings, computedIds), computed);
-      exportPrintJob(format === "3mf" ? "3mf" : "stl", job, after.name, choice.bodyIds.length);
+      setBusy(true);
+      await exportPrintFile(
+        format === "3mf" ? "3mf" : "stl",
+        after,
+        settings,
+        printChoices(after, settings, computedIds),
+        computed,
+        choice.bodyIds.length,
+      );
+      setBusy(false);
       close();
       return;
     }

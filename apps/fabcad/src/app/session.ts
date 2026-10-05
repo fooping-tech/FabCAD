@@ -324,6 +324,11 @@ export async function bodyTopology(bodyId: string, options?: TessellationOptions
   return engine().request({ type: "topology", bodyId, ...(options ? { options } : {}) });
 }
 
+/** A body tessellated with other tolerances than the display, e.g. for a file to print. */
+export async function bodyMesh(bodyId: string, options: TessellationOptions) {
+  return engine().request({ type: "mesh", bodyId, options });
+}
+
 // ------------------------------------------------------------ files and export
 
 export function downloadBlob(data: BlobPart, fileName: string, mime: string): void {

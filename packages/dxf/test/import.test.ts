@@ -878,7 +878,7 @@ describe("importDxfIntoSketch", () => {
     expect(regions[0]!.area).toBeCloseTo(96, 9);
   });
 
-  it("imports a full ellipse and replaces an elliptical arc by a spline", () => {
+  it("imports a full ellipse and replaces an elliptical arc by control splines", () => {
     const r = importText(
       file([
         [0, "ELLIPSE"],
@@ -899,30 +899,32 @@ describe("importDxfIntoSketch", () => {
         [42, 1.5707963267948966],
       ]),
     );
-    expect(r.created).toHaveLength(2);
     const e = entity(r.sketch, r.created[0]!, "ellipse");
     expect(getPoint(r.sketch, e.center)).toEqual({ x: 10, y: 5 });
     expect(getPoint(r.sketch, e.majorPoint)).toEqual({ x: 10, y: 13 });
     expect(e.minorRadius).toBeCloseTo(2, 12);
 
-    const s = entity(r.sketch, r.created[1]!, "spline");
-    expect(s.kind).toBe("fit");
-    expect(s.closed).toBe(false);
-    const pts = s.points.map((id) => getPoint(r.sketch, id));
-    expect(pts[0]!.x).toBeCloseTo(6, 12);
-    expect(pts[0]!.y).toBeCloseTo(0, 12);
-    expect(pts[pts.length - 1]!.x).toBeCloseTo(0, 12);
-    expect(pts[pts.length - 1]!.y).toBeCloseTo(3, 12);
-    for (const p of pts) expect((p.x / 6) ** 2 + (p.y / 3) ** 2).toBeCloseTo(1, 12);
-    // The spline stays close to the ellipse between the points as well.
-    for (const c of entityToCurves(r.sketch, s)) {
-      for (const t of [0.25, 0.5, 0.75]) {
-        const p = curvePointAt(c, t);
-        expect(Math.abs(Math.hypot(p.x / 6, p.y / 3) - 1)).toBeLessThan(5e-4);
+    // The arc: control splines of four points, end to end, within 1e-6 mm of the ellipse.
+    const spans = r.created.slice(1).map((id) => entity(r.sketch, id, "spline"));
+    expect(spans.length).toBeGreaterThan(1);
+    for (const [i, s] of spans.entries()) {
+      expect(s.kind).toBe("control");
+      expect(s.points).toHaveLength(4);
+      if (i > 0) expect(s.points[0]).toBe(spans[i - 1]!.points[3]);
+      for (const c of entityToCurves(r.sketch, s)) {
+        for (const t of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+          const p = curvePointAt(c, t);
+          // Distance to the ellipse x²/36 + y²/9 = 1, to first order.
+          const g = Math.hypot(p.x / 18, (2 * p.y) / 9);
+          expect(Math.abs((p.x / 6) ** 2 + (p.y / 3) ** 2 - 1) / g).toBeLessThan(2e-6);
+        }
       }
     }
-    expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0]).toMatch(/elliptical arc/);
+    expect(getPoint(r.sketch, spans[0]!.points[0]!)).toEqual({ x: 6, y: 0 });
+    const end = getPoint(r.sketch, spans[spans.length - 1]!.points[3]!);
+    expect(end.x).toBeCloseTo(0, 12);
+    expect(end.y).toBeCloseTo(3, 12);
+    expect(r.warnings).toEqual([]);
   });
 
   it("imports splines with fit points and with control points", () => {
@@ -1019,7 +1021,7 @@ describe("importDxfIntoSketch", () => {
     });
   });
 
-  it("samples splines that the sketch cannot represent (NURBS, non-uniform knots)", () => {
+  it("follows splines that one control spline cannot hold (NURBS, non-uniform knots) with several", () => {
     // Quarter of the unit circle as a rational quadratic.
     const w = Math.SQRT1_2;
     const r = importText(
@@ -1065,23 +1067,46 @@ describe("importDxfIntoSketch", () => {
         [20, 0],
       ]),
     );
-    expect(r.created).toHaveLength(2);
-    const arc = entity(r.sketch, r.created[0]!, "spline");
-    expect(arc.kind).toBe("fit");
-    const pts = arc.points.map((id) => getPoint(r.sketch, id));
-    expect(pts.length).toBeGreaterThan(4);
-    for (const p of pts) expect(Math.hypot(p.x, p.y)).toBeCloseTo(10, 9);
-    expect(pts[0]).toEqual({ x: 10, y: 0 });
-    expect(pts[pts.length - 1]!.x).toBeCloseTo(0, 12);
-    expect(pts[pts.length - 1]!.y).toBeCloseTo(10, 12);
-
-    const nonUniform = entity(r.sketch, r.created[1]!, "spline");
-    expect(nonUniform.kind).toBe("fit");
-    const ends = nonUniform.points.map((id) => getPoint(r.sketch, id));
-    expect(ends[0]).toEqual({ x: 0, y: 0 });
-    expect(ends[ends.length - 1]).toEqual({ x: 10, y: 0 });
-    expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0]).toMatch(/2 splines/);
+    const splines = r.created.map((id) => entity(r.sketch, id, "spline"));
+    for (const s of splines) {
+      expect(s.kind).toBe("control");
+      expect(s.points).toHaveLength(4);
+    }
+    // The quarter circle: the spans that start at (10, 0), until the one that ends at (0, 10).
+    const arcEnd = splines.findIndex((s) => Math.abs(getPoint(r.sketch, s.points[3]!).x) < 1e-9);
+    const arc = splines.slice(0, arcEnd + 1);
+    expect(getPoint(r.sketch, arc[0]!.points[0]!)).toEqual({ x: 10, y: 0 });
+    expect(getPoint(r.sketch, arc[arc.length - 1]!.points[3]!).y).toBeCloseTo(10, 12);
+    for (const s of arc) {
+      for (const c of entityToCurves(r.sketch, s)) {
+        for (const t of [0, 0.2, 0.5, 0.8, 1]) {
+          const p = curvePointAt(c, t);
+          expect(Math.abs(Math.hypot(p.x, p.y) - 10)).toBeLessThan(1e-6);
+        }
+      }
+    }
+    // The non-uniform cubic: one span per knot span, each the curve of the file exactly.
+    const rest = splines.slice(arcEnd + 1);
+    expect(rest).toHaveLength(2);
+    const knots = [0, 0, 0, 0, 1, 10, 10, 10, 10];
+    const cps = [
+      { x: 0, y: 0 },
+      { x: 2, y: 4 },
+      { x: 5, y: -2 },
+      { x: 8, y: 4 },
+      { x: 10, y: 0 },
+    ];
+    rest.forEach((s, span) => {
+      const [u0, u1] = span === 0 ? [0, 1] : [1, 10];
+      const c = entityToCurves(r.sketch, s)[0]!;
+      for (const t of [0, 0.3, 0.5, 0.9, 1]) {
+        const expected = evaluateBSpline(3, knots, cps, undefined, u0 + (u1 - u0) * t);
+        const p = curvePointAt(c, t);
+        expect(p.x).toBeCloseTo(expected.x, 6);
+        expect(p.y).toBeCloseTo(expected.y, 6);
+      }
+    });
+    expect(r.warnings).toEqual([]);
   });
 
   it("imports points", () => {

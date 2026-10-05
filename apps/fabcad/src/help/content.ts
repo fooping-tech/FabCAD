@@ -311,7 +311,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Click an edge, a face or a vertex of a body: its projection onto the sketch plane is added to the sketch.",
       "A curved face also gives its silhouette: where it turns away from the sketch plane. A cylinder seen from the side becomes a rectangle, a sphere a circle. Edges that land on the same line (the seams of a cylinder seen from the side) are projected once.",
-      "Curved edges made from sketch splines (and ellipses) are projected exactly, as control splines, so that a profile drawn on the projection matches the faces of the body.",
+      "Lines, circles and arcs are projected with the exact positions, centers and radii of the body. Curved edges made from sketch splines are projected exactly, as control splines. Other curved edges (the edges of fillets, lofts and sweeps, where a slanted face cuts a cylinder, or a circle seen at a slant) are projected as a chain of control splines that stays within 0.000001 mm of the edge. A profile drawn on the projection therefore matches the faces of the body.",
       "Projected geometry follows the body when the body changes.",
       "Projected geometry is a reference for profiles: it does not cut a region that drawn curves enclose where it runs into the drawn curves. A ring drawn across the edge of a face is extruded as the whole ring. A projected outline that lies inside a drawn shape without touching it does divide it, into the frame between the two and the inside. Where nothing is drawn, the projection makes regions of its own: the face itself, the face around a drawn hole, or the parts of the face a drawn line divides.",
     ],
@@ -951,6 +951,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Shows the bodies on the build plate, checks size and overhangs, and exports STL or 3MF.",
       "A body of a component is printed once for each visible instance of the component (the number of instances is the quantity), or once: choose it at the component in the Bodies list. Export → 3MF / STL (parts on the bed) opens a window with the same choice.",
+      "The file is made of finer facets than the preview: curved faces stray from the true surface by at most 0.02 mm.",
     ],
     requires: ["At least one body."],
     limitations: [
