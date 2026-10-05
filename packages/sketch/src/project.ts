@@ -131,6 +131,8 @@ export interface ExactEdge {
   /** For circles and circular arcs. */
   center?: Vec3;
   radius?: number;
+  /** For circles: the normal of the circle's plane. */
+  axis?: Vec3;
 }
 
 /**
@@ -149,6 +151,56 @@ export function projectCurve(
 ): ProjectedShape | null {
   const shape = projectSampled(plane, points, bezier);
   return shape && exact ? snapToExact(plane, shape, exact, points) : shape;
+}
+
+/**
+ * The points of a circle standing upright on the sketch (its plane contains the sketch normal)
+ * that lie on the edge and are extremes along its edge-on projection: the ends of the edge,
+ * and the two points of the circle farthest to either side where the edge passes them. The
+ * samples tell which way round the edge runs. Null for a circle that does not stand upright.
+ */
+function uprightExtremes(plane: Plane3, edge: ExactEdge, points: readonly Vec3[]): Vec2[] | null {
+  const { center: c, radius: r, axis } = edge;
+  if (!c || r === undefined || !axis) return null;
+  const n = plane.normal;
+  if (Math.abs(n.x * axis.x + n.y * axis.y + n.z * axis.z) > 1e-9) return null;
+  const at = (p: Vec3): Vec2 => {
+    const q = worldToPlane(plane, p);
+    return { x: tidy(q.x), y: tidy(q.y) };
+  };
+  // In the circle's plane: e1 towards the start, e2 a quarter turn on.
+  const rel = (p: Vec3): Vec3 => ({ x: p.x - c.x, y: p.y - c.y, z: p.z - c.z });
+  const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+  const crossV = (a: Vec3, b: Vec3): Vec3 => ({
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  });
+  const f = rel(edge.from);
+  const fl = Math.hypot(f.x, f.y, f.z);
+  if (fl < 1e-12) return null;
+  const e1 = { x: f.x / fl, y: f.y / fl, z: f.z / fl };
+  const e2 = crossV(axis, e1);
+  const angle = (p: Vec3): number => {
+    const v = rel(p);
+    const a = Math.atan2(dot(v, e2), dot(v, e1));
+    return a < 0 ? a + 2 * Math.PI : a;
+  };
+  // Which way round: the second sample is a little way on from the start.
+  const second = points.length > 1 ? angle(points[1]!) : 0;
+  const ccw = second < Math.PI;
+  const turn = (a: number): number => (ccw ? a : (2 * Math.PI - a) % (2 * Math.PI));
+  const closed = Math.hypot(edge.from.x - edge.to.x, edge.from.y - edge.to.y, edge.from.z - edge.to.z) < 1e-9;
+  const sweep = closed ? 2 * Math.PI : turn(angle(edge.to));
+  // The direction in the circle's plane that is parallel to the sketch.
+  const u = crossV(n, axis);
+  const ul = Math.hypot(u.x, u.y, u.z);
+  const out: Vec2[] = closed ? [] : [at(edge.from), at(edge.to)];
+  for (const s of [1, -1]) {
+    const p = { x: c.x + (s * r * u.x) / ul, y: c.y + (s * r * u.y) / ul, z: c.z + (s * r * u.z) / ul };
+    if (turn(angle(p)) <= sweep + 1e-12) out.push(at(p));
+  }
+  return out.length > 0 ? out : null;
 }
 
 /** Normalise exact values: drop the last bits of rounding noise and negative zero. */
@@ -174,11 +226,33 @@ function snapToExact(
     dist2(a, from) + dist2(b, to) <= dist2(a, to) + dist2(b, from) ? [from, to] : [to, from];
   const near = (a: Vec2, b: Vec2): boolean => dist2(a, b) <= 1e-3;
   switch (shape.type) {
+    case "point":
+      // A vertex, or a curve seen end-on.
+      return near(shape.at, from) ? { type: "point", at: from } : near(shape.at, to) ? { type: "point", at: to } : shape;
     case "line": {
-      // A curve seen edge-on also becomes a line, but its ends are not those of the edge.
-      if (edge.curve !== "line" || (!near(shape.a, from) && !near(shape.a, to))) return shape;
-      const [a, b] = ends(shape.a, shape.b);
-      return { type: "line", a, b };
+      if (edge.curve === "line") {
+        if (!near(shape.a, from) && !near(shape.a, to)) return shape;
+        const [a, b] = ends(shape.a, shape.b);
+        return { type: "line", a, b };
+      }
+      // A curve seen edge-on also becomes a line. Its ends are the extremes of the curve: the
+      // ends of the edge, and for a circle standing upright on the sketch, the points of the
+      // circle farthest along the line where the arc passes them, which the samples only come
+      // close to.
+      const extremes: Vec2[] = [from, to];
+      let tolerance = 1e-3;
+      const upright = edge.curve === "circle" ? uprightExtremes(plane, edge, points) : null;
+      if (upright) {
+        extremes.splice(0, 2, ...upright);
+        // Samples at most 0.15 rad from an extreme fall short of it by r·(1 − cos 0.15).
+        tolerance = Math.max(tolerance, 0.02 * edge.radius!);
+      }
+      const dir = sub2(shape.b, shape.a);
+      const along = (p: Vec2): number => (p.x - shape.a.x) * dir.x + (p.y - shape.a.y) * dir.y;
+      const lo = extremes.reduce((m, p) => (along(p) < along(m) ? p : m));
+      const hi = extremes.reduce((m, p) => (along(p) > along(m) ? p : m));
+      if (dist2(lo, shape.a) > tolerance || dist2(hi, shape.b) > tolerance) return shape;
+      return { type: "line", a: lo, b: hi };
     }
     case "circle":
     case "arc": {

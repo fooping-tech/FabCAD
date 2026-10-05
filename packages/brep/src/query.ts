@@ -51,6 +51,28 @@ export function nearestVertex(geometry: BodyGeometry, point: Vec3): Vec3 | null 
   return best;
 }
 
+/**
+ * The axis of a circular edge: the exact normal of its plane, turned to agree with the
+ * direction in which the edge runs (counter-clockwise about the axis). Null for other edges.
+ */
+export function circleAxis(geometry: BodyGeometry, edge: MeshEdgeGroup): Vec3 | null {
+  if (edge.curve !== "circle" || !edge.center) return null;
+  // The way round, from three points of the edge that are well apart.
+  const pts = edgePolyline(geometry, edge);
+  const a = pts[0];
+  const b = pts[Math.floor(pts.length / 3)];
+  const c = pts[Math.floor((2 * pts.length) / 3)];
+  if (!a || !b || !c) return null;
+  const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+  const n = { x: u.y * v.z - u.z * v.y, y: u.z * v.x - u.x * v.z, z: u.x * v.y - u.y * v.x };
+  const len = Math.hypot(n.x, n.y, n.z);
+  const axis = edge.axis;
+  if (!axis) return len > 1e-12 ? { x: n.x / len, y: n.y / len, z: n.z / len } : null;
+  const sign = axis.x * n.x + axis.y * n.y + axis.z * n.z < 0 ? -1 : 1;
+  return { x: sign * axis.x, y: sign * axis.y, z: sign * axis.z };
+}
+
 /** Edges that bound a face: all of their points are vertices of the face's triangles. */
 export function faceEdges(geometry: BodyGeometry, faceIndex: number): MeshEdgeGroup[] {
   const face = geometry.faces[faceIndex];

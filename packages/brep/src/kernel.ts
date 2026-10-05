@@ -62,6 +62,8 @@ export interface MeshEdgeGroup {
   /** For circles and circular arcs. */
   radius?: number;
   center?: Vec3;
+  /** For circles: the unit normal of the circle's plane, from the B-Rep. */
+  axis?: Vec3;
   /**
    * Control points of a Bézier edge (the spans of sketch splines and ellipses), trimmed to the
    * edge, in the direction of the curve. A projection of the edge onto a plane is the Bézier
@@ -79,8 +81,8 @@ export interface BodyGeometry {
   /** Line segments of the B-Rep edges: x0,y0,z0, x1,y1,z1, … */
   edgePositions: Float32Array;
   edges: MeshEdgeGroup[];
-  /** B-Rep vertices: x,y,z, … */
-  vertices: Float32Array;
+  /** B-Rep vertices: x,y,z, … in double precision: they are exact, unlike the mesh. */
+  vertices: Float64Array;
   bounds: { min: Vec3; max: Vec3 };
   volume: number;
   area: number;

@@ -210,6 +210,63 @@ describe("projectCurve with the exact edge", () => {
     expect(shape).toEqual({ type: "arc", center: c, start: end(1), end: end(1.1) });
   });
 
+  it("keeps a projected vertex where the B-Rep has it, finer than the samples", () => {
+    const v = { x: 40.831077088, y: -23.328422305, z: 10 };
+    expect(projectCurve(XY, [v], undefined, { curve: "other", from: v, to: v })).toEqual({
+      type: "point",
+      at: { x: 40.831077088, y: -23.328422305 },
+    });
+  });
+
+  it("ends a circle seen edge-on at its exact extremes", () => {
+    // A circle of radius 7.3 standing upright in the XZ plane, sampled 0.15 rad apart.
+    const c = { x: 12.345678, y: 3.21, z: 5 };
+    const r = 7.3;
+    const samples: Vec3[] = Array.from({ length: 42 }, (_, i) => {
+      const a = 0.07 + i * 0.15;
+      return { x: Math.fround(c.x + r * Math.cos(a)), y: Math.fround(c.y), z: Math.fround(c.z + r * Math.sin(a)) };
+    });
+    const start = { x: c.x + r * Math.cos(0.07), y: c.y, z: c.z + r * Math.sin(0.07) };
+    const shape = projectCurve(XY, samples, undefined, {
+      curve: "circle",
+      from: start,
+      to: start,
+      center: c,
+      radius: r,
+      axis: { x: 0, y: 1, z: 0 },
+    });
+    expect(shape?.type).toBe("line");
+    const ends = shape?.type === "line" ? [shape.a.x, shape.b.x].sort((p, q) => p - q) : [];
+    expect(ends).toEqual([5.045678, 19.645678]);
+  });
+
+  it("ends an upright arc at its own ends or at the circle's extreme it passes", () => {
+    const c = { x: 12.345678, y: 3.21, z: 5 };
+    const r = 7.3;
+    const on = (a: number): Vec3 => ({ x: c.x + r * Math.cos(a), y: c.y, z: c.z + r * Math.sin(a) });
+    const arc = (from: number, to: number) => {
+      const samples = Array.from({ length: 13 }, (_, i) => {
+        const p = on(from + ((to - from) * i) / 12);
+        return { x: Math.fround(p.x), y: Math.fround(p.y), z: Math.fround(p.z) };
+      });
+      const shape = projectCurve(XY, samples, undefined, {
+        curve: "circle",
+        from: on(from),
+        to: on(to),
+        center: c,
+        radius: r,
+        axis: { x: 0, y: -1, z: 0 },
+      });
+      return shape?.type === "line" ? [shape.a.x, shape.b.x].sort((p, q) => p - q) : [];
+    };
+    const x = (a: number): number => Math.round((c.x + r * Math.cos(a)) * 1e9) / 1e9;
+    // Not through the extreme at angle 0: the ends of the arc.
+    expect(arc(0.2, 1.5)).toEqual([x(1.5), x(0.2)]);
+    // Through it, either way round.
+    expect(arc(-0.5, 1)).toEqual([x(1), 19.645678]);
+    expect(arc(1, -0.5)).toEqual([x(1), 19.645678]);
+  });
+
   it("leaves a tilted circle, which projects to an ellipse, to the samples", () => {
     // Turned 60° about the x axis: seen from above it is an ellipse.
     const tilted = circle3d(8, 0).map((p) => ({ x: p.x, y: 5 + (p.y - 5) * 0.5, z: 5 + (p.y - 5) * Math.sin(Math.PI / 3) }));

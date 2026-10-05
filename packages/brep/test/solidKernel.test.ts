@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { type Loop2, ORIGIN_PLANES, type Plane3, type Profile2, type Vec2 } from "@fabcad/geometry";
 import { type GeometryKernel, KernelError } from "../src/kernel";
+import { circleAxis, edgePolyline } from "../src/query";
 import { nodeKernel } from "./nodeKernel";
 
 const polygonLoop = (pts: Vec2[]): Loop2 => ({
@@ -301,5 +302,40 @@ describe("loft", () => {
     expect(() => kernel.loft([one, { type: "face", shape: cylinder, faceIndex: round }])).toThrow(
       /planar/,
     );
+  });
+});
+
+describe("exact edge and vertex data", () => {
+  it("keeps the B-Rep vertices in double precision", () => {
+    const x = 40.831077088;
+    const g = kernel.tessellate(kernel.extrude([rect(10, 20, x, -23.328422305)], ORIGIN_PLANES.XY, 0, 30));
+    expect(g.vertices).toBeInstanceOf(Float64Array);
+    const xs = new Set<number>();
+    for (let i = 0; i < g.vertices.length; i += 3) xs.add(g.vertices[i]!);
+    expect([...xs].sort((a, b) => a - b)).toEqual([x, x + 10]);
+  });
+
+  it("gives a circular edge the exact axis, turned the way the edge runs", () => {
+    const d = Math.hypot(1, 2, 3);
+    const direction = { x: 1 / d, y: 2 / d, z: 3 / d };
+    const g = kernel.tessellate(
+      kernel.hole([{ position: { x: 113.7, y: -52.1, z: 31.3 }, direction, diameter: 8, depth: 12 }]),
+    );
+    const circles = g.edges.filter((e) => e.curve === "circle");
+    expect(circles.length).toBeGreaterThan(0);
+    for (const e of circles) {
+      const axis = circleAxis(g, e)!;
+      const dot = axis.x * direction.x + axis.y * direction.y + axis.z * direction.z;
+      expect(Math.abs(dot)).toBeCloseTo(1, 13);
+      // The way round agrees with the samples of the edge: counter-clockwise about the axis.
+      const pts = edgePolyline(g, e);
+      const [a, b] = [pts[0]!, pts[1]!];
+      const c = e.center!;
+      const turn =
+        ((a.y - c.y) * (b.z - c.z) - (a.z - c.z) * (b.y - c.y)) * axis.x +
+        ((a.z - c.z) * (b.x - c.x) - (a.x - c.x) * (b.z - c.z)) * axis.y +
+        ((a.x - c.x) * (b.y - c.y) - (a.y - c.y) * (b.x - c.x)) * axis.z;
+      expect(turn).toBeGreaterThan(0);
+    }
   });
 });

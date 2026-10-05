@@ -8,6 +8,7 @@ import {
   type PathCurve3,
   type ShapeTransform,
   type TessellationOptions,
+  circleAxis,
   edgePolyline,
   faceSilhouettes,
   isIdentityMatrix,
@@ -96,6 +97,7 @@ import {
   entityToCurves,
   getPoint,
   hitTestSketch,
+  type ExactEdge,
   projectCurve,
   resolveProfileRefs,
   textOutlineAt,
@@ -609,7 +611,7 @@ export class FeatureEngine {
       let points: Vec3[];
       let hint: Vec3;
       let bezier: Vec3[] | undefined;
-      let exact: MeshEdgeGroup | undefined;
+      let exact: ExactEdge | undefined;
       if (ref.source === "silhouette") {
         const index = ref.ref
           ? (resolveFaceRef(ref.ref, body)?.index ?? -1)
@@ -647,6 +649,7 @@ export class FeatureEngine {
         if (!v) continue;
         points = [v];
         hint = v;
+        exact = { curve: "other", from: v, to: v };
       } else {
         let edge = ref.ref ? geometry.edges[resolveEdgeRef(ref.ref, body)?.index ?? -1] : undefined;
         if (!edge) {
@@ -987,13 +990,8 @@ export class FeatureEngine {
       return { origin: edge.from, direction: norm3(sub3(edge.to, edge.from)) };
     }
     if (circular && edge.curve === "circle" && edge.center) {
-      // The plane of the circle from three of its points that are well apart.
-      const pts = edgePolyline(body.geometry, edge);
-      const a = pts[0];
-      const b = pts[Math.floor(pts.length / 3)];
-      const c = pts[Math.floor((2 * pts.length) / 3)];
-      const normal = a && b && c ? cross3(sub3(b, a), sub3(c, a)) : { x: 0, y: 0, z: 0 };
-      if (len3(normal) > 1e-12) return { origin: edge.center, direction: norm3(normal) };
+      const direction = circleAxis(body.geometry, edge);
+      if (direction) return { origin: edge.center, direction };
     }
     throw new Error(
       circular

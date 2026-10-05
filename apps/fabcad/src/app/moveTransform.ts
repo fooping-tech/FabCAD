@@ -23,7 +23,7 @@ import {
   scale3,
   sub3,
 } from "@fabcad/geometry";
-import { edgePolyline } from "@fabcad/brep";
+import { circleAxis } from "@fabcad/brep";
 import type { MoveDialog } from "./appState";
 import type { BodyModel } from "./session";
 import { dialogFromFeature } from "./solidDialogs";
@@ -205,12 +205,8 @@ export function resolveMoveAxis(
     return { origin: edge.from, direction: norm3(sub3(edge.to, edge.from)) };
   }
   if (edge.curve === "circle" && edge.center) {
-    const pts = edgePolyline(body.geometry, edge);
-    const a = pts[0];
-    const b = pts[Math.floor(pts.length / 3)];
-    const c = pts[Math.floor((2 * pts.length) / 3)];
-    const normal = a && b && c ? cross3(sub3(b, a), sub3(c, a)) : null;
-    if (normal && len3(normal) > 1e-12) return { origin: edge.center, direction: norm3(normal) };
+    const direction = circleAxis(body.geometry, edge);
+    if (direction) return { origin: edge.center, direction };
   }
   return null;
 }
