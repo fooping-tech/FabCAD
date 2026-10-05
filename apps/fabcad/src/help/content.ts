@@ -103,6 +103,18 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     when: ["When a tool is in a menu, its icon is hard to tell apart, or the keyboard is quicker."],
   },
+  timeline: {
+    title: "Timeline",
+    summary: "The history of the design, one step per feature, in the order they are computed.",
+    what: [
+      "Click a step to select it, double-click it to edit it, Alt-click it to suppress it. Right-click a step for its commands.",
+      "The buttons at the left move the history marker to roll the design back: steps right of the marker are not computed, and new steps go in at the marker.",
+      "Drag a step to another place to change the order. A blue bar shows where it can go; a step stays after what it is built on (its sketch, its plane, the step that made its body) and before the steps built on it, and a red bar says the place is refused. Two steps that only work on the same body may change places: the later one then works on what the earlier one left.",
+    ],
+    examples: [
+      "A Join refuses because the bodies would touch only along an edge: drag the step that adds the joining piece in front of it.",
+    ],
+  },
   "timeline.copy-log": {
     title: "History Log",
     summary: "The design history as text: to check a result, or to report a problem.",

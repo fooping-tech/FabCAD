@@ -161,7 +161,12 @@ export class KernelError extends Error {
   }
 }
 
-export type SolidProblem = "empty" | "open" | "invalid";
+/**
+ * What is wrong with a shape that should be a solid: nothing there, a gap (an edge of one face
+ * only), a broken B-Rep, or parts that touch only along an edge (an edge of more than two
+ * faces), which is no solid either.
+ */
+export type SolidProblem = "empty" | "open" | "invalid" | "non-manifold";
 
 export interface GeometryKernel {
   readonly name: string;

@@ -201,6 +201,17 @@ describe("replicad adapter", () => {
     expect(stl.length).toBe(84 + 12 * 50);
   });
 
+  it("refuses to join bodies that touch only along an edge", () => {
+    const a = kernel.extrude([rect(10, 10)], ORIGIN_PLANES.XY, 0, 10);
+    const b = kernel.extrude([rect(10, 10, 10, 10)], ORIGIN_PLANES.XY, 0, 10);
+    expect(() => kernel.boolean("union", a, [b])).toThrow(/touch only along an edge/);
+    // Sharing a face is fine.
+    const c = kernel.extrude([rect(10, 10, 10, 0)], ORIGIN_PLANES.XY, 0, 10);
+    const joined = kernel.boolean("union", a, [c]);
+    expect(kernel.solidProblem(joined)).toBeNull();
+    expect(kernel.tessellate(joined).volume).toBeCloseTo(2000, 3);
+  });
+
   it("joins a box whose walls touch a cylinder tangentially into a closed solid", () => {
     // A wall drawn on the projected outline of a cylinder: exactly on the tangent, or a few
     // micrometres off it. Without a tolerance the Boolean leaves a sliver that does not mesh.

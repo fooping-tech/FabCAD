@@ -92,6 +92,28 @@ export async function createReplicadKernel(
  */
 const BOOLEAN_FUZZY = 1e-5;
 
+/**
+ * Whether an edge of the shape borders more than two faces: the solid is pinched there (two
+ * parts touch only along that edge). A seam, which a face meets twice, counts once.
+ */
+function hasNonManifoldEdge(s: Shape3D): boolean {
+  const seen = new Map<number, { edge: replicad.Edge; faces: number }[]>();
+  s.faces.forEach((face) => {
+    const counted: replicad.Edge[] = [];
+    for (const edge of face.edges) {
+      if (counted.some((e) => e.isSame(edge))) continue;
+      counted.push(edge);
+      const bucket = seen.get(edge.hashCode) ?? [];
+      const entry = bucket.find((b) => b.edge.isSame(edge));
+      if (entry) entry.faces += 1;
+      else bucket.push({ edge, faces: 1 });
+      seen.set(edge.hashCode, bucket);
+    }
+  });
+  for (const bucket of seen.values()) if (bucket.some((b) => b.faces > 2)) return true;
+  return false;
+}
+
 /** `a` op `b` with the fuzzy tolerance; same simplification as replicad's own Booleans. */
 function tolerantBoolean(op: BooleanOp, a: Shape3D, b: Shape3D): Shape3D {
   const oc = replicad.getOC() as unknown as {
@@ -490,6 +512,11 @@ class ReplicadKernel implements GeometryKernel {
     const inputs = [target, ...tools];
     if (inputs.some((s) => this.solidProblem(s) !== null)) return;
     const problem = this.solidProblem(result);
+    if (problem === "non-manifold") {
+      throw new KernelError(
+        "Boolean failed: the bodies touch only along an edge, so the result is not a solid. Make them overlap or share a face, e.g. by first adding the piece that joins them.",
+      );
+    }
     if (problem === "open" || problem === "invalid") {
       throw new KernelError(
         `Boolean failed: the result is not a closed solid (${problem === "open" ? "some edges do not join two faces" : "the B-Rep is invalid"}).`,
@@ -1034,7 +1061,8 @@ class ReplicadKernel implements GeometryKernel {
       const analyzer = new oc.BRepCheck_Analyzer(s.wrapped, true, false, false);
       const valid = analyzer.IsValid();
       analyzer.delete();
-      return valid ? null : "invalid";
+      if (!valid) return "invalid";
+      return hasNonManifoldEdge(s) ? "non-manifold" : null;
     } catch {
       return "invalid";
     }

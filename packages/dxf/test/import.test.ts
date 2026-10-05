@@ -1262,7 +1262,9 @@ describe("importDxfIntoSketch", () => {
     // With a smaller tolerance the ends stay apart and nothing is closed.
     const apart = importText(text, { mergeTolerance: 1e-6 });
     expect(Object.values(apart.sketch.entities).filter((e) => e.type === "point")).toHaveLength(8);
-    expect(detectProfiles(apart.sketch)).toHaveLength(0);
+    expect(detectProfiles(apart.sketch, { tolerance: 1e-6 })).toHaveLength(0);
+    // Profile detection itself joins ends closer than 1e-4 mm.
+    expect(detectProfiles(apart.sketch)).toHaveLength(1);
 
     // A gap larger than the tolerance is not closed.
     const gap = importText(file([...line(0, 0, 10, 0), ...line(10.001, 0, 10, 5)]));

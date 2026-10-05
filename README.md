@@ -36,7 +36,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | 複数選択 | `Shift` / `Ctrl` / `Cmd` + クリックで追加・解除。リボンまたは画面下の **Multi-Select** をオンにすると、修飾キーなしのクリック（タップ）で追加・解除できます。稜線・面・Body・スケッチの要素・ブラウザとタイムラインの項目に共通です |
 | ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details · 詳しく見る** で、用途、必要な選択、パラメータ、制限、使用例を表示します。説明は英語と日本語の併記です。ヘルプを開いても、実行中のコマンドと選択は変わりません |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
-| Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集 |
+| Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集、ドラッグで順番の入れ替え（もとにしている工程より後、それをもとにする工程より前の範囲で。置けない位置は理由を表示） |
 | 入出力 | STEP import / export、STL export（書き出す Body とコンポーネントを選べます。コンポーネントはインスタンスの位置ごと、または原点に 1 つ）、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存 |
 
 ### FABRICATION ワークスペース（Laser）

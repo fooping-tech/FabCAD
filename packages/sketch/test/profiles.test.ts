@@ -396,6 +396,25 @@ describe("projected geometry", () => {
     }
   });
 
+  it("closes a projected outline whose curves meet only to a few hundred-thousandths", () => {
+    // Fitted to the edges of a body, the projected curves miss each other's ends slightly.
+    const ends: [number, number, number, number][] = [
+      [0, 0, 20.00002, 0.00001],
+      [20, 0, 20.00001, 10.00002],
+      [19.99998, 10, 0.00002, 10],
+      [0, 9.99998, 0.00001, -0.00002],
+    ];
+    const sketch = ends.reduce(
+      (current, [x1, y1, x2, y2], i) =>
+        addProjection(current, { type: "line", a: v(x1, y1), b: v(x2, y2) }, { ...from, hint: { x: i, y: 2, z: 0 } })!
+          .sketch,
+      build(() => null).sketch,
+    );
+    const regions = detectProfiles(sketch);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]!.area).toBeCloseTo(200, 3);
+  });
+
   it("closes regions with drawn curves that end on the projection", () => {
     const base = build((b) => createLine(b, v(0, -20), v(0, 20)));
     const sketch = [

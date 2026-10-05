@@ -1924,7 +1924,9 @@ describe("history", () => {
     const before = volumes(ctx);
 
     setParameter(ctx, "n", "5");
-    ctx.store.execute(updateFeature<RectangularPatternFeature>(ids.rectangular!, { distance: "12" }));
+    // Counterbores Ø 12 at 14 mm: 2 mm of plate between them. At 12 they would touch, and the
+    // plate between them would be pinched to an edge, which is no solid.
+    ctx.store.execute(updateFeature<RectangularPatternFeature>(ids.rectangular!, { distance: "14" }));
     await compute(ctx);
     const changed = volumes(ctx);
     expect(changed).not.toEqual(before);

@@ -278,6 +278,9 @@ function requireSolid(kernel: GeometryKernel, shape: KernelShape, empty: string)
     throw new Error("The result is not a closed solid: some edges do not join two faces.");
   }
   if (problem === "invalid") throw new Error("The result is not a valid solid.");
+  if (problem === "non-manifold") {
+    throw new Error("The result touches itself only along an edge, so it is not a solid.");
+  }
 }
 
 function decodeBase64(data: string): Uint8Array {

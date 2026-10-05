@@ -444,6 +444,11 @@ table.grid td input { padding: 2px 5px; }
 .timeline-item.error { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
 .timeline-item.suppressed, .timeline-item.rolled-back { opacity: 0.45; border-style: dashed; }
 .timeline-item.other-component { opacity: 0.55; }
+.timeline-item.dragging { opacity: 0.4; }
+.timeline-item.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.timeline-item.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.timeline-item.drop-refused.drop-before { box-shadow: -3px 0 0 var(--danger); }
+.timeline-item.drop-refused.drop-after { box-shadow: 3px 0 0 var(--danger); }
 .timeline-item.editing { border-color: var(--ok); background: var(--ok-soft); color: #1f7a50; }
 .timeline-marker { flex: none; width: 5px; height: 46px; border-radius: 3px; background: var(--warm); cursor: ew-resize; }
 .timeline-empty { color: var(--ink-faint); }

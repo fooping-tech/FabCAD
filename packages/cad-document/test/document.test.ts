@@ -20,6 +20,8 @@ import {
   featureNode,
   listBodies,
   paramNode,
+  featureMoveRange,
+  moveFeature,
   removeFeatures,
   renameParameter,
   serializeDocument,
@@ -266,5 +268,49 @@ describe("bodies at the history marker", () => {
     // Keeping the tools keeps them listed.
     store.execute(updateFeature(c.id!, { suppressed: false, keepTools: true }));
     expect(listBodies(store.document).map((x) => x.id)).toEqual([a, b]);
+  });
+});
+
+describe("timeline reordering", () => {
+  it("keeps every step after what it is built on, and lets steps on one body change places", () => {
+    const store = new DocumentStore(createDocument());
+    const { sketchId, extrudeId, bodyId } = buildBox(store); // Sketch001, Extrude001
+    store.execute(addFillet({ bodyId, edges: [{ point: { x: 0, y: 0, z: 10 } }], radius: "3" }));
+    const fillet = store.document.timeline.at(-1)!;
+    // A second sketch, and a join into the same body built on it.
+    const s: CreatedRef = {};
+    store.execute(addSketch({ type: "origin", plane: "XY" }, s));
+    store.execute(
+      updateSketch(s.id!, "Rectangle", (sk) =>
+        editSketch(sk, (b) => {
+          createRectangle2Point(b, { x: 10, y: 10 }, { x: 20, y: 20 });
+        }),
+      ),
+    );
+    const sketch2 = (store.document.features[s.id!] as SketchFeature).sketch;
+    const e: CreatedRef = {};
+    store.execute(
+      addExtrude(
+        { sketchId: s.id!, profiles: [profileRefOf(detectProfiles(sketch2)[0]!)], distance: "5", operation: "join", targetBodyIds: [bodyId] },
+        e,
+      ),
+    );
+    const doc = store.document;
+    expect(doc.timeline).toEqual([sketchId, extrudeId, fillet, s.id, e.id]);
+    // The join needs its sketch (right before it) and the body's extrude, not the fillet.
+    expect(featureMoveRange(doc, e.id!)).toMatchObject({ min: 4, max: 4, after: s.id });
+    // The extrude needs its sketch and comes before everything built on its body.
+    expect(featureMoveRange(doc, extrudeId)).toMatchObject({ min: 1, max: 1, after: sketchId, before: fillet });
+    // A sketch on an origin plane needs nothing, but stays before its extrude.
+    expect(featureMoveRange(doc, s.id!)).toMatchObject({ min: 0, max: 3, before: e.id });
+
+    // The second sketch and its join go before the fillet: the join may follow its sketch there.
+    store.execute(moveFeature(s.id!, 2));
+    expect(featureMoveRange(store.document, e.id!)).toMatchObject({ min: 3, max: 4 });
+    store.execute(moveFeature(e.id!, 3));
+    expect(store.document.timeline).toEqual([sketchId, extrudeId, s.id, e.id, fillet]);
+    // Out of range: nothing happens.
+    expect(store.execute(moveFeature(e.id!, 0))).toBe(false);
+    expect(store.execute(moveFeature(extrudeId, 4))).toBe(false);
   });
 });
