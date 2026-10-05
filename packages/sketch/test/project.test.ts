@@ -186,6 +186,30 @@ describe("projectCurve with the exact edge", () => {
     expect(line).toEqual({ type: "line", a: { x: 0, y: 30 }, b: { x: -20, y: 30 } });
   });
 
+  it("takes the exact circle for a short arc whose fitted center is off", () => {
+    // 6° of a 38.5 mm circle away from the origin, sampled coarsely and in single precision:
+    // the circle through three of the samples misses the center by micrometres.
+    const c = { x: 7.33108, y: -7 };
+    const r = 38.5;
+    const samples: Vec3[] = Array.from({ length: 4 }, (_, i) => {
+      const a = 1 + (0.1 * i) / 3;
+      const wobble = i === 1 ? 4e-6 : i === 2 ? -4e-6 : 0;
+      return {
+        x: Math.fround(c.x + (r + wobble) * Math.cos(a)),
+        y: Math.fround(c.y + (r + wobble) * Math.sin(a)),
+        z: 10,
+      };
+    });
+    const at = (a: number): Vec3 => ({ x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a), z: 10 });
+    const exact = { curve: "circle" as const, from: at(1), to: at(1.1), center: { ...c, z: 10 }, radius: r };
+    const fitted = projectCurve(XY, samples);
+    expect(fitted?.type).toBe("arc");
+    expect(Math.hypot((fitted as any).center.x - c.x, (fitted as any).center.y - c.y)).toBeGreaterThan(1e-3);
+    const shape = projectCurve(XY, samples, undefined, exact);
+    const end = (a: number) => ({ x: Math.round((c.x + r * Math.cos(a)) * 1e9) / 1e9, y: Math.round((c.y + r * Math.sin(a)) * 1e9) / 1e9 });
+    expect(shape).toEqual({ type: "arc", center: c, start: end(1), end: end(1.1) });
+  });
+
   it("leaves a tilted circle, which projects to an ellipse, to the samples", () => {
     // Turned 60° about the x axis: seen from above it is an ellipse.
     const tilted = circle3d(8, 0).map((p) => ({ x: p.x, y: 5 + (p.y - 5) * 0.5, z: 5 + (p.y - 5) * Math.sin(Math.PI / 3) }));
