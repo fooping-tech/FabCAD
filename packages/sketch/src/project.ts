@@ -148,7 +148,7 @@ export function projectCurve(
   exact?: ExactEdge,
 ): ProjectedShape | null {
   const shape = projectSampled(plane, points, bezier);
-  return shape && exact ? snapToExact(plane, shape, exact) : shape;
+  return shape && exact ? snapToExact(plane, shape, exact, points) : shape;
 }
 
 /** Normalise exact values: drop the last bits of rounding noise and negative zero. */
@@ -157,7 +157,12 @@ const tidy = (v: number): number => {
   return Object.is(r, -0) ? 0 : r;
 };
 
-function snapToExact(plane: Plane3, shape: ProjectedShape, edge: ExactEdge): ProjectedShape {
+function snapToExact(
+  plane: Plane3,
+  shape: ProjectedShape,
+  edge: ExactEdge,
+  points: readonly Vec3[],
+): ProjectedShape {
   const at = (p: Vec3): Vec2 => {
     const q = worldToPlane(plane, p);
     return { x: tidy(q.x), y: tidy(q.y) };
@@ -179,9 +184,17 @@ function snapToExact(plane: Plane3, shape: ProjectedShape, edge: ExactEdge): Pro
     case "arc": {
       if (edge.curve !== "circle" || !edge.center || edge.radius === undefined) return shape;
       const center = at(edge.center);
-      // The circle lies parallel to the sketch: its radius is that of the edge.
-      if (dist2(center, shape.center) > 1e-3) return shape;
-      if (shape.type === "circle") return { type: "circle", center, radius: tidy(edge.radius) };
+      const radius = edge.radius;
+      // The fit of a short arc from single-precision samples can be off by a few micrometres
+      // in its center: the exact circle is taken whenever it is the one the samples lie on,
+      // which also says that it lies parallel to the sketch (a tilted one would project to an
+      // ellipse). Arcs of the same circle then share their center and radius, and their ends
+      // meet those of the neighbouring edges exactly.
+      const slack = 1e-3 * Math.max(1, radius);
+      const onCircle = (p: Vec2): boolean => Math.abs(dist2(p, center) - radius) <= slack;
+      if (!points.every((p) => onCircle(worldToPlane(plane, p)))) return shape;
+      if (shape.type === "circle") return { type: "circle", center, radius: tidy(radius) };
+      if (!onCircle(from) || !onCircle(to)) return shape;
       if (!near(shape.start, from) && !near(shape.start, to)) return shape;
       const [start, end] = ends(shape.start, shape.end);
       return { type: "arc", center, start, end };
