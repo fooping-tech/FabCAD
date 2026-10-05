@@ -13,6 +13,7 @@ import {
   isIdentityMatrix,
   nearestEdge,
   transformBodyGeometry,
+  transformPlane,
   nearestVertex,
   polylineMidpoint,
 } from "@fabcad/brep";
@@ -87,7 +88,6 @@ import {
   worldToPlane,
 } from "@fabcad/geometry";
 import {
-  type ProjectedGeometryRef,
   type ProfileRef,
   type Sketch,
   type SketchRegion,
@@ -162,6 +162,17 @@ export interface ExportItem {
   /** Rigid placement applied to a copy of the body, for the export only. */
   steps?: ShapeTransform[];
 }
+
+/**
+ * Where geometry of another component lies in a sketch's coordinates: row-major placements of a
+ * body or a construction plane (seen at an instance), or null where nothing has to move.
+ */
+interface SketchPlacement {
+  body(bodyId: string, instanceId?: string): number[] | null;
+  plane(featureId: string, instanceId?: string): number[] | null;
+}
+
+const NO_PLACEMENT: SketchPlacement = { body: () => null, plane: () => null };
 
 export interface RecomputeResult {
   bodies: BodyResult[];
@@ -341,14 +352,17 @@ export class FeatureEngine {
       }
       if (feature.type === "sketch") {
         try {
-          const projected = this.reproject(feature.sketch, bodies, (ref) => {
-            // Edges of another component's body are projected from where that body is seen
-            // from the sketch's component: at the instance they were picked on, or else at the
-            // component's first instance.
-            const owner = doc.bodies[ref.bodyId]?.componentId;
-            if (!owner || (owner === feature.componentId && !ref.instanceId)) return null;
-            const m = instanceMatrix(relativePlacement(doc, owner, feature.componentId, ref.instanceId));
+          // Geometry of another component (a face the sketch lies on, a construction plane,
+          // projected edges) is taken from where that component is seen from the sketch's
+          // component: at the instance it was picked on, or else at its first instance.
+          const placement = (owner: string | undefined, instanceId?: string): number[] | null => {
+            if (!owner || (owner === feature.componentId && !instanceId)) return null;
+            const m = instanceMatrix(relativePlacement(doc, owner, feature.componentId, instanceId));
             return isIdentityMatrix(m, 1e-12) ? null : m;
+          };
+          const projected = this.reproject(feature.sketch, bodies, {
+            body: (bodyId, instanceId) => placement(doc.bodies[bodyId]?.componentId, instanceId),
+            plane: (featureId, instanceId) => placement(doc.features[featureId]?.componentId, instanceId),
           });
           const evaluated = this.evaluateSketch(
             projected === feature.sketch ? feature : { ...feature, sketch: projected },
@@ -571,10 +585,10 @@ export class FeatureEngine {
   private reproject(
     sketch: Sketch,
     bodies: Map<string, BodyState>,
-    /** Placement of a projection's body in the sketch's coordinates, unless the identity. */
-    placementOf: (ref: ProjectedGeometryRef) => number[] | null = () => null,
+    /** Placement of another component's body or plane in the sketch's coordinates. */
+    place: SketchPlacement = NO_PLACEMENT,
   ): Sketch {
-    let current = this.followPlane(this.followFace(sketch, bodies));
+    let current = this.followPlane(this.followFace(sketch, bodies, place), place);
     if (sketch.projections.length === 0) return current;
     const plane = resolveSketchPlane(current.plane);
     const placed = new Map<string, BodyState>();
@@ -582,7 +596,7 @@ export class FeatureEngine {
       const source = bodies.get(ref.bodyId);
       if (!source) continue;
       let body = source;
-      const m = placementOf(ref);
+      const m = place.body(ref.bodyId, ref.instanceId);
       if (m) {
         const key = `${ref.bodyId}@${ref.instanceId ?? ""}`;
         body = placed.get(key) ?? { ...source, geometry: transformBodyGeometry(source.geometry, m) };
@@ -654,10 +668,12 @@ export class FeatureEngine {
   }
 
   /** A sketch drawn on a face of a body stays on that face when the body changes. */
-  private followFace(sketch: Sketch, bodies: Map<string, BodyState>): Sketch {
+  private followFace(sketch: Sketch, bodies: Map<string, BodyState>, place: SketchPlacement): Sketch {
     const plane = sketch.plane;
     if (plane.type !== "face" || !plane.ref) return sketch;
-    const body = bodies.get(plane.bodyId);
+    const source = bodies.get(plane.bodyId);
+    const m = source ? place.body(plane.bodyId, plane.instanceId) : null;
+    const body = source && m ? { ...source, geometry: transformBodyGeometry(source.geometry, m) } : source;
     const found = body ? resolveFaceRef(plane.ref, body) : null;
     const face = found && body ? body.geometry.faces[found.index] : undefined;
     if (!face || face.surface !== "plane") return sketch;
@@ -680,10 +696,12 @@ export class FeatureEngine {
   }
 
   /** A sketch drawn on a construction plane stays on it when the plane moves. */
-  private followPlane(sketch: Sketch): Sketch {
+  private followPlane(sketch: Sketch, place: SketchPlacement): Sketch {
     const plane = sketch.plane;
     if (plane.type !== "plane") return sketch;
-    const next = this.planes.get(plane.featureId)?.plane;
+    const found = this.planes.get(plane.featureId)?.plane;
+    const m = found ? place.plane(plane.featureId, plane.instanceId) : null;
+    const next = found && m ? transformPlane(found, m) : found;
     if (!next || JSON.stringify(next) === JSON.stringify(plane.plane)) return sketch;
     return { ...sketch, plane: { ...plane, plane: next } };
   }

@@ -855,7 +855,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Edit a component: its sketches, features and bodies, shown alone in its own coordinates.",
     what: [
       "Double-click a component in the Browser, or choose Activate Component in its context menu (or in that of one of its instances). The view shows that component where its definition lies, and what you make belongs to it. The rest of the model (the root bodies and the instances of the other components) is shown faded around it, where it is relative to the component, as in Fusion.",
-      "In a sketch of the active component, Project also picks edges, faces and vertices of the faded parts. The projection follows them: when an instance is moved, its projected edges move along.",
+      "The faded parts can be built on: Create Sketch on one of their flat faces or construction planes starts a sketch of the active component there, and Project picks their edges, faces and vertices. Both follow: when an instance is moved, the sketch on it and its projected edges move along.",
       "Activate Root (the ribbon button, the context menu, or a double-click on the document in the Browser) returns to the whole model: the root bodies and every instance in its place.",
       "With the root active, an instance is selected as a whole. Its faces and edges cannot be picked for a command: activate the component to change it.",
       "The construction planes of a component are shown at its instances while the root is active. Create Sketch on one activates the component and starts the sketch there: a sketch belongs to the component of its plane.",

@@ -29,7 +29,7 @@ import {
   planeToWorld,
   scale3,
 } from "@fabcad/geometry";
-import { pointInBody } from "@fabcad/brep";
+import { pointInBody, transformBodyGeometry, transformPlane } from "@fabcad/brep";
 import {
   type ProfileRef,
   type Sketch,
@@ -38,7 +38,7 @@ import {
   profileRefOf,
   removeTexts,
 } from "@fabcad/sketch";
-import { resolveSketchPlane } from "@fabcad/features";
+import { makeFaceRef, resolveSketchPlane } from "@fabcad/features";
 import { projectInto } from "../sketch/projectTool";
 import { directionForOperation, extrudeRange, operationForSide } from "./extrudeDirection";
 import { cancelText, commitText, deleteTexts } from "../text/textCommands";
@@ -80,7 +80,12 @@ import {
 import { bodiesCenter } from "./moveTransform";
 import type { HandleContext } from "./dialogHandles";
 import { extrudeTargetReach, reachSpan } from "./extrudeTarget";
-import { activateComponent, activeComponentId, deleteSelectedComponents } from "./components";
+import {
+  activateComponent,
+  activeComponentId,
+  deleteSelectedComponents,
+  ghostPlacement,
+} from "./components";
 
 /** High-level user actions shared by the ribbon, the panels and the keyboard shortcuts. */
 
@@ -228,15 +233,26 @@ export function startSketchOnOrigin(plane: OriginPlaneName): void {
   startSketch({ type: "origin", plane });
 }
 
-/** Sketch on a construction plane. False when the plane has not been evaluated (yet). */
-export function startSketchOnPlane(featureId: string): boolean {
-  const plane = modelState.get().planes[featureId]?.plane;
-  if (!plane) {
+/**
+ * Sketch on a construction plane. False when the plane has not been evaluated (yet). `ghost`:
+ * picked on the ghost of another component while one is being edited; the sketch then belongs
+ * to the component being edited and lies where the ghost shows the plane.
+ */
+export function startSketchOnPlane(featureId: string, ghost?: string): boolean {
+  const found = modelState.get().planes[featureId]?.plane;
+  if (!found) {
     toast("This plane is not available. It may be suppressed or its reference is missing.", "warning");
     return false;
   }
-  // A plane lies in the coordinates of its component: the sketch goes there, as in Fusion.
   const owner = documentStore.document.features[featureId]?.componentId;
+  if (ghost && owner) {
+    const { placement, instanceId } = ghostPlacement(owner, ghost);
+    const plane = transformPlane(found, placement);
+    startSketch({ type: "plane", featureId, plane, ...(instanceId ? { instanceId } : {}) });
+    return true;
+  }
+  const plane = found;
+  // A plane lies in the coordinates of its component: the sketch goes there, as in Fusion.
   if (owner && owner !== activeComponentId()) {
     const pending = appState.get().pendingSketchTool;
     activateComponent(owner);
@@ -257,6 +273,11 @@ export function startSketchOnFace(
   point: Vec3,
   normal: Vec3,
   faceIndex?: number,
+  /**
+   * Picked on the ghost of another component (`point` and `normal` are where the ghost shows
+   * the face): the sketch belongs to the component being edited and follows that face there.
+   */
+  ghost?: string,
 ): void {
   // Keep the sketch axes aligned with the world axes where the face allows it.
   const xHint = Math.abs(normal.x) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
@@ -265,18 +286,30 @@ export function startSketchOnFace(
   const origin = scale3(n, dot3(n, point));
   const plane = makePlane(origin, n, xHint);
   const model = modelState.get().bodies[bodyId];
-  const geometry = model?.geometry;
+  const owner = documentStore.document.bodies[bodyId]?.componentId;
+  const placed = ghost && owner ? ghostPlacement(owner, ghost) : null;
+  const geometry =
+    model && placed ? transformBodyGeometry(model.geometry, placed.placement) : model?.geometry;
+  const instance = placed?.instanceId ? { instanceId: placed.instanceId } : {};
+  // The face's name, taken from the geometry as the sketch sees it.
+  const ref =
+    faceIndex === undefined
+      ? undefined
+      : placed && geometry && model
+        ? (makeFaceRef({ geometry, names: model.names }, faceIndex) ?? { kind: "face" as const, point, normal })
+        : faceRefOf(bodyId, faceIndex, point, normal);
   startSketch(
     {
       type: "face",
       bodyId,
       hint: point,
       plane,
-      ...(faceIndex !== undefined ? { ref: faceRefOf(bodyId, faceIndex, point, normal) } : {}),
+      ...(ref ? { ref } : {}),
+      ...instance,
     },
-    geometry && faceIndex !== undefined
+    geometry && model && faceIndex !== undefined
       ? (sketch) =>
-          projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex }, model.names)
+          projectInto(sketch, plane, geometry, { kind: "face", bodyId, faceIndex, ...instance }, model.names)
             .sketch
       : undefined,
   );
