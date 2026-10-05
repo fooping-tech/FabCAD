@@ -75,7 +75,11 @@ export interface ProfileRef {
 }
 
 export interface DetectProfilesOptions {
-  /** Distance below which points are considered coincident. Default 1e-6 mm. */
+  /**
+   * Distance below which points are considered coincident. Default 1e-4 mm: projected curves
+   * are fitted to the edges of a body and meet each other only to a few hundred-thousandths of
+   * a millimetre, which must still close a loop. Nothing anyone draws is that small.
+   */
   tolerance?: number;
   /** Chord tolerance of `polygon` / `holePolygons`. Default 0.01 mm. */
   flattenTolerance?: number;
@@ -480,7 +484,7 @@ function detectCurveProfiles(
   sketch: Sketch,
   options: DetectProfilesOptions = {},
 ): SketchRegion[] {
-  const tol = options.tolerance ?? 1e-6;
+  const tol = options.tolerance ?? 1e-4;
   const flattenTolerance = options.flattenTolerance ?? 0.01;
   const projected = new Set<EntityId>();
   for (const r of sketch.projections) for (const id of r.entityIds) projected.add(id);

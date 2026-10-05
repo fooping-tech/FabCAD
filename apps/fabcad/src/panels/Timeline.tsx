@@ -1,5 +1,11 @@
-import { listFeatures, setFeatureSuppressed, setTimelineCursor } from "@fabcad/cad-document";
-import type { ReactElement } from "react";
+import {
+  featureMoveRange,
+  listFeatures,
+  moveFeature,
+  setFeatureSuppressed,
+  setTimelineCursor,
+} from "@fabcad/cad-document";
+import { type ReactElement, useState } from "react";
 import { editFeature, featureIcon, pickInDialog } from "../app/actions";
 import { appState, isAdditiveClick, isSelected, select, toast } from "../app/appState";
 import { useHelpTrigger } from "../help/useHelpTrigger";
@@ -34,6 +40,28 @@ export function Timeline(): ReactElement {
   const activeComponent = useActiveComponentId();
   const features = listFeatures(doc);
   const cursor = doc.timelineCursor ?? features.length;
+  // Dragging a step to another place in the history (`featureMoveRange` says where it may go).
+  const [drag, setDrag] = useState<{ id: string; from: number; range: ReturnType<typeof featureMoveRange> } | null>(null);
+  const [over, setOver] = useState<{ index: number; side: "before" | "after"; to: number; ok: boolean } | null>(null);
+  const dropAt = (index: number, side: "before" | "after"): { to: number; ok: boolean } | null => {
+    if (!drag) return null;
+    const place = side === "before" ? index : index + 1;
+    const to = place > drag.from ? place - 1 : place;
+    return { to, ok: to >= drag.range.min && to <= drag.range.max };
+  };
+  const refusal = (to: number): string => {
+    if (!drag) return "";
+    const name = (id?: string): string => (id ? (doc.features[id]?.name ?? id) : "");
+    const moved = name(drag.id);
+    return to < drag.range.min
+      ? `${moved} is built on ${name(drag.range.after)}: it has to stay after it.`
+      : `${name(drag.range.before)} is built on ${moved}: ${moved} has to stay before it.`;
+  };
+  const trackHelp = useHelpTrigger({ id: "timeline", title: "Timeline" });
+  // Help on the empty part of the timeline; the steps have a context menu of their own.
+  const onTrack = <E extends { target: EventTarget; currentTarget: EventTarget }>(
+    handler: ((e: E) => void) | undefined,
+  ) => (handler ? (e: E) => e.target === e.currentTarget && handler(e) : undefined);
 
   const marker = (
     <div
@@ -61,7 +89,15 @@ export function Timeline(): ReactElement {
         </button>
         <CopyLogButton />
       </div>
-      <div className="timeline-track">
+      <div
+        className="timeline-track"
+        onContextMenu={onTrack(trackHelp?.onContextMenu)}
+        onPointerDown={onTrack(trackHelp?.onPointerDown)}
+        onPointerMove={trackHelp?.onPointerMove}
+        onPointerUp={trackHelp?.onPointerUp}
+        onPointerCancel={trackHelp?.onPointerCancel}
+        onPointerLeave={trackHelp?.onPointerLeave}
+      >
         {features.length === 0 && (
           <span className="timeline-empty">
             The design history appears here. Start with Create Sketch.
@@ -85,7 +121,7 @@ export function Timeline(): ReactElement {
             f.componentId !== doc.assembly.rootComponentId && owner ? `Component: ${owner.name}` : "",
             status?.message,
             f.suppressed ? "Suppressed" : "",
-            "Double-click to edit · Alt-click to suppress",
+            "Double-click to edit · Alt-click to suppress · Drag to move in the history",
           ]
             .filter(Boolean)
             .join("\n");
@@ -94,8 +130,43 @@ export function Timeline(): ReactElement {
             <button
               key={f.id}
               data-feature-id={f.id}
-              className={`timeline-item ${state}${selected ? " selected" : ""}${activeSketchId === f.id ? " editing" : ""}${other ? " other-component" : ""}`}
+              className={`timeline-item ${state}${selected ? " selected" : ""}${activeSketchId === f.id ? " editing" : ""}${other ? " other-component" : ""}${
+                over?.index === i ? ` drop-${over.side}${over.ok ? "" : " drop-refused"}` : ""
+              }${drag?.id === f.id ? " dragging" : ""}`}
               title={title}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", f.name);
+                setDrag({ id: f.id, from: i, range: featureMoveRange(documentStore.document, f.id) });
+              }}
+              onDragEnd={() => {
+                setDrag(null);
+                setOver(null);
+              }}
+              onDragOver={(e) => {
+                if (!drag) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                const side = e.clientX < r.left + r.width / 2 ? "before" : "after";
+                const at = dropAt(i, side);
+                if (!at) return;
+                // Taken either way, so that a refused place can say why on drop.
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (over?.index !== i || over.side !== side || over.ok !== at.ok) setOver({ index: i, side, ...at });
+              }}
+              onDragLeave={() => setOver((o) => (o?.index === i ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                const r = e.currentTarget.getBoundingClientRect();
+                const at = dropAt(i, e.clientX < r.left + r.width / 2 ? "before" : "after");
+                if (drag && at) {
+                  if (at.ok) run(moveFeature(drag.id, at.to));
+                  else toast(refusal(at.to), "warning", 6000);
+                }
+                setDrag(null);
+                setOver(null);
+              }}
               onClick={(e) => {
                 if (e.altKey) {
                   run(setFeatureSuppressed(f.id, !f.suppressed));
@@ -109,6 +180,7 @@ export function Timeline(): ReactElement {
               onDoubleClick={() => editFeature(f.id)}
               onContextMenu={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 appState.set({ selection: [{ kind: "feature", featureId: f.id }] });
                 openContextMenu(e.clientX, e.clientY);
               }}

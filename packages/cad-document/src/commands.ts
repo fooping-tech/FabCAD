@@ -56,6 +56,11 @@ import {
   type BooleanFeature,
   featureCreatedBodies,
   featureExpressions,
+  featureInputBodies,
+  featureInputFeatures,
+  featureInputPlanes,
+  featureInputSketches,
+  featureOutputBodies,
   parseDynamicBodyId,
   setFeatureExpression,
 } from "./features";
@@ -1067,10 +1072,73 @@ export function removeBody(bodyId: string): Command {
   });
 }
 
+/**
+ * Where a step may go in the timeline: `to` positions as `moveFeature` takes them (the index in
+ * the timeline without the step). A step stays after what it is built on (its sketches, planes,
+ * the features a pattern repeats, and the steps that make the bodies it uses) and before the
+ * steps built on it. Steps that only work on the same body one after the other may change
+ * places: the later one then works on what the earlier one left.
+ *
+ * `after` / `before` name the steps that set the limits, for saying why a place is refused.
+ */
+export function featureMoveRange(
+  doc: CadDocument,
+  id: string,
+): { min: number; max: number; after?: string; before?: string } {
+  const i = doc.timeline.indexOf(id);
+  const n = doc.timeline.length;
+  if (i < 0) return { min: 0, max: Math.max(0, n - 1) };
+  const lookup = (f: string): Feature | undefined => doc.features[f];
+  const maker = (bodyId: string): string | undefined =>
+    doc.bodies[bodyId]?.createdBy ?? parseDynamicBodyId(bodyId)?.featureId;
+  /** Steps a feature cannot do without. */
+  const needs = (f: Feature): Set<string> => {
+    const out = new Set<string>([
+      ...featureInputSketches(f),
+      ...featureInputPlanes(f),
+      ...featureInputFeatures(f),
+    ]);
+    for (const b of [...featureInputBodies(f, lookup), ...featureOutputBodies(f, lookup)]) {
+      const m = maker(b);
+      if (m && m !== f.id) out.add(m);
+    }
+    out.delete(f.id);
+    return out;
+  };
+  const feature = doc.features[id];
+  if (!feature) return { min: 0, max: Math.max(0, n - 1) };
+  /** Index in the timeline without the moved step. */
+  const without = (j: number): number => (j < i ? j : j - 1);
+  let min = 0;
+  let after: string | undefined;
+  for (const need of needs(feature)) {
+    const j = doc.timeline.indexOf(need);
+    if (j >= 0 && without(j) + 1 > min) {
+      min = without(j) + 1;
+      after = need;
+    }
+  }
+  let max = n - 1;
+  let before: string | undefined;
+  for (const other of doc.timeline) {
+    const g = doc.features[other];
+    if (!g || other === id || !needs(g).has(id)) continue;
+    const j = without(doc.timeline.indexOf(other));
+    if (j < max) {
+      max = j;
+      before = other;
+    }
+  }
+  return { min, max, ...(after ? { after } : {}), ...(before ? { before } : {}) };
+}
+
+/** Move a step in the timeline, within `featureMoveRange`. */
 export function moveFeature(id: string, toIndex: number): Command {
   return command("Reorder timeline", (doc) => {
     const from = doc.timeline.indexOf(id);
     if (from < 0) return doc;
+    const range = featureMoveRange(doc, id);
+    if (toIndex < range.min || toIndex > range.max) return doc;
     const timeline = doc.timeline.slice();
     timeline.splice(from, 1);
     const to = Math.max(0, Math.min(timeline.length, toIndex));
