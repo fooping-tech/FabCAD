@@ -374,6 +374,11 @@ table.grid td input { padding: 2px 5px; }
   background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line); border-radius: 16px; padding: 4px 6px 4px 12px;
   box-shadow: 0 1px 3px rgba(29, 43, 56, 0.1); white-space: nowrap;
 }
+.render-notice {
+  position: absolute; z-index: 5; left: 10px; bottom: 10px;
+  background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px;
+  font-size: 11px; color: var(--ink-soft); cursor: pointer;
+}
 .inline-editor {
   position: absolute; z-index: 30; transform: translate(-50%, -50%);
   display: flex; gap: 3px; background: #fff; border: 1px solid var(--accent); border-radius: 5px; padding: 3px;

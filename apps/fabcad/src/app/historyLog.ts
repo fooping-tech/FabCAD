@@ -1,4 +1,5 @@
 import type { BodyGeometry } from "@fabcad/brep";
+import type { Vec3 } from "@fabcad/geometry";
 import {
   type CadDocument,
   type Feature,
@@ -17,7 +18,14 @@ export function historyLog(
   doc: CadDocument,
   statuses: Record<string, FeatureStatus | undefined>,
   bodies: Record<string, { geometry: BodyGeometry } | undefined>,
-  meta: { version: string; date: Date; project?: boolean; fabrication?: string[] | null } = {
+  meta: {
+    version: string;
+    date: Date;
+    project?: boolean;
+    fabrication?: string[] | null;
+    /** Solve state of each sketch, by feature ID. */
+    sketches?: Record<string, SketchState | undefined>;
+  } = {
     version: "",
     date: new Date(),
   },
@@ -41,6 +49,8 @@ export function historyLog(
           : "not computed";
     lines.push(`${i + 1}. ${f.name} [${f.type}] (${f.id}) — ${state}`);
     lines.push(`   ${describeFeature(f, doc)}`);
+    const sketch = meta.sketches?.[f.id];
+    if (f.type === "sketch" && sketch) lines.push(`   ${describeSketchState(sketch)}`);
   });
   lines.push("", "Bodies:");
   const records = Object.values(doc.bodies);
@@ -55,6 +65,7 @@ export function historyLog(
         ? describeBody(g)
         : "no result";
     lines.push(`- ${b.name} (${b.id})${b.visible ? "" : " hidden"}: ${state}`);
+    if (g && !by) lines.push(...bodyDetails(g).map((l) => `   ${l}`));
   }
   if (meta.fabrication) lines.push("", "Fabrication (laser):", ...meta.fabrication);
   // Left out where the log is read on screen; the copy carries it.
@@ -63,6 +74,24 @@ export function historyLog(
 }
 
 const round = (v: number): number => Math.round(v * 1000) / 1000;
+
+/** What the solver says of a sketch, and how many closed profiles it has. */
+export interface SketchState {
+  /** `fully-constrained`, `under-constrained` or `over-constrained`. */
+  status: string;
+  degreesOfFreedom: number;
+  profiles: number;
+}
+
+function describeSketchState(s: SketchState): string {
+  const status =
+    s.status === "fully-constrained"
+      ? "fully constrained"
+      : s.status === "over-constrained"
+        ? "over-constrained"
+        : `under-constrained, ${s.degreesOfFreedom} DOF`;
+  return `${status} · ${s.profiles} closed profiles`;
+}
 
 /** Values longer than this are left out of the steps, so that the steps stay readable. */
 const LONG = 200;
@@ -124,6 +153,76 @@ function describeBody(g: BodyGeometry): string {
     `${meshPieces(g)} separate pieces`,
     `bounds (${round(min.x)}, ${round(min.y)}, ${round(min.z)}) – (${round(max.x)}, ${round(max.y)}, ${round(max.z)})`,
   ].join(" · ");
+}
+
+/** Faces listed one by one in the log; a body with more lists the first ones. */
+const MAX_FACES = 40;
+/** Likewise for the circles. */
+const MAX_CIRCLES = 20;
+
+const AXES: [string, number, number, number][] = [
+  ["+X", 1, 0, 0], ["-X", -1, 0, 0],
+  ["+Y", 0, 1, 0], ["-Y", 0, -1, 0],
+  ["+Z", 0, 0, 1], ["-Z", 0, 0, -1],
+];
+
+/** `+Z` for a direction along an axis, the rounded vector otherwise. */
+function direction(n: { x: number; y: number; z: number }): string {
+  for (const [name, x, y, z] of AXES) if (n.x * x + n.y * y + n.z * z > 1 - 1e-6) return name;
+  return `(${round(n.x)}, ${round(n.y)}, ${round(n.z)})`;
+}
+
+/**
+ * The size of a body, its circles and arcs (holes, fillets) by size, and its faces with where
+ * they are: what a reader who cannot see the view needs to check the shape against the design.
+ */
+export function bodyDetails(g: BodyGeometry): string[] {
+  const { min, max } = g.bounds;
+  const out = [`size ${round(max.x - min.x)} × ${round(max.y - min.y)} × ${round(max.z - min.z)} mm (X × Y × Z)`];
+  const tally = (items: number[], label: (v: number) => string): string =>
+    [...items.reduce((m, v) => m.set(v, (m.get(v) ?? 0) + 1), new Map<number, number>())]
+      .sort((a, b) => a[0] - b[0])
+      .map(([v, n]) => `${n} × ${label(v)}`)
+      .join(", ");
+  // The B-Rep often splits a circle into arcs (at its seam): arcs of the same circle are put
+  // together, and they make a circle when they go all the way round.
+  const groups = new Map<string, { center: Vec3; radius: number; angle: number }>();
+  for (const e of g.edges) {
+    if (e.curve !== "circle" || e.radius === undefined || !e.center) continue;
+    const axis = e.axis ? [e.axis.x, e.axis.y, e.axis.z].map((v) => round(Math.abs(v))) : [];
+    const key = [e.center.x, e.center.y, e.center.z, e.radius].map(round).concat(axis).join(",");
+    const group = groups.get(key) ?? { center: e.center, radius: e.radius, angle: 0 };
+    group.angle += e.closed ? 2 * Math.PI : e.length / e.radius;
+    groups.set(key, group);
+  }
+  const full = [...groups.values()].filter((c) => c.angle > 2 * Math.PI - 1e-3);
+  const arcs = [...groups.values()].filter((c) => c.angle <= 2 * Math.PI - 1e-3).map((c) => round(c.radius));
+  if (full.length > 0) {
+    const listed = full
+      .slice(0, MAX_CIRCLES)
+      .map((c) => `Ø${round(c.radius * 2)} at (${round(c.center.x)}, ${round(c.center.y)}, ${round(c.center.z)})`);
+    if (full.length > MAX_CIRCLES) listed.push(`… and ${full.length - MAX_CIRCLES} more`);
+    out.push(`circles (${full.length}): ${listed.join(", ")}`);
+  }
+  if (arcs.length > 0) out.push(`arcs: ${tally(arcs, (r) => `R${r}`)}`);
+  out.push("faces:");
+  for (const f of g.faces.slice(0, MAX_FACES)) {
+    const c = f.center;
+    const where =
+      f.surface === "plane"
+        ? (() => {
+            const dir = direction(f.normal);
+            const offset = round(c.x * f.normal.x + c.y * f.normal.y + c.z * f.normal.z);
+            const axis = dir.length === 2 ? dir[1]!.toLowerCase() : null;
+            return axis
+              ? `facing ${dir} at ${axis} = ${round(axis === "x" ? c.x : axis === "y" ? c.y : c.z)}`
+              : `facing ${dir}, ${offset} from the origin`;
+          })()
+        : `around (${round(c.x)}, ${round(c.y)}, ${round(c.z)})`;
+    out.push(`  F${f.faceIndex} ${f.surface} ${where} · ${round(f.area)} mm²`);
+  }
+  if (g.faces.length > MAX_FACES) out.push(`  … and ${g.faces.length - MAX_FACES} more faces`);
+  return out;
 }
 
 /** Number of pieces of the mesh that do not touch each other. */

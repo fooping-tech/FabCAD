@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useStore } from "../app/tinyStore";
 import { printUiState, selectPrintPart } from "./uiState";
 import { sourceBodyId } from "./bodies";
+import { createViewRenderer, type ViewRenderer } from "../viewport/softwareRenderer";
 
 const COLORS = {
   background: 0xeef1f4,
@@ -20,7 +21,7 @@ const COLORS = {
 
 /** The print bed with the parts as they will be printed; overhangs are shown in red. */
 class BedScene {
-  readonly renderer: THREE.WebGLRenderer;
+  readonly renderer: ViewRenderer;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(35, 1, 1, 20000);
   private controls: OrbitControls;
@@ -33,7 +34,7 @@ class BedScene {
   private rig = new THREE.Group();
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = createViewRenderer(canvas, { antialias: true }).renderer;
     this.renderer.setClearColor(COLORS.background);
     this.camera.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, canvas);
