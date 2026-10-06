@@ -119,11 +119,26 @@ export const HELP: Record<string, HelpEntry> = {
     title: "History Log",
     summary: "The design history as text: to check a result, or to report a problem.",
     what: [
-      "The button at the left end of the timeline opens the history log: every step with its status and error message, the settings of each step, and the size and make-up of each body (volume, faces, separate pieces). It follows the model while it is open.",
+      "The button at the left end of the timeline opens the history log: every step with its status and error message, the settings of each step, whether each sketch is fully constrained (or how many degrees of freedom are left) and how many closed profiles it has, and the size and make-up of each body (volume, faces, separate pieces). It follows the model while it is open.",
+      "Under each body: its size along X, Y and Z, its circles with their diameter and centre (holes) and its other arcs by radius (fillets), and its faces one by one: the kind of surface, where a flat face lies and which way it faces (e.g. \"plane facing +Z at z = 5\"), and the area. With these a result can be checked against the design without looking at the view.",
       "Its last part, Fabrication (laser), says what would be cut: the material, what each body was recognised as (Flat Part, Rectangular Box, Unfolded Net, Unsupported) and every part with its size.",
       "Copy puts it on the clipboard together with the project itself. Paste it into a bug report: with the project in it, the result can be computed again exactly.",
     ],
     limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],
+  },
+
+  "view.software": {
+    title: "Simplified 3D View (No WebGL)",
+    summary: "The browser does not provide WebGL: the 3D view is drawn in a simpler way.",
+    what: [
+      "When the browser cannot draw with WebGL (a cloud browser, a remote desktop, a locked-down computer), the 3D view is drawn by FabCAD itself instead. \"No WebGL · simplified 3D view\" at the lower left of the view says so.",
+      "Faces are shaded flat, edges and sketches are drawn as usual, and everything still works: selecting faces and edges, sketching, every feature, Fabrication and export.",
+    ],
+    limitations: [
+      "Turning and zooming the view is slower, the more so the larger the model and the window.",
+      "Lighting is simpler than in the normal view.",
+      "To check sizes exactly, read the History Log (the button at the left end of the timeline) or use Measure.",
+    ],
   },
 
   // ------------------------------------------------------------ sketch: create

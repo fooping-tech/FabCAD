@@ -9,6 +9,7 @@ import {
 import type { PlanePatch } from "@fabcad/features";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { createViewRenderer, type ViewRenderer } from "./softwareRenderer";
 import { COLORS } from "./theme";
 
 /**
@@ -98,7 +99,9 @@ const toV3 = (v: Vec3): THREE.Vector3 => new THREE.Vector3(v.x, v.y, v.z);
 const fromV3 = (v: THREE.Vector3): Vec3 => ({ x: v.x, y: v.y, z: v.z });
 
 export class ViewportScene {
-  readonly renderer: THREE.WebGLRenderer;
+  readonly renderer: ViewRenderer;
+  /** WebGL is not available: the view is drawn by the (slower, simpler) software renderer. */
+  readonly software: boolean;
   readonly scene = new THREE.Scene();
   readonly perspective: THREE.PerspectiveCamera;
   readonly orthographic: THREE.OrthographicCamera;
@@ -130,7 +133,9 @@ export class ViewportScene {
   private originSize = 60;
 
   constructor(private canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    const { renderer, software } = createViewRenderer(canvas, { antialias: true, alpha: false });
+    this.renderer = renderer;
+    this.software = software;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(COLORS.background);
 

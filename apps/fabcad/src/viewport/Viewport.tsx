@@ -29,6 +29,8 @@ import {
   selectionKey,
   toast,
 } from "../app/appState";
+import { helpFor } from "../help/content";
+import { openHelpTopic } from "../help/helpState";
 import { openContextMenu } from "../app/contextMenu";
 import { ROOT_GHOST } from "../app/components";
 import {
@@ -250,6 +252,7 @@ export function Viewport(): ReactElement {
   const sceneRef = useRef<ViewportScene | null>(null);
   const controllerRef = useRef<SketchController | null>(null);
   const [ready, setReady] = useState(false);
+  const [software, setSoftware] = useState(false);
 
   const doc = useDocument();
   const app = useStore(appState);
@@ -335,6 +338,7 @@ export function Viewport(): ReactElement {
     observer.observe(host);
     resize();
     setReady(true);
+    setSoftware(scene.software);
 
     const info = (e: PointerEvent | MouseEvent) => {
       const r = webgl.getBoundingClientRect();
@@ -1634,6 +1638,17 @@ export function Viewport(): ReactElement {
             Cancel
           </button>
         </div>
+      )}
+
+      {software && (
+        <button
+          className="render-notice"
+          role="status"
+          title="This browser does not provide WebGL. The 3D view is drawn in a simpler way; everything else works as usual. Click for details."
+          onClick={() => openHelpTopic({ id: "view.software", title: helpFor("view.software").title })}
+        >
+          No WebGL · simplified 3D view
+        </button>
       )}
 
       {app.dimensionEdit && <DimensionEditor />}
