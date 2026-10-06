@@ -3,11 +3,16 @@ const DB_NAME = "fabcad";
 const STORE = "projects";
 const KEY = "autosave";
 
-function openDb(): Promise<IDBDatabase> {
+/** Computed models by document id (see `resultCache.ts`). */
+export const RESULT_STORE = "results";
+
+export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE);
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(RESULT_STORE)) db.createObjectStore(RESULT_STORE);
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB is unavailable"));

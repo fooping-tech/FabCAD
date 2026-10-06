@@ -31,6 +31,7 @@ import { useSyncExternalStore } from "react";
 import { EngineClient } from "../worker/engineClient";
 import { appState, toast } from "./appState";
 import { loadAutosave, storeAutosave } from "./persistence";
+import { loadCachedModel, storeCachedModel } from "./resultCache";
 import { startTextMaintenance } from "../text/typography";
 import { TinyStore } from "./tinyStore";
 
@@ -62,6 +63,11 @@ export interface ModelState {
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
   lastDurationMs: number;
+  /**
+   * The model shown is the one kept from the last time this document was open: the engine is
+   * still computing it (see `resultCache.ts`).
+   */
+  cached: boolean;
 }
 
 export const modelState = new TinyStore<ModelState>({
@@ -74,6 +80,7 @@ export const modelState = new TinyStore<ModelState>({
   features: {},
   sketches: {},
   lastDurationMs: 0,
+  cached: false,
 });
 
 export function useDocument(): CadDocument {
@@ -234,6 +241,34 @@ let lastComputed: CadDocument | null = null;
  */
 let writeBacks = 0;
 const MAX_WRITE_BACKS = 4;
+/** Counts the results of the engine shown, so that a cached model never replaces a newer one. */
+let resultsShown = 0;
+let cacheTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Keep the model of a document once it has settled (no recompute for a while), so that
+ * opening the document again shows it before the engine is done.
+ */
+function scheduleCacheStore(doc: CadDocument): void {
+  if (cacheTimer) clearTimeout(cacheTimer);
+  cacheTimer = setTimeout(() => {
+    cacheTimer = null;
+    if (lastComputed !== doc || recomputeRunning) return;
+    const { bodies, planes, features, sketches } = modelState.get();
+    void storeCachedModel(doc, { bodies, planes, features, sketches });
+  }, 2000);
+}
+
+/**
+ * Show the cached model of a document that was just opened, while the engine computes it. A
+ * result of the engine that arrived first, or a change of the document meanwhile, wins.
+ */
+async function showCachedModel(doc: CadDocument): Promise<void> {
+  const shown = resultsShown;
+  const model = await loadCachedModel(doc);
+  if (!model || resultsShown !== shown || geometryChanged(doc, documentStore.document)) return;
+  modelState.set({ ...model, cached: true });
+}
 
 function engine(): EngineClient {
   if (!client) client = new EngineClient();
@@ -274,12 +309,14 @@ async function recomputeLoop(): Promise<void> {
         const names = b.names ?? previous[b.id]?.names;
         if (geometry && names) bodies[b.id] = { id: b.id, hash: b.hash, geometry, names };
       }
+      resultsShown++;
       modelState.set({
         bodies,
         planes: Object.fromEntries((result.planes ?? []).map((p) => [p.id, p])),
         features: result.features,
         sketches: result.sketches,
         lastDurationMs: result.durationMs,
+        cached: false,
       });
       // What the recompute found out about the document is written back, unless the document
       // changed meanwhile: the recompute that is queued for that change will do it then.
@@ -304,6 +341,7 @@ async function recomputeLoop(): Promise<void> {
           return syncBodies(features === d.features ? d : { ...d, features });
         });
       writeBacks = changed ? writeBacks + 1 : 0;
+      if (!changed) scheduleCacheStore(doc);
     } while (recomputeQueued);
   } catch (err) {
     console.error(err);
@@ -373,8 +411,9 @@ function resetUi(): void {
 export function loadDocument(doc: CadDocument): void {
   resetUi();
   lastComputed = null;
-  modelState.set({ bodies: {}, planes: {}, features: {}, sketches: {} });
+  modelState.set({ bodies: {}, planes: {}, features: {}, sketches: {}, cached: false });
   documentStore.load(doc);
+  void showCachedModel(doc);
   requestRecompute();
 }
 
@@ -410,6 +449,10 @@ export async function exportModel(format: "step" | "stl", items: ExportItem[]): 
   const doc = documentStore.document;
   if (items.length === 0) {
     toast("There is no body to export.", "warning");
+    return false;
+  }
+  if (modelState.get().cached) {
+    toast("The model is still being computed. Export again in a moment.", "warning");
     return false;
   }
   try {

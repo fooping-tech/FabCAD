@@ -195,9 +195,13 @@ export function useFabrication(): FabricationState {
     }
     return list;
   }, [bodies, modelBodies, settings]);
-  const requestKey = wanted.map((w) => keyOf(w)).join("|");
+  // A cached model (see `resultCache.ts`) is only shown: the engine does not hold its bodies
+  // until it has computed them, and would answer that they do not exist.
+  const cached = model.cached;
+  const requestKey = (cached ? "cached|" : "") + wanted.map((w) => keyOf(w)).join("|");
 
   useEffect(() => {
+    if (cached) return;
     let cancelled = false;
     for (const w of wanted) {
       const key = keyOf(w);

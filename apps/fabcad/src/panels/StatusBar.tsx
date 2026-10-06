@@ -53,7 +53,9 @@ export function StatusBar(): ReactElement {
         </span>
       )}
       <span>
-        {model.kernel === "loading"
+        {model.cached && model.kernel !== "error"
+          ? "Shown as last saved · computing…"
+          : model.kernel === "loading"
           ? "Kernel loading…"
           : model.kernel === "error"
             ? "Kernel unavailable"
