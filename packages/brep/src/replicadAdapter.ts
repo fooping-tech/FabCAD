@@ -150,6 +150,36 @@ interface FuzzyBuilder {
 
 const wrap = (shape: Shape3D): KernelShape => shape as unknown as KernelShape;
 const unwrap = (shape: KernelShape): Shape3D => shape as unknown as Shape3D;
+
+/** Centre of mass and area of a face, as `Face.center` integrates them (to 1e-7). */
+function surfaceProperties(face: replicad.Face): { center: Vec3; area: number } {
+  const oc = openCascade() as unknown as {
+    GProp_GProps: new () => { CentreOfMass(): { X(): number; Y(): number; Z(): number; delete(): void }; Mass(): number; delete(): void };
+    BRepGProp: { SurfaceProperties(shape: unknown, props: unknown, eps: number, skipShared: boolean): number };
+  };
+  const props = new oc.GProp_GProps();
+  try {
+    oc.BRepGProp.SurfaceProperties(face.wrapped, props, 1e-7, true);
+    const c = props.CentreOfMass();
+    const center = { x: c.X(), y: c.Y(), z: c.Z() };
+    c.delete();
+    return { center, area: props.Mass() };
+  } finally {
+    props.delete();
+  }
+}
+
+/** What `solidProblem` found, and volumes, by shape: shapes do not change once made. */
+const problems = new WeakMap<object, SolidProblem | null>();
+const volumes = new WeakMap<object, number>();
+function volumeOf(s: Shape3D): number {
+  let v = volumes.get(s);
+  if (v === undefined) {
+    v = replicad.measureVolume(s);
+    volumes.set(s, v);
+  }
+  return v;
+}
 const tuple = (p: Vec2): [number, number] => [p.x, p.y];
 const tuple3 = (p: Vec3): [number, number, number] => [p.x, p.y, p.z];
 
@@ -602,8 +632,8 @@ class ReplicadKernel implements GeometryKernel {
       );
     }
     if (problem === "empty") return;
-    const volumes = inputs.map((s) => replicad.measureVolume(unwrap(s)));
-    const volume = replicad.measureVolume(unwrap(result));
+    const volumes = inputs.map((s) => volumeOf(unwrap(s)));
+    const volume = volumeOf(unwrap(result));
     const tolerance = 1e-6 * Math.max(...volumes) + 1e-6;
     const wrong =
       op === "union"
@@ -983,9 +1013,11 @@ class ReplicadKernel implements GeometryKernel {
         let area = 0;
         if (face) {
           surface = SURFACES[face.geomType] ?? "other";
-          center = vec(face.center);
+          // Centre and area from one integration over the face (what `face.center` does).
+          const props = surfaceProperties(face);
+          center = props.center;
+          area = props.area;
           normal = vec(face.normalAt());
-          area = replicad.measureArea(face);
         }
         return { faceIndex: i, start: g.start, count: g.count, surface, center, normal, area };
       });
@@ -1054,7 +1086,7 @@ class ReplicadKernel implements GeometryKernel {
           min: { x: box[0][0], y: box[0][1], z: box[0][2] },
           max: { x: box[1][0], y: box[1][1], z: box[1][2] },
         },
-        volume: replicad.measureVolume(s),
+        volume: volumeOf(s),
         area: replicad.measureArea(s),
       };
     });
@@ -1129,10 +1161,20 @@ class ReplicadKernel implements GeometryKernel {
   }
 
   solidProblem(shape: KernelShape): SolidProblem | null {
+    // A shape never changes once made, and the check is costly: inputs of one operation are
+    // the results of the previous ones, which were checked already.
+    const known = problems.get(shape as object);
+    if (known !== undefined) return known;
+    const problem = this.findSolidProblem(shape);
+    problems.set(shape as object, problem);
+    return problem;
+  }
+
+  private findSolidProblem(shape: KernelShape): SolidProblem | null {
     let s: Shape3D;
     try {
       s = unwrap(shape);
-      if (s.isNull || s.faces.length === 0 || !(replicad.measureVolume(s) > 1e-9)) return "empty";
+      if (s.isNull || s.faces.length === 0 || !(volumeOf(s) > 1e-9)) return "empty";
     } catch {
       return "empty";
     }
