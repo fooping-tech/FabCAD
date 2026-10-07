@@ -31,6 +31,7 @@ import { useSyncExternalStore } from "react";
 import { EngineClient } from "../worker/engineClient";
 import { appState, toast } from "./appState";
 import { loadAutosave, storeAutosave } from "./persistence";
+import { decodeShareFragment, isShareFragment } from "./shareLink";
 import { loadCachedModel, storeCachedModel } from "./resultCache";
 import { startTextMaintenance } from "../text/typography";
 import { TinyStore } from "./tinyStore";
@@ -426,6 +427,45 @@ export async function openProjectFile(file: File): Promise<void> {
   }
 }
 
+/** The project kept in this browser that a shared one would replace, if it has any work in it. */
+const workIn = (doc: CadDocument | null): CadDocument | null =>
+  doc && (doc.timeline.length > 0 || doc.parameters.length > 0) ? doc : null;
+
+/** Take the share fragment out of the address, without loading the page again. */
+function clearShareFragment(): void {
+  history.replaceState(history.state, "", window.location.pathname + window.location.search);
+}
+
+/**
+ * Open the project of a share link (`hash`, `#project=…`). `current` is the project it would
+ * replace: when there is work in it, the user is asked first. A link that cannot be opened
+ * leaves everything as it was and says why. True when the shared project was opened.
+ */
+export async function openSharedProject(hash: string, current: CadDocument | null): Promise<boolean> {
+  let doc: CadDocument;
+  try {
+    doc = deserializeDocument(await decodeShareFragment(hash));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    toast(`The shared project could not be opened. ${reason} Your own project was not changed.`, "error", 12000);
+    return false;
+  }
+  const mine = workIn(current);
+  if (
+    mine &&
+    !window.confirm(
+      `Open the shared project "${doc.name}"?\n\nIt replaces the project kept in this browser ("${mine.name}"). ` +
+        "Choose Cancel to keep working on yours; to keep both, save yours first (File → Save project).",
+    )
+  ) {
+    return false;
+  }
+  loadDocument(doc);
+  clearShareFragment();
+  toast(`Opened the shared project "${doc.name}".`);
+  return true;
+}
+
 export function newProject(): void {
   loadDocument(createDocument("Untitled"));
 }
@@ -502,17 +542,21 @@ export function startSession(): void {
     }, 1200);
   });
 
+  const shared = isShareFragment(window.location.hash) ? window.location.hash : null;
   void loadAutosave()
-    .then((json) => {
-      if (!json || documentStore.canUndo) return;
+    .then(async (json) => {
+      if (documentStore.canUndo) return;
+      let saved: CadDocument | null = null;
       try {
-        const doc = deserializeDocument(json);
-        if (doc.timeline.length > 0 || doc.parameters.length > 0) {
-          loadDocument(doc);
-          toast("Restored the automatically saved project.");
-        }
+        saved = json ? workIn(deserializeDocument(json)) : null;
       } catch {
         // A broken autosave is ignored.
+      }
+      // A share link opens its project; the one kept here is replaced only if the user says so.
+      if (shared && (await openSharedProject(shared, saved))) return;
+      if (saved) {
+        loadDocument(saved);
+        toast("Restored the automatically saved project.");
       }
     })
     .catch(() => undefined)
@@ -530,6 +574,13 @@ export function startSession(): void {
         kernelError: err instanceof Error ? err.message : String(err),
       });
     });
+
+  // A share link pasted into the address bar of an open FabCAD only changes the fragment.
+  window.addEventListener("hashchange", () => {
+    if (isShareFragment(window.location.hash)) {
+      void openSharedProject(window.location.hash, documentStore.document);
+    }
+  });
 
   window.addEventListener("beforeunload", (event) => {
     if (documentStore.dirty && documentStore.document.timeline.length > 0) {

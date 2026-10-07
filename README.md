@@ -37,7 +37,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | ヘルプ | ツールのアイコンを右クリック（タッチでは長押し）すると、短い説明が出ます。**Details · 詳しく見る** で、用途、必要な選択、パラメータ、制限、使用例を表示します。説明は英語と日本語の併記です。ヘルプを開いても、実行中のコマンドと選択は変わりません |
 | Parameters | 名前付きパラメータ、単位（mm / cm / m / in / deg / rad）、式、他パラメータの参照、`sin cos tan asin acos atan atan2 sqrt abs min max floor ceil round pow` |
 | Timeline | Feature History、ヒストリーマーカー、抑制（Alt + クリック）、ダブルクリックで編集、ドラッグで順番の入れ替え（もとにしている工程より後、それをもとにする工程より前の範囲で。置けない位置は理由を表示） |
-| 入出力 | STEP import / export、STL export（書き出す Body とコンポーネントを選べます。コンポーネントはインスタンスの位置ごと、または原点に 1 つ）、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、IndexedDB への自動保存（計算した形も保存し、次に同じドキュメントを開いたときは再計算を待たずに表示します） |
+| 入出力 | STEP import / export、STL export（書き出す Body とコンポーネントを選べます。コンポーネントはインスタンスの位置ごと、または原点に 1 つ）、DXF import、スケッチの SVG / DXF 書き出し、プロジェクト保存・読み込み、共有リンク（File → Share link…。プロジェクトを URL の `#` 以降に圧縮して入れるので、サーバーには送りません。1 MiB まで）、IndexedDB への自動保存（計算した形も保存し、次に同じドキュメントを開いたときは再計算を待たずに表示します） |
 
 ### FABRICATION ワークスペース（Laser）
 

@@ -21,6 +21,16 @@ describe("guide for AI agents", () => {
     expect(md).toContain("| E | Extrude |");
   });
 
+  it("says how to reach the editor without the browser's Back button", () => {
+    expect(md).toContain("https://fooping-tech.github.io/FabCAD/app/");
+    expect(md).toContain("FabCADを開く");
+    expect(md).toContain("top right of the page header");
+    expect(md).toContain("Do not use the browser's Back button");
+    expect(md).toContain("not an error of FabCAD");
+    expect(md).toContain("```text\n");
+    expect(html).toContain("<pre>Introduction page");
+  });
+
   it("is a complete HTML page with the same content, escaped", () => {
     expect(html.startsWith("<!doctype html>")).toBe(true);
     expect(html).toContain("<title>FabCAD Agent Guide</title>");

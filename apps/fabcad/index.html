@@ -241,7 +241,7 @@
             <article class="card">
               <h3>頼み方</h3>
               <ol class="plain-steps">
-                <li>ブラウザを操作できるAIエージェントに、FabCADを開かせます。</li>
+                <li>ブラウザを操作できるAIエージェントに、FabCADの編集画面 <a class="link" href="./app/">/FabCAD/app/</a> を開かせます（このページでは右上の「FabCADを開く」ボタン）。</li>
                 <li>作業の前に、エージェント向けガイド <a class="link" href="./llms.txt">llms.txt</a> を読ませます（<a class="link" href="./agents/">HTML版</a>）。</li>
                 <li>作りたい物を、寸法と基準の位置まで数値で伝えます。</li>
                 <li>終わったら、作業の記録で結果を確かめさせ、報告させます。</li>
@@ -275,7 +275,7 @@
             </div>
             <pre id="agent-prompt">FabCAD（https://fooping-tech.github.io/FabCAD/app/）で、次の部品を作ってください。
 作業は、あなた自身の環境（エージェント用のコンテナ）の中のブラウザで行ってください。私のパソコンのブラウザは使わないでください。
-作業を始める前に https://fooping-tech.github.io/FabCAD/llms.txt を読み、そこに書かれた操作方法に従ってください。
+作業を始める前に https://fooping-tech.github.io/FabCAD/llms.txt を読み、そこに書かれた操作方法に従ってください。ガイドは別のタブで読み、編集画面のタブは閉じずに使い続けてください（ブラウザの「戻る」は使わない）。
 
 作るもの
 - XY平面に、原点を左下の角とする 60 × 40 mm の長方形を描き、5 mm 押し出した板
