@@ -225,6 +225,20 @@ describe("save / load", () => {
     expect(JSON.parse(json).format).toBe("fabcad");
   });
 
+  it("migrates legacy origin-plane sketch references", () => {
+    const store = new DocumentStore(createDocument("Legacy plane"));
+    const { sketchId } = buildBox(store);
+    const file = JSON.parse(serializeDocument(store.document));
+    file.document.features[sketchId].sketch.plane = { type: "origin-plane", plane: "XY" };
+
+    const loaded = deserializeDocument(JSON.stringify(file));
+    const sketch = loaded.features[sketchId];
+    expect(sketch?.type).toBe("sketch");
+    if (sketch?.type === "sketch") {
+      expect(sketch.sketch.plane).toEqual({ type: "origin", plane: "XY" });
+    }
+  });
+
   it("rejects foreign and newer files", () => {
     expect(() => deserializeDocument("not json")).toThrow(/JSON/);
     expect(() => deserializeDocument("{}")).toThrow(/not a FabCAD/);
