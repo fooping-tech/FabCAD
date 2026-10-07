@@ -115,6 +115,7 @@ export function paletteCommands(hooks: PaletteHooks): PaletteCommand[] {
   add({ id: "parameters", label: "Parameters…", group: "File", keywords: "variables expressions", run: () => openDialog("parameters") });
   add({ id: "undo", label: "Undo", group: "Edit", shortcut: "Ctrl+Z", run: undo });
   add({ id: "redo", label: "Redo", group: "Edit", shortcut: "Ctrl+Y", run: redo });
+  add({ id: "share-link", label: "Share link…", group: "File", detail: "A link that opens this project", keywords: "url copy send", run: () => appState.set({ shareLinkOpen: true }) });
   add({ id: "save", label: "Save project", group: "File", shortcut: "Ctrl+S", keywords: "download", run: saveProject });
   add({ id: "history-log", label: "History Log", group: "Help", detail: "The steps, their status and the bodies", keywords: "bug report timeline errors", run: () => appState.set({ historyLogOpen: true }) });
   add({ id: "copy-log", label: "Copy History Log", group: "Help", keywords: "bug report timeline", run: () => void copyHistoryLog() });

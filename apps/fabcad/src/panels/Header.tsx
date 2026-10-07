@@ -121,6 +121,12 @@ export function Header({
           { label: "New project", icon: "new", onSelect: createProject },
           { label: "Open…", icon: "open", kbd: `${mod}O`, onSelect: () => void openProject() },
           { label: "Save project", icon: "save", kbd: `${mod}S`, onSelect: saveProject },
+          {
+            label: "Share link…",
+            icon: "link",
+            onSelect: () => appState.set({ shareLinkOpen: true }),
+            help: { id: "file.share-link", title: "Share Link" },
+          },
           { separator: true },
           { label: "Import STEP…", icon: "import", onSelect: () => void importStep() },
           { label: "Import DXF…", icon: "import", onSelect: () => void pickDxf() },

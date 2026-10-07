@@ -73,6 +73,8 @@ npm run build
 
 WebGL が使えないブラウザ（AI エージェントのクラウドブラウザなど）では、3D ビューと 3D Print のビューは `viewport/softwareRenderer.ts` の `SoftwareRenderer`（2D キャンバスに描く z バッファのラスタライザ）で描く。どちらを使うかは `createViewRenderer()` が決め、`?renderer=software` を付けると WebGL があっても使う。ピッキングは Raycaster で CPU で計算するので、どちらでも同じに動く。画面を見られない読み手のために、History Log（`app/historyLog.ts`）に Body の寸法・円の径・面の一覧とスケッチの拘束の状態を出している。
 
+共有リンク（File → Share link…）は、保存と同じ JSON を deflate で圧縮し、URL の fragment（`#project=v1.…`）に入れる（`app/shareLink.ts`。純粋な関数）。fragment はサーバーに送られないので、CAD データを送らない方針のまま共有できる。長さは 1 MiB まで。起動時と `hashchange` で `openSharedProject()`（`session.ts`）が開き、このブラウザに作業中のプロジェクトがあれば置き換える前に確認する。開けないリンクは理由を出して何も変えない。
+
 キーボードショートカットは `app/shortcuts.ts`。日本語入力がオンだと `key` が `Process` になるので、`code` から文字を求めている。
 
 テキストの輪郭は派生データで、`SketchText.outline` にキャッシュする。`outline.key` が入力（文字列、フォント、評価済みの数値、パスの形）と一致しなくなったら、`refreshTexts()` が作り直して `documentStore.amend()` で差し替える（履歴は増えない）。テキストのダイアログは `documentStore.begin()` のトランザクションの中でドキュメントを直接書き換え、OK で 1 つの履歴にまとめる。

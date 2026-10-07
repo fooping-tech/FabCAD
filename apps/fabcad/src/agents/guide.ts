@@ -10,6 +10,8 @@ import type { HelpEntry } from "../help/types";
 
 type Block =
   | { p: string }
+  /** Preformatted text: a small drawing of the screen. */
+  | { pre: string }
   | { list: string[] }
   | { steps: string[] }
   | { table: { head: string[]; rows: string[][] } };
@@ -29,7 +31,12 @@ const SECTIONS: Section[] = [
   {
     title: "Opening the app",
     blocks: [
-      { p: "The CAD is at /FabCAD/app/ (https://fooping-tech.github.io/FabCAD/app/). It needs no account; the project is saved automatically in the browser and comes back after a reload." },
+      { p: "The CAD is at /FabCAD/app/ (https://fooping-tech.github.io/FabCAD/app/). Go to that address directly. It needs no account; the project is saved automatically in the browser and comes back after a reload." },
+      { p: "From the introduction page (https://fooping-tech.github.io/FabCAD/), the editor is behind the dark button labelled \"FabCADを開く\" (\"Open FabCAD\"). It is at the top right of the page header, and again below the big heading at the top of the page (\"FabCADを開く →\", next to \"View on GitHub\") and at the bottom of the page. All of them lead to /FabCAD/app/. Links to this guide (llms.txt, HTML) are in the AI Agents section and the footer; they do not open the editor." },
+      { pre: "Introduction page (https://fooping-tech.github.io/FabCAD/), top of the screen:\n\n  FabCAD BETA   Design  Fabrication  How it works  AI Agents  GitHub   [ FabCADを開く ]   <- header: the button at the far right\n  ----------------------------------------------------------------------------------\n  Design it. Then make it cuttable.\n  [ FabCADを開く → ]  [ View on GitHub ]                                          <- the same link, under the heading" },
+      { p: "Keep one tab for the editor and do not leave it. Read this guide before you start, or in a second tab (the HTML version is at /FabCAD/agents/). Do not use the browser's Back button to return from the guide to the editor: open /FabCAD/app/ again instead. The project is kept in the browser, so nothing is lost by opening the address again." },
+      { p: "If your browser tool refuses to go to an address or to go Back (for example \"blocked by URL policy\" or \"only http and https are allowed\"), that is a rule of your tool, not an error of FabCAD. Do not try to reach the same page another way: tell the user what was refused and ask how to go on." },
+      { p: "A link with #project=… at the end (a share link, made by File → Share link…) opens a shared project. If the browser already keeps a project, FabCAD asks before replacing it." },
       { p: "After the page opens, wait until the view shows neither \"Loading the geometry kernel\" nor \"Building the model\". The status bar at the bottom right then reads \"Ready\"." },
     ],
   },
@@ -40,7 +47,7 @@ const SECTIONS: Section[] = [
         table: {
           head: ["Area", "Where", "What it is for"],
           rows: [
-            ["Header", "top", "DESIGN / FABRICATION workspace switch, File menu (New, Open, Save, Import, Parameters), Undo / Redo, Commands (the command palette), Save, Export"],
+            ["Header", "top", "DESIGN / FABRICATION workspace switch, File menu (New, Open, Save, Share link, Import, Parameters), Undo / Redo, Commands (the command palette), Save, Export"],
             ["Ribbon", "below the header", "the commands of the workspace, in labelled groups (SKETCH, CREATE, MODIFY, CONSTRAINTS …). Every button has a tooltip with its name and shortcut"],
             ["Browser", "left, upper half", "the tree of the document: Origin (XY / XZ / YZ planes, axes), Sketches, Bodies, Components (definitions, each with its Sketches, Features and Bodies) and Instances. Rows can be clicked to select, and to pick a plane. The component being edited has an ACTIVE badge"],
             ["Properties", "left, lower half", "properties of the selection, and the Parameters of the document"],
@@ -229,6 +236,7 @@ function sections(help: Record<string, HelpEntry>): Section[] {
 
 function mdBlock(b: Block): string {
   if ("p" in b) return b.p;
+  if ("pre" in b) return "```text\n" + b.pre + "\n```";
   if ("list" in b) return b.list.map((x) => `- ${x}`).join("\n");
   if ("steps" in b) return b.steps.map((x, i) => `${i + 1}. ${x}`).join("\n");
   const cell = (c: string): string => c.replace(/\|/g, "\\|");
@@ -264,6 +272,7 @@ const inline = (t: string): string =>
 
 function htmlBlock(b: Block): string {
   if ("p" in b) return `<p>${inline(b.p)}</p>`;
+  if ("pre" in b) return `<pre>${esc(b.pre)}</pre>`;
   if ("list" in b) return `<ul>${b.list.map((x) => `<li>${inline(x)}</li>`).join("")}</ul>`;
   if ("steps" in b) return `<ol>${b.steps.map((x) => `<li>${inline(x)}</li>`).join("")}</ol>`;
   return (
@@ -310,6 +319,7 @@ p, li { color: var(--ink); }
 a { color: var(--accent); }
 code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: #eef1f4; padding: 1px 5px; border-radius: 4px; }
 .table { overflow-x: auto; }
+pre { font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; background: #fff; }
 th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
 th { background: #eef1f4; }

@@ -127,6 +127,21 @@ export const HELP: Record<string, HelpEntry> = {
     limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],
   },
 
+  "file.share-link": {
+    title: "Share Link",
+    summary: "A link that opens this project, for someone else or another browser.",
+    what: [
+      "File → Share link… makes a link that opens the current project as it is: its sketches, steps and bodies. Copy link puts it on the clipboard; the link is also shown in the window, to select and copy by hand.",
+      "The project is inside the link itself, after the # of the address. Browsers do not send that part to the server, so nothing is uploaded and no one can open the model without the link.",
+      "Opening the link shows the project. If this browser already keeps a project with work in it, FabCAD asks before replacing it; Cancel keeps yours. A link that is damaged (cut off when it was copied) or made by a newer FabCAD is refused with the reason, and nothing changes.",
+    ],
+    limitations: [
+      "A link is at most 1 MiB (1,048,576 characters). A larger project cannot be shared this way: save it as a file (File → Save project) and send the file.",
+      "Chat, mail and social apps may cut long links. If a link does not open, send the project file instead.",
+      "Anyone who has the link can open the model.",
+      "Fonts you loaded yourself are not in the link, as in a saved project.",
+    ],
+  },
   "view.software": {
     title: "Simplified 3D View (No WebGL)",
     summary: "The browser does not provide WebGL: the 3D view is drawn in a simpler way.",

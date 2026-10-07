@@ -425,6 +425,8 @@ export interface AppState {
   sketchTransform: SketchTransform | null;
   /** The window with the history log (steps, bodies) is open. */
   historyLogOpen: boolean;
+  /** The Share Link window (`panels/ShareLinkPanel.tsx`). */
+  shareLinkOpen: boolean;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
   cursor: Vec2 | null;
   toasts: Toast[];
@@ -493,6 +495,7 @@ export const appState = new TinyStore<AppState>({
   pointEntry: null,
   commandPalette: null,
   historyLogOpen: false,
+  shareLinkOpen: false,
   shapeDimensions: null,
   sketchTransform: null,
   cursor: null,

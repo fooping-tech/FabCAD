@@ -11,6 +11,7 @@ const P: Record<string, ReactElement> = {
   redo: <path d="M13 5l3.5 3.5L13 12M16 8.5H8.5a4.5 4.5 0 000 9H12" />,
   save: <path d="M4 4h10l2 2v10H4zM7 4v4h6V4M7 16v-5h6v5" />,
   open: <path d="M3 6V5h5l1.5 2H17v2M3 6v10h12l2-7H5l-2 7" />,
+  link: <path d="M8.5 11.5l3-3M9 6.5l1.2-1.2a3 3 0 0 1 4.3 4.3L13.5 10.8M11 13.5l-1.2 1.2a3 3 0 0 1-4.3-4.3L6.5 9.2" />,
   new: <path d="M5 3h7l3 3v11H5zM12 3v3h3M10 9v5M7.5 11.5h5" />,
   export: <path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 14v3h12v-3" />,
   import: <path d="M10 12V3M6.5 6.5L10 3l3.5 3.5M4 14v3h12v-3" />,
