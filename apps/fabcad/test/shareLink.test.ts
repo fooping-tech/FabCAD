@@ -77,7 +77,8 @@ describe("share links", () => {
 
   it("says why a damaged or newer link cannot be opened", async () => {
     const good = await encodeShareFragment(serializeDocument(plate().document, false));
-    const cut = good.slice(0, Math.floor(good.length / 2));
+    // Keep the Base64url payload decodable so the failure is specifically a truncated DEFLATE stream.
+    const cut = good.slice(0, -4);
     await expect(decodeShareFragment(cut)).rejects.toThrow(ShareLinkError);
     await expect(decodeShareFragment(cut)).rejects.toThrow(/cut off/);
     await expect(decodeShareFragment("#project=v1.%%%")).rejects.toThrow(/damaged/);
