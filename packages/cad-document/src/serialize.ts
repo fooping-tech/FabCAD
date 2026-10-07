@@ -96,6 +96,9 @@ export function normalizeDocument(input: unknown): CadDocument {
         if (!isRecord(s) || !isRecord(s.entities) || !isRecord(s.constraints)) {
           throw new ProjectFormatError(`Sketch "${id}" is malformed.`);
         }
+        // Projects saved before origin planes were named "origin" used "origin-plane".
+        // Keep those sketches on the intended origin plane when loading old share links/files.
+        if (isRecord(s.plane) && s.plane.type === "origin-plane") s.plane.type = "origin";
         if (!isRecord(s.dimensions)) s.dimensions = {};
         if (!Array.isArray(s.projections)) s.projections = [];
         if (typeof s.nextId !== "number") s.nextId = Object.keys(s.entities).length * 4 + 1000;
