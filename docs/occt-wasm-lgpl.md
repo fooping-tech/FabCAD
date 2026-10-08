@@ -75,6 +75,46 @@ The script uses that altered file to initialize OpenCascade.js and Replicad in N
 
 **Critical limitation:** Adding a custom section leaves OCCT functionality unchanged. This establishes a working alternate-file path, but neither independent C++ source recompilation nor genuine OCCT functionality changes. It does not test a deployed browser interacting with a custom OCCT build and is not proof of LGPL-2.1 compliance.
 
+## 3.2. Source-level C++ wrapper modification and pinned WASM relink
+
+A stronger validation than the custom-section smoke is now available via
+`bash scripts/rebuild-occt-wrapper.sh`. The repository's Pages workflow includes
+a **label-gated** pull-request job, `occt-source-rebuild`, which runs only
+if the PR has the `occt-source-rebuild` label. It is not part of normal deployments.
+
+The script:
+
+1. Fetches Replicad's immutable source tag `v1.1.0` and checks the
+   corresponding C++ build-config wrapper into a temporary directory.
+2. Makes a real source-level change in
+   `packages/replicad-opencascadejs/build-config/wrappers/shape-hasher.cpp`:
+   the exported shape hasher uses `(nativeHash + 1)` instead of `nativeHash`
+   before the modulus. This changes generated topology labels but leaves CAD
+   geometry operations unchanged.
+3. Pulls `ghcr.io/taucad/opencascade.js` by the **OCI digest** recorded in
+   upstream Replicad PR #263, not a mutable tag.
+4. Runs `link custom_build_single.yml` against the checked-in generated
+   OCCT binding config and modified wrapper C++ source, producing a new
+   `replicad_single.wasm`.
+5. Passes that WASM into `OCCT_WASM_PATH=...`
+   `node scripts/test-occt-replacement.mjs`; this loads it through npm's
+   OpenCascade.js glue, exercises solids, Boolean, STEP and STL, then builds
+   FabCAD using its explicit same-origin replacement path. CI records the
+   source patch as an artifact when available.
+
+**This is not a full rebuild of OCCT C++ sources**: the pinned builder
+contains separately compiled OCCT libraries. It tests changes to a C++
+wrapper and a genuine WASM relink. An independent reconstruction of all
+OCCT 8.0.1 libraries from the pinned OCCT commit and patches would require a
+different, substantially more expensive upstream toolchain build.
+
+The upstream canary image was documented as short-lived. If the pinned
+OCI digest has been garbage-collected, the job will fail at `docker pull`.
+That does not mean the software is non-compliant; it means the original image
+must be rebuilt from source at `taucad/opencascade.js` commit
+`ebd263f15337b440b391492af073662707e86482` before an independent
+binary provenance/compatibility conclusion can be reached.
+
 ## 4. LGPL-2.1 redistribution tasks still open
 
 - [x] Identify the upstream Replicad v1.1.0 build entry points, single-threaded OCI image and its recorded digest.
