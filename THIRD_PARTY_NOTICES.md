@@ -15,6 +15,14 @@ FabCAD の `LICENSE` は **FabCAD 著作権者が許諾できる独自コード*
 | [opentype.js](https://github.com/opentypejs/opentype.js) | MIT | [opentype.js MIT本文](licenses/opentype.js-MIT.txt) |
 | 標準搭載の8書体 | SIL Open Font License 1.1 | [フォント別の著作権表示](THIRD_PARTY_FONTS.md)、`apps/fabcad/public/fonts/*-OFL.txt` |
 
+## WASMのネイティブビルド依存の一次資料
+
+[OpenCascade.jsの固定 `DEPS.json`](https://github.com/taucad/opencascade.js/blob/ebd263f15337b440b391492af073662707e86482/DEPS.json)には、OCCT本体のほかに次のビルド入力が記録されています。**実配布WASMにすべてリンクされていることをまだ検証したわけではありません**が、対応する第三者許諾本文を公開ページへ保守的に同梱しました。
+
+- FreeType（固定コミット `de8b92dd7ec634e9e2b25ef534c54a3537555c11`）: [配布するFTL原文](apps/fabcad/public/licenses/freetype-FTL.txt)。FreeType License（FTL）とGPLの選択許諾があるライブラリです。
+- RapidJSON（固定コミット `24b5e7a8b27f42fa16b96fc70aade9106cf7102f`）: [配布する原文](apps/fabcad/public/licenses/rapidjson-license.txt)。主なコードはMIT、上流許諾テキストには第三者部品の条件も含まれます。
+- これらの本文・対象コミットは上流の固定ソースから直接取得しました。**単なるビルド入力の列挙であり、OCCT/C++配布物全体のSBOMまたは法的完了宣言ではありません。**
+
 ## 本番依存パッケージの自動ライセンス表示
 
 ビルドで `npm run audit:licenses` を実行し、`package-lock.json` の本番外部依存に関する各パッケージの原文 `LICENSE`/`COPYING`/`NOTICE` を `dist/THIRD_PARTY_LICENSES.txt` に収集します。同時に `dist/third-party-components.json` を生成し、[第三者ライセンス画面](apps/fabcad/public/licenses.html)から参照できます。未知のライセンス種別や許諾原文が欠けるとCIを失敗させます。
