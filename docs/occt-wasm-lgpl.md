@@ -59,7 +59,7 @@ npm run preview
 
 The flag is used **at build time** and deliberately does not accept arbitrary network URLs or link-supplied override parameters. The override file is gitignored so it cannot accidentally be committed. Builds fail immediately if the override flag is set and the file is absent. The build will copy the binary to `dist/occt-override.wasm`; the worker loads `<Vite BASE_URL>/occt-override.wasm`. Normal builds are unchanged.
 
-**Compatibility test still outstanding:** execute the above workflow with an independently rebuilt WASM and record a real browser smoke test of at least extrusion, Boolean, STEP export, STL export and an ordinary model opening. Unit tests proving the URL routing are not proof that a modified library works.
+**Compatibility evidence:** a wrapper-C++-modified binary built using the pinned OCI linker passed Node box/Boolean/STEP/STL integration and the real Chromium worker-load/empty-document-recompute flow in [CI #37782658677](https://github.com/fooping-tech/FabCAD/actions/runs/37782658677). Browser geometry/export for a non-empty document, a full OCCT source rebuild, and exact correspondence of the original npm WASM to the pinned full source chain remain unverified. URL routing tests alone are not LGPL compliance proof.
 
 ## 3.1. Automated replacement integration smoke
 
@@ -136,7 +136,8 @@ binary provenance/compatibility conclusion can be reached.
 - [x] Automate a hash/size check of the `dist/` WASM in CI.
 - [ ] Verify the full corresponding source chain, including OCCT 8.0.1 commit, any C++ changes/patches, the pinned upstream toolchain, and the license of each relevant component.
 - [ ] Obtain or rebuild from the *same sources/configuration* as the published `replicad-opencascadejs@1.1.0` artifacts; compare hashes when reproducibility is expected, and otherwise document functional provenance.
-- [ ] Verify source-modified WASM use in a real **browser session** and whether all necessary materials for modified-library use/relinking are available to recipients as required by LGPL-2.1 §6. The Node/CAD + Vite integration smoke is already successful.
+- [x] Use a C++-wrapper-modified WASM in a real Chromium **browser worker session**; initialization and an empty-document recompute passed in [CI #37782658677](https://github.com/fooping-tech/FabCAD/actions/runs/37782658677). Non-empty browser geometry/export and user-accessible corresponding-source sufficiency remain unverified.
+- [x] Generate a pinned upstream source candidate archive in [CI #37783285458](https://github.com/fooping-tech/FabCAD/actions/runs/37783285458). Integrate candidate plus SHA-256/WASM provenance in main Pages deploy via `scripts/stage-occt-source-site.sh`. Deploy and verify the URLs after merge; a candidate is not a complete source offer.
 - [ ] Confirm applicable source-delivery, relinking, and reverse-engineering conditions, including exceptions, notices and accessibility of license texts. Get legal review for distribution compliance; do not assume the existence of this recipe is sufficient.
 - [ ] Audit all additional executable third-party components and required notices in the released build.
 
