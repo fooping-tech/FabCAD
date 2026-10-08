@@ -31,7 +31,7 @@ Open CASCADE の公式説明では、LGPLのライブラリについて、少な
 - [ ] `package-lock.json` と実際のWeb配布物を照合し、WASMに含まれるOCCTの正確なバージョン・ソース・パッチ・ビルド方法を特定する。
 - [ ] LGPLに従った対象ソース提供方法、利用者による改変WASMでの置換・再リンクの方法を検証し、必要な手順を文書化する。
 - [ ] 著作権表示・本文へのリンクをユーザーが参照できる画面に設置し、ビルド後も利用できることを確認する。
-- [ ] **ReplicadのMIT `LICENSE` / `package.json` とAGPL表記のあるREADMEの不整合について、上流の正式な意思を確認する。** 不一致が解消されるまで、全体のライセンス適合が確認済みと表明しない。
+- [x] **Replicad本体のライセンス確認**: [2023-08-14の上流コミット](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)で開発者本人がAGPLからMITへ変更。現在の `replicad@1.1.0` はMITであることをGit履歴、LICENSE、package.json、npm公開情報で裏付け済み。READMEのAGPL文言は旧記述。なお、`replicad-opencascadejs` に含まれるOCCTのLGPL対応は別途未完了。
 - [ ] ReactなどMIT系ライブラリの配布先への著作権表示の引き継ぎを検証し、トランジティブ依存を網羅する。
 - [ ] フォントの再配布物にOFL本文・著作権表示が含まれていることを確認する。
 
