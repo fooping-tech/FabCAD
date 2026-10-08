@@ -30,7 +30,7 @@ import { type DragTarget, createDefaultSolver } from "@fabcad/sketch-solver";
 import { useSyncExternalStore } from "react";
 import { EngineClient } from "../worker/engineClient";
 import { appState, toast } from "./appState";
-import { loadAutosave, storeAutosave } from "./persistence";
+import { AutosaveConflictError, loadAutosave, loadRecoverySnapshots, storeAutosave } from "./persistence";
 import { decodeShareFragment, isShareFragment } from "./shareLink";
 import { loadCachedModel, storeCachedModel } from "./resultCache";
 import { startTextMaintenance } from "../text/typography";
@@ -64,6 +64,7 @@ export interface ModelState {
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
   lastDurationMs: number;
+  computeStartedAt: number | null;
   /**
    * The model shown is the one kept from the last time this document was open: the engine is
    * still computing it (see `resultCache.ts`).
@@ -81,6 +82,7 @@ export const modelState = new TinyStore<ModelState>({
   features: {},
   sketches: {},
   lastDurationMs: 0,
+  computeStartedAt: null,
   cached: false,
 });
 
@@ -232,6 +234,7 @@ function afterHistoryJump(): void {
 // ---------------------------------------------------------------- recompute
 
 let client: EngineClient | null = null;
+let engineGeneration = 0;
 let recomputeRunning = false;
 let recomputeQueued = false;
 let lastComputed: CadDocument | null = null;
@@ -293,15 +296,17 @@ async function recomputeLoop(): Promise<void> {
     return;
   }
   recomputeRunning = true;
+  const generation = engineGeneration;
   try {
     do {
       recomputeQueued = false;
       const doc = documentStore.document;
       if (!geometryChanged(lastComputed, doc)) continue;
-      modelState.set({ busy: true });
+      modelState.set({ busy: true, computeStartedAt: Date.now() });
       const known: Record<string, string> = {};
       for (const b of Object.values(modelState.get().bodies)) known[b.id] = b.hash;
       const result = await engine().request({ type: "recompute", document: doc, known });
+      if (generation !== engineGeneration) return;
       lastComputed = doc;
       const previous = modelState.get().bodies;
       const bodies: Record<string, BodyModel> = {};
@@ -345,11 +350,29 @@ async function recomputeLoop(): Promise<void> {
       if (!changed) scheduleCacheStore(doc);
     } while (recomputeQueued);
   } catch (err) {
-    console.error(err);
-    toast(`Recompute failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+    if (generation === engineGeneration) {
+      console.error(err);
+      toast(`Recompute failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
   } finally {
     recomputeRunning = false;
-    modelState.set({ busy: false });
+    modelState.set({ busy: false, computeStartedAt: null });
+    if (generation !== engineGeneration && modelState.get().kernel === "ready") requestRecompute();
+  }
+}
+
+export async function restartCadWorker(): Promise<void> {
+  engineGeneration++;
+  client?.dispose();
+  client = null;
+  lastComputed = null;
+  modelState.set({ kernel: "loading", busy: false, computeStartedAt: null, cached: false });
+  try {
+    await engine().request({ type: "init" });
+    modelState.set({ kernel: "ready" });
+    requestRecompute();
+  } catch (err) {
+    modelState.set({ kernel: "error", kernelError: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -392,7 +415,7 @@ export function saveProject(): void {
     "application/json",
   );
   documentStore.markSaved();
-  toast("Project saved.");
+  toast("Project download requested. Verify the file in Downloads.");
 }
 
 function resetUi(): void {
@@ -526,6 +549,71 @@ export async function fileToBase64(file: File): Promise<string> {
 
 let started = false;
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let autosaveToken: string | null = null;
+let autosaveRevision = 0;
+let savedRevision = 0;
+let saveQueue: Promise<void> = Promise.resolve();
+
+export type AutosaveStatus = "unsaved" | "saving" | "saved" | "error";
+export const autosaveState = new TinyStore<{
+  status: AutosaveStatus;
+  message: string;
+  lastSavedAt: number | null;
+}>({ status: "unsaved", message: "", lastSavedAt: null });
+
+function flushAutosave(): void {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  const revision = autosaveRevision;
+  if (revision === savedRevision) return;
+  const json = serializeDocument(documentStore.document, false);
+  autosaveState.set({ status: "saving", message: "" });
+  saveQueue = saveQueue.then(async () => {
+    // Skip an obsolete snapshot rather than saving it over a newer edit.
+    if (revision < autosaveRevision) return;
+    try {
+      const token = await storeAutosave(json, autosaveToken);
+      autosaveToken = token;
+      savedRevision = revision;
+      if (revision === autosaveRevision) {
+        autosaveState.set({ status: "saved", message: "", lastSavedAt: Date.now() });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      autosaveState.set({ status: "error", message });
+      toast(err instanceof AutosaveConflictError
+        ? "Another tab changed recovery data. Export this project to keep your changes."
+        : "Browser autosave failed. Export the project to protect your work.", "error", 9000);
+    }
+  });
+}
+
+export function retryAutosave(): void {
+  autosaveRevision++;
+  flushAutosave();
+}
+
+export async function recoverPreviousAutosave(): Promise<void> {
+  try {
+    const history = await loadRecoverySnapshots();
+    if (!history.length) {
+      toast("No recovery snapshots available.", "warning");
+      return;
+    }
+    const choices = history.map((entry, i) => `${i + 1}: ${new Date(entry.savedAt).toLocaleString()}`).join("\\n");
+    const selection = window.prompt(`Choose a recovery snapshot:\\n${choices}`, "1");
+    if (!selection) return;
+    const index = Number(selection) - 1;
+    if (!Number.isInteger(index) || !history[index]) return;
+    const recovered = deserializeDocument(history[index].json);
+    if (documentStore.dirty && !window.confirm("Replace the current unsaved project with this recovery snapshot?")) return;
+    loadDocument(recovered);
+    documentStore.markUnsaved();
+    toast("Recovered a previous version. Export it to keep a separate copy.");
+  } catch (err) {
+    toast(`Recovery failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+  }
+}
 
 export function startSession(): void {
   if (started) return;
@@ -536,30 +624,43 @@ export function startSession(): void {
   documentStore.subscribe((doc) => {
     // While dragging, the 3D model is left alone; it catches up when the drag is committed.
     if (!documentStore.inTransaction) requestRecompute();
+    autosaveRevision++;
+    autosaveState.set({ status: "unsaved" });
     if (autosaveTimer) clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => {
-      void storeAutosave(serializeDocument(doc, false));
-    }, 1200);
+    autosaveTimer = setTimeout(flushAutosave, 1200);
   });
 
   const shared = isShareFragment(window.location.hash) ? window.location.hash : null;
   void loadAutosave()
-    .then(async (json) => {
+    .then(async (snapshot) => {
+      autosaveToken = snapshot.token;
       if (documentStore.canUndo) return;
       let saved: CadDocument | null = null;
       try {
-        saved = json ? workIn(deserializeDocument(json)) : null;
+        saved = snapshot.json ? workIn(deserializeDocument(snapshot.json)) : null;
       } catch {
-        // A broken autosave is ignored.
+        // Try an earlier verified snapshot if the current one cannot be deserialized.
+        for (const previous of await loadRecoverySnapshots()) {
+          try {
+            saved = workIn(deserializeDocument(previous.json));
+            if (saved) break;
+          } catch { /* skip broken snapshot */ }
+        }
+        if (saved) toast("Latest recovery was invalid. Loaded an earlier version.", "warning");
       }
+      if (snapshot.recovered) toast("Latest autosave was damaged. Restored a previous version.", "warning");
       // A share link opens its project; the one kept here is replaced only if the user says so.
       if (shared && (await openSharedProject(shared, saved))) return;
       if (saved) {
         loadDocument(saved);
-        toast("Restored the automatically saved project.");
+        documentStore.markUnsaved();
+        toast("Restored browser recovery. Export a project file for a durable backup.");
       }
     })
-    .catch(() => undefined)
+    .catch((err: unknown) => {
+      autosaveState.set({ status: "error", message: err instanceof Error ? err.message : String(err) });
+      toast("Could not read browser recovery data.", "error");
+    })
     .finally(() => modelState.set({ restoring: false }));
 
   engine()
@@ -581,6 +682,11 @@ export function startSession(): void {
       void openSharedProject(window.location.hash, documentStore.document);
     }
   });
+
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAutosave();
+  });
+  window.addEventListener("pagehide", flushAutosave);
 
   window.addEventListener("beforeunload", (event) => {
     if (documentStore.dirty && documentStore.document.timeline.length > 0) {
