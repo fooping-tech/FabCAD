@@ -65,6 +65,15 @@ cp "$repo_root/scripts/rebuild-occt-wrapper.sh" "$tmp/documentation/"
 cp "$repo_root/LICENSE" "$tmp/documentation/fabcad-original-code-LICENSE"
 cp "$repo_root/licenses/LGPL-2.1.txt" "$tmp/documentation/"
 cp "$repo_root/licenses/OCCT_LGPL_EXCEPTION.txt" "$tmp/documentation/"
+cp "$repo_root/scripts/package-occt-sources.sh" "$tmp/documentation/"
+cp "$repo_root/scripts/test-occt-browser.mjs" "$tmp/documentation/"
+cp "$repo_root/scripts/test-occt-replacement.mjs" "$tmp/documentation/"
+# Include this release's actual published WASM digest whenever available.
+# The archive is still only a candidate until matching source/build and LGPL
+# section 6 requirements have been independently validated.
+if [[ -f "$repo_root/dist/occt-wasm-provenance.json" ]]; then
+  cp "$repo_root/dist/occt-wasm-provenance.json" "$tmp/documentation/"
+fi
 
 # Zero timestamps and fixed ordering make repeated builds comparable.
 tar --sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner \
