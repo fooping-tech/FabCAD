@@ -6,3 +6,6 @@ output/
 .DS_Store
 .env
 .env.*
+
+# Locally compiled OCCT wasm for LGPL-compatible replacement testing.
+apps/fabcad/public/occt-override.wasm
