@@ -103,6 +103,10 @@ try {
 
   const published = await readFile(join(distDir, "occt-override.wasm"));
   assert.equal(digest(published), digest(replacement), "built WASM must exactly match supplied alternative");
+  const provenance = JSON.parse(await readFile(join(distDir, "occt-wasm-provenance.json"), "utf8"));
+  assert.equal(provenance.sha256, digest(replacement), "published provenance must match published WASM");
+  assert.equal(provenance.replacementMode, true, "override provenance must report correct build mode");
+  assert.equal(provenance.sourceProvenance.occtVersion, "V8_0_1");
   const files = await walk(distDir);
   const js = (await Promise.all(files.filter(f => f.endsWith(".js")).map(f => readFile(f, "utf8")))).join("\n");
   assert.ok(js.includes("occt-override.wasm"), "compiled worker must reference the override asset");
