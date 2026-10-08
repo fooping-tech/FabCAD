@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 permissions:
@@ -52,6 +53,31 @@ jobs:
       # replacement loading + Boolean/STEP/STL + browser build output.
       # It is not an OCCT from-source rebuild or a legal compliance verdict.
       - run: node scripts/test-occt-replacement.mjs
+
+
+  # Costly C++/WASM re-link: triggered only when a reviewer adds this label.
+  # The pinned canary OCI digest may no longer be pullable (upstream retention);
+  # document a registry failure rather than pretending a source rebuild passed.
+  occt-source-rebuild:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'occt-source-rebuild')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: bash -n scripts/rebuild-occt-wrapper.sh
+      - run: bash scripts/rebuild-occt-wrapper.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: occt-source-wrapper-rebuild-evidence
+          path: ${{ runner.temp }}/fabcad-occt-source-rebuild/replicad-wrapper-change.patch
+          if-no-files-found: ignore
+          retention-days: 14
 
   deploy:
     if: github.event_name != 'pull_request'
