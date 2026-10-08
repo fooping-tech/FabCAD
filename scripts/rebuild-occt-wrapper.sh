@@ -58,7 +58,7 @@ docker run --rm \
   -v "$pkg/build-config:/src" \
   "$BUILD_IMAGE" link custom_build_single.yml
 
-out="$pkg/dist/replicad_single.wasm"
+out="$pkg/build-config/replicad_single.wasm"
 test -s "$out"
 sha256sum "$out"
 
