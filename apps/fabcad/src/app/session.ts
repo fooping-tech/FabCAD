@@ -352,6 +352,7 @@ async function recomputeLoop(): Promise<void> {
   } catch (err) {
     if (generation === engineGeneration) {
       console.error(err);
+      modelState.set({ kernel: "error", kernelError: err instanceof Error ? err.message : String(err) });
       toast(`Recompute failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   } finally {
@@ -366,7 +367,7 @@ export async function restartCadWorker(): Promise<void> {
   client?.dispose();
   client = null;
   lastComputed = null;
-  modelState.set({ kernel: "loading", busy: false, computeStartedAt: null, cached: false });
+  modelState.set({ kernel: "loading", busy: false, computeStartedAt: null, cached: false, bodies: {}, planes: {}, features: {}, sketches: {} });
   try {
     await engine().request({ type: "init" });
     modelState.set({ kernel: "ready" });
@@ -600,7 +601,7 @@ export async function recoverPreviousAutosave(): Promise<void> {
       toast("No recovery snapshots available.", "warning");
       return;
     }
-    const choices = history.map((entry, i) => `${i + 1}: ${new Date(entry.savedAt).toLocaleString()}`).join("\\n");
+    const choices = history.map((entry, i) => `${i + 1}: ${new Date(entry.savedAt).toLocaleString()}`).join("\n");
     const selection = window.prompt(`Choose a recovery snapshot:\\n${choices}`, "1");
     if (!selection) return;
     const index = Number(selection) - 1;
