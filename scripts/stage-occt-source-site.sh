@@ -4,6 +4,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
 dist="$repo_root/dist"
 provenance="$dist/occt-wasm-provenance.json"
 target_dir="$dist/lgpl"
@@ -36,7 +37,7 @@ for needed in \
   source/replicad/packages/replicad-opencascadejs/build-config/wrappers/shape-hasher.cpp \
   source/occt/CMakeLists.txt \
   source/opencascade.js/DEPS.json; do
-  if ! printf '%s\n' "$listing" | grep -Fxq "$needed"; then
+  if ! grep -Fxq "$needed" <<< "$listing"; then
     echo "Source bundle missing $needed" >&2
     exit 1
   fi
