@@ -41,7 +41,7 @@ For every FabCAD release that publicly serves an OCCT WASM:
 - [x] Runtime dependency notices (npm, fonts, FreeType FTL, RapidJSON license) included in distribution
 - [x] Exact served WASM hash recorded in `dist/occt-wasm-provenance.json`
 - [ ] Chromium test for *source-modified* WASM, not only a synthetically altered file
-- [ ] Complete, tested corresponding source and rebuild bundle, including all OCCT source changes
+- [ ] Complete, tested corresponding source and rebuild bundle, including all OCCT source changes. A [candidate packaging script](../scripts/package-occt-sources.sh) is available to collect SHA-pinned upstream trees locally, but **has not been executed or validated as a complete LGPL source offer**, and publishing the resulting archive still requires a long-lived download location.
 - [ ] Permanent equivalent source download mechanism for the publicly distributed WASM
 - [ ] Detailed legal determination of applicable LGPL §§4–6 and custom license permissions
 
