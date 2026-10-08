@@ -77,10 +77,22 @@ for (const filename of ttfs) {
   }
 }
 
+
+const nativeNoticeFiles = ["freetype-FTL.txt", "rapidjson-license.txt"];
+for (const name of nativeNoticeFiles) {
+  const path = join(root, "apps/fabcad/public/licenses", name);
+  const published = join(root, "dist/licenses", name);
+  const expected = await readFile(path);
+  assert.ok(expected.length > 200, `Native license text is unexpectedly short: ${name}`);
+  assert.ok(expected.equals(await readFile(published)),
+    `Native license notice missing or changed in distribution: ${name}`);
+}
+
 console.log(JSON.stringify({
   status: "runtime dependency notice files found and exported (not a legal certification)",
   total: report.length,
   fontOflPairsVerified: ttfs.length,
+  nativeNoticesVerified: nativeNoticeFiles,
   licenses: Object.fromEntries([...allowed].map(l => [l, report.filter(p => p.license === l).length])),
   documents: ["dist/THIRD_PARTY_LICENSES.txt", "dist/third-party-components.json"],
 }, null, 2));
