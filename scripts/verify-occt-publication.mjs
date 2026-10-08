@@ -36,6 +36,10 @@ async function verify() {
   assert.ok(/^[a-f0-9]{64}$/.test(manifest.archiveSha256), "invalid source digest");
   assert.ok(/^[a-f0-9]{64}$/.test(manifest.servedWasmSha256), "invalid WASM digest");
   assert.equal(manifest.servedWasmSha256, provenance.sha256);
+  const tag = `occt-source-${manifest.servedWasmSha256}-${manifest.archiveSha256}`;
+  const releaseUrl = `https://github.com/fooping-tech/FabCAD/releases/download/${tag}/occt-corresponding-source-candidate.tar.gz`;
+  assert.equal(manifest.archiveReleaseTag, tag);
+  assert.equal(manifest.archiveReleaseUrl, releaseUrl);
   if (expectedCommit) assert.equal(manifest.siteBuildCommit, expectedCommit, "Pages publication is from another commit");
   assert.equal(manifest.archive, "occt-corresponding-source-candidate.tar.gz");
   const source = await digestAt("lgpl/" + manifest.archive);
