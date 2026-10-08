@@ -4,7 +4,7 @@
  * FabCAD. This is an integrity/provenance aid, NOT a legal compliance verdict.
  */
 import { createHash } from "node:crypto";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -49,11 +49,26 @@ if (bytes.length < wasmHeader.length || !bytes.subarray(0, 8).equals(wasmHeader)
 const info = await stat(selected);
 const report = {
   status: "artifact checks passed (not an LGPL compliance certification)",
-  "replicad": versionOf("replicad"),
+  replicad: versionOf("replicad"),
   "replicad-opencascadejs": versionOf("replicad-opencascadejs"),
   selectedWasm: relative(root, selected),
   sizeBytes: info.size,
   sha256: createHash("sha256").update(bytes).digest("hex"),
   replacementMode: override,
+  sourceProvenance: {
+    evidenceOnly: true,
+    upstreamReplicadTag: "v1.1.0",
+    upstreamReplicadSource: "https://github.com/sgenoud/replicad/tree/v1.1.0/packages/replicad-opencascadejs",
+    upstreamBuildPullRequest: "https://github.com/sgenoud/replicad/pull/263",
+    occtVersion: "V8_0_1",
+    occtSourceCommit: "b8f597c677811d1f9f4d8a97f5ae2825c0353a42",
+    occtSource: "https://github.com/Open-Cascade-SAS/OCCT/commit/b8f597c677811d1f9f4d8a97f5ae2825c0353a42",
+    ocjsSourceCommit: "ebd263f15337b440b391492af073662707e86482",
+    ocjsSource: "https://github.com/taucad/opencascade.js/commit/ebd263f15337b440b391492af073662707e86482",
+    originalBuilderImageDigest: "sha256:215198af0e2ca4c5f308e5540869f2419784dc290062d3eb03d34e4f22e0188c",
+    documentation: "https://github.com/fooping-tech/FabCAD/blob/main/docs/occt-wasm-lgpl.md",
+    warning: "The original npm WASM was not independently byte-for-byte reproduced. This record is not proof of LGPL compliance.",
+  },
 };
+await writeFile(join(dist, "occt-wasm-provenance.json"), JSON.stringify(report, null, 2) + "\\n");
 console.log(JSON.stringify(report, null, 2));
