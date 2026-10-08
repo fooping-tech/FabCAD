@@ -33,7 +33,7 @@ export class DocumentStore {
   private redoStack: HistoryEntry[] = [];
   private listeners = new Set<StoreListener>();
   private transaction: { label: string; before: CadDocument } | null = null;
-  private saved: CadDocument;
+  private saved: CadDocument | null;
   private readonly historyLimit: number;
 
   constructor(doc: CadDocument, options: StoreOptions = {}) {
@@ -187,6 +187,12 @@ export class DocumentStore {
 
   markSaved(): void {
     this.saved = this.doc;
+    this.emit();
+  }
+
+  /** A browser recovery snapshot is not a user-exported project file. */
+  markUnsaved(): void {
+    this.saved = null;
     this.emit();
   }
 
