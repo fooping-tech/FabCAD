@@ -1,6 +1,6 @@
 import { type ReactElement, useEffect, useState } from "react";
 import { appState } from "../app/appState";
-import { autosaveState, modelState, recoverPreviousAutosave, restartCadWorker, retryAutosave, sketchView, useDocument } from "../app/session";
+import { autosaveState, modelState, restartCadWorker, retryAutosave, sketchView, useDocument } from "../app/session";
 import { useStore } from "../app/tinyStore";
 
 const fmt = (v: number): string => v.toFixed(2);
@@ -66,7 +66,6 @@ export function StatusBar(): ReactElement {
           autosave.status === "error" ? "Browser save FAILED" : "Browser unsaved"}
       </span>
       {autosave.status === "error" && <button className="btn small" onClick={retryAutosave}>Retry save</button>}
-      <button className="btn small" onClick={() => void recoverPreviousAutosave()} title="Restore an earlier browser recovery snapshot">Recover</button>
       {((model.busy && computeSeconds >= 8) || model.kernel === "error") && (
         <button className="btn small" onClick={() => void restartCadWorker()}>{model.kernel === "error" ? "Restart CAD" : `Stop / restart CAD (${computeSeconds}s)`}</button>
       )}
