@@ -50,12 +50,20 @@ const provenance = JSON.parse(await readFile(process.env.OCCT_PROVENANCE, "utf8"
 if (provenance.replacementMode || provenance["replicad-opencascadejs"] !== "1.1.0")
   throw new Error("Source bundle correspondence must be reviewed when the distributed OCCT WASM changes");
 const bytes = await readFile(process.env.SOURCE_ARCHIVE);
+const archiveSha256 = createHash("sha256").update(bytes).digest("hex");
+// A versioned release preserves older sources after subsequent Pages deploys.
+// The tag combines the EXACT served WASM hash and source bundle hash to avoid
+// overwriting earlier material when implementation or documentation changes.
+const archiveReleaseTag = `occt-source-${provenance.sha256}-${archiveSha256}`;
+const archiveReleaseUrl = `https://github.com/fooping-tech/FabCAD/releases/download/${archiveReleaseTag}/occt-corresponding-source-candidate.tar.gz`;
 const report = {
   status: "candidate source archive: legal completeness and exact binary correspondence unverified",
   siteBuildCommit: process.env.GITHUB_SHA || null,
   archive: "occt-corresponding-source-candidate.tar.gz",
   archiveSizeBytes: bytes.byteLength,
-  archiveSha256: createHash("sha256").update(bytes).digest("hex"),
+  archiveSha256,
+  archiveReleaseTag,
+  archiveReleaseUrl,
   servedWasmSha256: provenance.sha256,
   servedWasmSizeBytes: provenance.sizeBytes,
   servedWasmPath: provenance.selectedWasm,
@@ -66,6 +74,7 @@ await writeFile(process.env.SOURCE_MANIFEST, JSON.stringify(report, null, 2) + "
 console.log("Published candidate OCCT source bundle manifest:", JSON.stringify({
   archiveSizeBytes: report.archiveSizeBytes,
   archiveSha256: report.archiveSha256,
+  archiveReleaseUrl: report.archiveReleaseUrl,
   servedWasmSha256: report.servedWasmSha256
 }, null, 2));
 NODE
