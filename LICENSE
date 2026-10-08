@@ -4,8 +4,9 @@ Effective: 2026-10-08
 Copyright (c) 2026 the respective FabCAD copyright holders.
 
 IMPORTANT: THIS IS A SOURCE-AVAILABLE LICENSE, NOT AN OPEN-SOURCE LICENSE.
-Commercial software use and providing hosted services are not permitted
-without separate written authorization.
+Internal business use and genuinely noncommercial, free third-party hosting
+are permitted. Commercial distribution of the code and commercially
+operated third-party hosted services require separate written authorization.
 
 1. Definitions
 
@@ -25,16 +26,37 @@ others and subject to their own license terms.
 manufacturing data, and other designs created or imported by a FabCAD
 user.
 
-"Commercial Use" means using, reproducing, adapting, incorporating,
-distributing, or making available Licensed Code in connection with any
-business, professional engagement, revenue-generating activity, paid
-product, paid service, or internal operation of an organization engaged
-in economic activity, whether or not the particular use is charged for.
+"Internal Use" means using, reproducing, running, modifying, or deploying
+Licensed Code inside an individual or organization's own operations,
+including commercial business operations, evaluation, proof-of-concept,
+research, production, and internal network services used by its personnel
+or contractors acting on its behalf. Internal Use does not include
+distributing Licensed Code as part of a product to external recipients
+or operating a Commercial Hosted Service for third parties.
 
-"Hosted Service" means making the functionality of Licensed Code
-available for use by other persons over a network, whether public or
-private and whether paid or free. This does not include accessing the
-Official FabCAD Service as an end user.
+"Hosted Service" means operating Licensed Code so that persons other
+than the operator's personnel or contractors acting on its behalf can
+use its functionality over a network. Internal Use and access to the
+Official FabCAD Service as an end user are not Hosted Services.
+
+"Noncommercial Free Hosted Service" means a Hosted Service that is free
+of charge to all users and is operated without direct or indirect
+commercial exploitation of the Licensed Code or the service. This
+excludes charging for access, usage, or required support; paid tiers;
+advertising or sponsorship revenue; promotion of paid products or
+services; sale of user data; and commercial lead generation. An
+operator's unrelated business activities alone do not disqualify an
+otherwise genuinely noncommercial, free Hosted Service.
+
+"Commercial Hosted Service" means a Hosted Service that does not meet
+all the conditions for a Noncommercial Free Hosted Service.
+
+"Commercial Product Distribution" means selling, licensing, or
+distributing Licensed Code as part of a product, application, device,
+or software offering to external recipients for direct or indirect
+commercial benefit. Selling physical products created using FabCAD,
+or selling User Content and its outputs, is not Commercial Product
+Distribution.
 
 "Official FabCAD Service" means the FabCAD application deployed by or
 with the express authorization of the Licensor, including the official
@@ -49,51 +71,67 @@ license to:
 
 (a) view, download, inspect, and study the Licensed Code, including
     for evaluation of its licensing and security;
-(b) reproduce, run, and modify the Licensed Code solely for your own
-    personal, educational, research, or hobby use that is not
-    Commercial Use and does not constitute a Hosted Service; and
+(b) reproduce, run, deploy, and modify the Licensed Code for personal,
+    educational, research, hobby, or Internal Use, including internal
+    business operations and commercial design workflows;
 (c) redistribute unmodified or modified copies of the Licensed Code
-    for non-commercial purposes, in source or binary form, provided
-    that you comply with Section 4.
+    for noncommercial purposes, in source or binary form, provided
+    that you comply with Section 4; and
+(d) deploy and operate a Noncommercial Free Hosted Service for third
+    parties, whether using original or modified Licensed Code,
+    provided that you comply with Section 4.
 
 You may access and use the Official FabCAD Service, including to design
 and produce items for sale or other commercial purposes, subject to
 the service's Terms of Use. This end-user permission does not authorize
-you to copy, deploy, modify, or commercially exploit Licensed Code
-outside the express grants above.
+Commercial Product Distribution or Commercial Hosted Services.
+Copying, internal deployment, modification, noncommercial
+redistribution, and noncommercial free hosting are governed by the
+express grants above.
 
 3. Uses Requiring Separate Written Authorization
 
 Without a separate written agreement from the relevant copyright
 holder(s), you may not:
 
-(a) engage in Commercial Use of Licensed Code;
-(b) provide a Hosted Service using Licensed Code, including a free
-    public clone or an internal network service for other users;
-(c) sell, license, or incorporate Licensed Code in a commercial
-    application, product, or service; or
-(d) grant any other person rights broader than those granted here.
+(a) engage in Commercial Product Distribution, including incorporating
+    Licensed Code into software or devices sold or commercially
+    licensed to external recipients;
+(b) operate a Commercial Hosted Service, including a service that is
+    free to its users but supported by advertising, commercial
+    promotion, or other direct or indirect monetization; or
+(c) grant any other person rights broader than those granted here.
+
+Internal Use by a business and the operation of a Noncommercial Free
+Hosted Service do not require separate written authorization.
 
 Authorization for Licensed Code does not replace any permission
 required for Third-Party Materials.
 
 4. Conditions on Redistribution
 
-For every redistribution permitted under Section 2(c), you must:
+For every redistribution permitted under Section 2(c), and for every
+Noncommercial Free Hosted Service permitted under Section 2(d), you must:
 
 (a) retain this complete License and all existing copyright,
     attribution, and license notices for Licensed Code;
 (b) identify your modifications and their dates in a reasonable way;
-(c) provide recipients a copy of this License and make clear that it
-    also governs redistributed modified Licensed Code;
+(c) provide recipients of copies with this License and make clear that
+    it also governs redistributed modified Licensed Code; for a Hosted
+    Service, provide users an easily accessible link to this License
+    and the required copyright and attribution notices;
 (d) preserve applicable Third-Party Materials notices and independently
-    satisfy their license requirements; and
-(e) not represent your copy as an Official FabCAD Service or as
-    endorsed by the Licensor.
+    satisfy their license requirements, including any corresponding
+    source and relinking obligations;
+(e) clearly identify any Hosted Service as independently operated and
+    not an Official FabCAD Service, and do not imply endorsement by
+    the Licensor; and
+(f) continue to meet the noncommercial and free-of-charge conditions
+    throughout operation of a service under Section 2(d).
 
-Any downstream recipient receives permissions to Licensed Code
-directly under this License from the relevant Licensor; you may not
-sublicense different permissions.
+Recipients of copies of Licensed Code receive permissions directly
+under this License from the relevant Licensor; you may not sublicense
+different permissions.
 
 5. User Content and Outputs
 
@@ -128,7 +166,7 @@ this License, you may modify that copy of the combined work for your
 own use and reverse engineer it for the purpose of debugging such
 modifications, to the extent required by LGPL-2.1 Section 6. This
 permission does not authorize redistributing Licensed Code under
-different terms, offering a Hosted Service, or granting a sublicense
+different terms, operating a Commercial Hosted Service, or granting a sublicense
 to others. If an applicable third-party license grants broader rights
 in the Third-Party Materials themselves, those rights prevail for
 those materials.
