@@ -57,9 +57,30 @@ for (const { path, name, version, license } of deps) {
 }
 await writeFile(join(root, "dist/THIRD_PARTY_LICENSES.txt"), licenseText.join("\n"));
 await writeFile(join(root, "dist/third-party-components.json"), JSON.stringify(report, null, 2) + "\n");
+
+// Vite copies these fonts to the live GitHub Pages output. Verify that every
+// embedded TTF is accompanied by its own unmodified OFL text and that both
+// files actually survive the production build.
+const bundledFontDir = join(root, "apps/fabcad/public/fonts");
+const publishedFontDir = join(root, "dist/fonts");
+const fontFiles = await readdir(bundledFontDir);
+const ttfs = fontFiles.filter(n => n.endsWith("-Regular.ttf")).sort();
+assert.ok(ttfs.length >= 8, `Expected at least 8 bundled fonts, found ${ttfs.length}`);
+for (const filename of ttfs) {
+  const licenseName = filename.replace(/-Regular\.ttf$/, "-OFL.txt");
+  assert.ok(fontFiles.includes(licenseName), `Missing OFL beside bundled font ${filename}`);
+  for (const assetName of [filename, licenseName]) {
+    const originalBytes = await readFile(join(bundledFontDir, assetName));
+    const publishedBytes = await readFile(join(publishedFontDir, assetName));
+    assert.ok(originalBytes.equals(publishedBytes),
+      `Published font/OFL bytes differ from checked-in original: ${assetName}`);
+  }
+}
+
 console.log(JSON.stringify({
   status: "runtime dependency notice files found and exported (not a legal certification)",
   total: report.length,
+  fontOflPairsVerified: ttfs.length,
   licenses: Object.fromEntries([...allowed].map(l => [l, report.filter(p => p.license === l).length])),
   documents: ["dist/THIRD_PARTY_LICENSES.txt", "dist/third-party-components.json"],
 }, null, 2));
