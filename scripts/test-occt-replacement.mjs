@@ -62,7 +62,10 @@ async function walk(dir) {
 }
 
 const original = await readFile(originalPath);
-const replacement = appendCustomSection(original);
+const sourceBuiltWasmPath = process.env.OCCT_WASM_PATH;
+const replacement = sourceBuiltWasmPath
+  ? await readFile(resolve(sourceBuiltWasmPath))
+  : appendCustomSection(original);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 assert.notEqual(digest(original), digest(replacement), "test artifact must differ from original");
@@ -70,7 +73,7 @@ assert.equal(WebAssembly.validate(replacement), true, "appended WASM must be str
 
 try {
   await writeFile(overridePath, replacement);
-  console.log("Alternative WASM written", { bytes: replacement.length, sha256: digest(replacement) });
+  console.log("Alternative WASM written", { sourceBuiltWasmPath: sourceBuiltWasmPath || null, bytes: replacement.length, sha256: digest(replacement) });
 
   // Load the changed binary through the actual OpenCascade.js glue.
   const { default: initOC } = await import("replicad-opencascadejs");
