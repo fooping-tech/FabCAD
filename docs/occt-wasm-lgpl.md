@@ -61,10 +61,25 @@ The flag is used **at build time** and deliberately does not accept arbitrary ne
 
 **Compatibility test still outstanding:** execute the above workflow with an independently rebuilt WASM and record a real browser smoke test of at least extrusion, Boolean, STEP export, STL export and an ordinary model opening. Unit tests proving the URL routing are not proof that a modified library works.
 
+## 3.1. Automated replacement integration smoke
+
+GitHub Pages CI has a separate `occt-replacement-smoke` job on pull requests:
+
+```sh
+node scripts/test-occt-replacement.mjs
+```
+
+This makes a distinct, valid alternative WASM file by appending a **non-semantic WebAssembly custom section** to the exact installed `replicad-opencascadejs/wasm` binary. The changed SHA-256 proves the test did not reuse the identical original file.
+
+The script uses that altered file to initialize OpenCascade.js and Replicad in Node, then verifies a box, a Boolean cut, STEP export, and STL export. It rebuilds FabCAD with `VITE_FABCAD_OCCT_WASM_OVERRIDE=1`, runs the OCCT distribution audit, verifies that `dist/occt-override.wasm` matches the supplied alternative byte for byte, and checks that the emitted worker references the replacement path. The test artifact is deleted afterward.
+
+**Critical limitation:** Adding a custom section leaves OCCT functionality unchanged. This establishes a working alternate-file path, but neither independent C++ source recompilation nor genuine OCCT functionality changes. It does not test a deployed browser interacting with a custom OCCT build and is not proof of LGPL-2.1 compliance.
+
 ## 4. LGPL-2.1 redistribution tasks still open
 
 - [x] Identify the upstream Replicad v1.1.0 build entry points, single-threaded OCI image and its recorded digest.
 - [x] Document how FabCAD loads the separately distributed WASM, and provide an opt-in same-origin replacement path with automated URL-selection tests.
+- [x] Run a CI integration smoke with a bitwise-altered WASM (non-semantic custom section), initialize CAD, execute Boolean and STEP/STL exports, and verify the override build output.
 - [x] Automate a hash/size check of the `dist/` WASM in CI.
 - [ ] Verify the full corresponding source chain, including OCCT 8.0.1 commit, any C++ changes/patches, the pinned upstream toolchain, and the license of each relevant component.
 - [ ] Obtain or rebuild from the *same sources/configuration* as the published `replicad-opencascadejs@1.1.0` artifacts; compare hashes when reproducibility is expected, and otherwise document functional provenance.
