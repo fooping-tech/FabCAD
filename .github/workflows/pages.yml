@@ -84,6 +84,23 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+
+  # Candidate corresponding-source archive, not a permanent LGPL source offer.
+  occt-source-bundle:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'occt-source-bundle')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/package-occt-sources.sh
+      - run: bash scripts/package-occt-sources.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: occt-lgpl-corresponding-source-candidate
+          path: occt-corresponding-source-candidate.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
   deploy:
     if: github.event_name != 'pull_request'
     environment:
