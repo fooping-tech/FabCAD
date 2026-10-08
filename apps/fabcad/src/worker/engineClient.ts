@@ -45,5 +45,8 @@ export class EngineClient {
 
   dispose(): void {
     this.worker.terminate();
+    const error = new Error("CAD worker stopped.");
+    for (const p of this.pending.values()) p.reject(error);
+    this.pending.clear();
   }
 }
