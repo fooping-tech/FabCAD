@@ -27,7 +27,7 @@ npm run build
 npm run audit:occt
 ```
 
-The audit checks the exact dependencies locked to `1.1.0`, locates the distributed WASM asset in `dist/`, checks its binary signature and prints its **SHA-256** and size. Keep this output in the PR/release records when performing the LGPL review. This does not establish that the LGPL requirements are satisfied.
+The audit checks the exact dependencies locked to `1.1.0`, locates the distributed WASM asset in `dist/`, checks its binary signature and prints its **SHA-256** and size. It also writes `dist/occt-wasm-provenance.json`, which publishes the exact distributed WASM hash alongside pinned upstream OCCT/OCJS source references and the original OCI builder digest. The site links this file from `licenses.html`. Keep this output in the PR/release records when performing the LGPL review. This is source *provenance metadata*, not confirmation that the LGPL source offer or relinking obligations are satisfied.
 
 ## 3. Opt-in loading of a user-rebuilt single-threaded WASM
 
