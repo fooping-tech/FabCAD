@@ -33,6 +33,7 @@ jobs:
       - run: npm run audit:licenses
       - run: bash -n scripts/package-occt-sources.sh
       - run: bash -n scripts/stage-occt-source-site.sh
+      - run: node --check scripts/verify-occt-publication.mjs
       # Serve the candidate source archive from the SAME Pages deployment as
       # the WASM. Never publish an executable without the documented source.
       # Packaging is release-only to avoid downloading 68 MiB on each PR.
@@ -150,3 +151,18 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # A green build only validates dist/. This verifies the actual CDN-served
+  # bytes after Pages deployment (including 70 MiB candidate source archive).
+  verify-publication:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify public source / WASM SHA-256, links, and build commit
+        run: node scripts/verify-occt-publication.mjs
