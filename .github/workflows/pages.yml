@@ -92,6 +92,30 @@ jobs:
           retention-days: 14
 
 
+  # Test exact matching against upstream npm WASM without modifying wrappers.
+  # The OCI linker includes precompiled OCCT native libraries; this is
+  # reproducibility evidence, not a full source rebuild or license verdict.
+  occt-original-binary-compare:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'occt-origin-compare')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: bash -n scripts/verify-occt-original-wasm.sh
+      - run: bash scripts/verify-occt-original-wasm.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: occt-original-wasm-comparison-evidence
+          path: ${{ runner.temp }}/fabcad-occt-origin-compare/original-wasm-comparison.json
+          retention-days: 14
+          if-no-files-found: warn
+
   # Label-gated end-to-end source-to-site test. PR artifacts remain temporary;
   # on main the identical stage script embeds the candidate in the Pages site.
   occt-source-bundle:
