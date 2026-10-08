@@ -53,6 +53,8 @@ jobs:
       # replacement loading + Boolean/STEP/STL + browser build output.
       # It is not an OCCT from-source rebuild or a legal compliance verdict.
       - run: node scripts/test-occt-replacement.mjs
+      - run: npm install --no-save --package-lock=false playwright-core@1.56.1
+      - run: node scripts/test-occt-browser.mjs
 
 
   # Costly C++/WASM re-link: triggered only when a reviewer adds this label.
@@ -71,6 +73,8 @@ jobs:
       - run: npm ci
       - run: bash -n scripts/rebuild-occt-wrapper.sh
       - run: bash scripts/rebuild-occt-wrapper.sh
+      - run: npm install --no-save --package-lock=false playwright-core@1.56.1
+      - run: node scripts/test-occt-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
