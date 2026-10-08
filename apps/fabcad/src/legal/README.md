@@ -12,4 +12,4 @@
 - FabCAD独自コードの条件はリポジトリルートの `LICENSE`（FabCAD Source Available License v1.0）。日本語の概要は `COMMERCIAL_LICENSE.md`。
 - 第三者製ライブラリの一覧は `THIRD_PARTY_NOTICES.md` と `licenses/`。標準搭載フォントは `THIRD_PARTY_FONTS.md` を参照。
 - 依存バージョン、配布するWASM、フォントを更新するときは、関連する表示・ライセンス原文・配布条件を同じ変更で見直す。
-- `replicad` の `LICENSE` / `package.json`（MIT）とREADME（AGPL）の不一致、OCCT系WASMのLGPL適合確認は未解決。公開前にチェックリストを完了する。
+- `replicad` のMIT採用は、2023-08-14の公式コミットで確認済み（READMEには旧AGPL記述あり）。OCCT系WASMのLGPL配布条件は引き続き未検証。詳細は `docs/occt-wasm-lgpl.md` とチェックリストを参照する。
