@@ -17,14 +17,14 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const dist = join(root, "dist");
 const base = "/FabCAD/";
 const port = 4198;
-const url = \`http://127.0.0.1:${port}\`;
+const url = `http://127.0.0.1:${port}`;
 const provenance = JSON.parse(await readFile(join(dist, "occt-wasm-provenance.json"), "utf8"));
 assert.equal(provenance.replacementMode, true, "Browser test requires WASM override build");
 
 const assets = await readdir(join(dist, "assets"));
-const workers = assets.filter(p => /^cadWorker-[^.]+\\.js$/.test(p));
+const workers = assets.filter(p => /^cadWorker-[^.]+\.js$/.test(p));
 assert.equal(workers.length, 1, "Expected exactly one Vite CAD worker chunk");
-const workerPath = \`${base}assets/${workers[0]}\`;
+const workerPath = `${base}assets/${workers[0]}`;
 
 const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: root,
