@@ -26,8 +26,10 @@ const workers = assets.filter(p => /^cadWorker-[^.]+\.js$/.test(p));
 assert.equal(workers.length, 1, "Expected exactly one Vite CAD worker chunk");
 const workerPath = `${base}assets/${workers[0]}`;
 
-const server = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
-  cwd: root,
+// Use the Vite CLI directly: the monorepo npm preview wrapper does not
+// forward positional CLI arguments to the workspace preview command.
+const server = spawn(process.execPath, [join(root, "node_modules/vite/bin/vite.js"), "preview", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+  cwd: join(root, "apps/fabcad"),
   env: process.env,
   stdio: ["ignore", "pipe", "pipe"],
   detached: false,
