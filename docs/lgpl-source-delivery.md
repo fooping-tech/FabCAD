@@ -34,6 +34,42 @@ For every FabCAD release that publicly serves an OCCT WASM:
 5. Verify in actual Chromium that a WASM rebuilt with a real C++ change loads through FabCAD's generated CAD worker; retain the build command, source patch, browser console, HTTP status and test results.
 6. Have counsel review whether §6(a)+(d) is the appropriate compliance route and whether the intended FabCAD Source Available terms permit the rights required by §6. **The separate same-origin WASM override is a useful engineering mechanism, not itself proof of a suitable LGPL §6(b) linking mechanism.**
 
+### Versioned archive retention (implemented, first public release pending)
+
+The current Pages source bundle is replaced on the next deployment. To make
+previously served OCCT versions inspectable, the release workflow now:
+
+1. Hashes both the exact served WASM and the packaged corresponding-source
+   candidate. Their complete SHA-256 digests form the GitHub Release tag
+   `occt-source-<wasm-sha256>-<archive-sha256>`.
+2. Publishes `occt-corresponding-source-candidate.tar.gz` to that release
+   **before** deploying the corresponding website build. The release job
+   has narrowly scoped `contents: write` permission.
+3. Never updates an existing release with that tag. Instead it re-downloads
+   the original archive and verifies the SHA-256; missing or changed data
+   blocks the deployment.
+4. Records a full `archiveReleaseUrl` and `archiveReleaseTag` in the
+   Pages `lgpl/occt-source-manifest.json`. Post-deployment CI downloads
+   and verifies **both** the current Pages copy and the versioned release
+   asset. The public licenses page points users to this manifest and the
+   releases index.
+
+The versioned source archives are *candidates*: source completeness,
+applied-patch provenance and practical relinking for LGPL-2.1 Sections
+4 and 6(a)/(d) remain subject to technical verification. GitHub Release
+availability alone does not establish these conditions. Releases are
+durable by project policy, not technically immutable against repository
+administrators, account loss, or deliberate deletion. Keep archival
+access available when the website or hosting setup changes.
+
+Reference implementations: [confBuild's component/version/binary notices]
+(https://confbuild.com/legal/open-source-notices/),
+[InvariantCAD's pinned WASM/source provenance]
+(https://github.com/shlokjain42/invariantCAD/blob/main/THIRD_PARTY_NOTICES.md),
+and [Qt's LGPL distribution guidance]
+(https://www.qt.io/ja-jp/development/download-open-source).
+Qt mainly documents LGPLv3; LGPL-2.1's own text governs FabCAD.
+
 ### Implementation status
 
 - [x] Upstream versions, source commits, patches location and builder image identified
@@ -44,7 +80,8 @@ For every FabCAD release that publicly serves an OCCT WASM:
 - [x] Candidate source archive generated in [CI #37783285458](https://github.com/fooping-tech/FabCAD/actions/runs/37783285458), with pinned repositories and source/build references. This **does not establish exact correspondence with the distributed npm WASM or complete relink material**.
 - [x] Automated Pages candidate source staging added to the deployment build, with release-WASM provenance embedded into the archive and a downloadable SHA-256 manifest. A release is only actually accessible **after merge and successful main deployment**.
 - [ ] Independently validate complete applied OCCT patches, matching source-to-binary provenance, and whether the packaged objects, bindings, toolchain recipes, and source are sufficient to rebuild/relink under the applicable LGPL option.
-- [ ] Verify the actual publicly deployed archive URL and its SHA-256 manifest after merge; protect stable access/retention for versions no longer current.
+- [x] Implement digest-tagged GitHub Releases retention, publish-before-deploy gate and post-deploy hash verification for previous source archives.
+- [ ] Confirm the first published Release asset and its matching Pages manifest after merge, and periodically audit retention.
 - [ ] Detailed legal determination of applicable LGPL §§4–6 and custom license permissions.
 
 **Release gate**: Keep PR #49 in Draft pending source-to-binary/relink-material validation and legal sign-off. CI green and a same-origin candidate archive are not an LGPL compliance verdict.
