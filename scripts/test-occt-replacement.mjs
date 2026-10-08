@@ -2,11 +2,11 @@
 /**
  * Exercise the opt-in OCCT WASM replacement path in CI.
  *
- * This creates a *valid but semantically unchanged* alternative WASM by
- * appending a WebAssembly custom section, then instantiates that exact file
- * with Replicad, checks CAD operations, builds FabCAD with the override,
- * and checks the build output. It is NOT an independently rebuilt/modified
- * OCCT library and does NOT certify LGPL compliance.
+ * Without OCCT_WASM_PATH, append a non-semantic custom section to make
+ * a distinct WASM file. With OCCT_WASM_PATH, load the supplied compiled WASM
+ * (e.g. one containing a modified C++ wrapper), exercise the same CAD/export
+ * operations and verify it is actually the one shipped by the Vite build.
+ * Neither mode certifies LGPL compliance or a full OCCT C++ source rebuild.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -95,7 +95,7 @@ try {
   assert.ok(step.length > 500 && new TextDecoder().decode(step.subarray(0, 200)).includes("ISO-10303-21"), "STEP export");
   const stl = cut.blobSTL({ tolerance: 0.1, angularTolerance: 0.3, binary: true });
   assert.ok((await stl.arrayBuffer()).byteLength > 100, "STL export");
-  console.log("Altered-section WASM: OCCT initialization, solid creation, Boolean, STEP/STL passed");
+  console.log(sourceBuiltWasmPath ? "Source-compiled WASM: OCCT initialization, solid creation, Boolean, STEP/STL passed" : "Custom-section WASM: OCCT initialization, solid creation, Boolean, STEP/STL passed");
 
   // Build the browser app against that same alternate binary.
   run("npm", ["run", "build"], { VITE_FABCAD_OCCT_WASM_OVERRIDE: "1" });
