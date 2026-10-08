@@ -29,6 +29,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run audit:occt
+      - run: npm run audit:licenses
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
