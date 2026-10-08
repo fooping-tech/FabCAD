@@ -70,5 +70,5 @@ const report = {
     warning: "The original npm WASM was not independently byte-for-byte reproduced. This record is not proof of LGPL compliance.",
   },
 };
-await writeFile(join(dist, "occt-wasm-provenance.json"), JSON.stringify(report, null, 2) + "\\n");
+await writeFile(join(dist, "occt-wasm-provenance.json"), JSON.stringify(report, null, 2) + "\n");
 console.log(JSON.stringify(report, null, 2));
