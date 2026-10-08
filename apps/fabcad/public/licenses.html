@@ -24,6 +24,12 @@
 <li><strong>Open CASCADE Technology (OCCT)</strong>: LGPL-2.1と特別例外。<a href="https://github.com/fooping-tech/FabCAD/blob/main/licenses/LGPL-2.1.txt">LGPL本文</a>、<a href="https://github.com/fooping-tech/FabCAD/blob/main/licenses/OCCT_LGPL_EXCEPTION.txt">特別例外</a>、<a href="https://github.com/Open-Cascade-SAS/OCCT">ソースコード</a>。</li>
 </ul>
 <p><a href="./occt-wasm-provenance.json">配信WASMのSHA-256・OCCT 8.0.1と対応ソースの来歴（JSON）</a>を公開しています。この記録は再ビルドの完全な一致やLGPLの法令遵守を保証するものではありません。</p>
+<h2>ネイティブビルド依存ライブラリ</h2>
+<p>OpenCascade.jsの固定ビルド入力にはFreeTypeとRapidJSONが含まれます。WASMへ最終的に組み込まれた範囲は別途検証が必要ですが、許諾表示を保守的に公開しています。</p>
+<ul>
+<li><strong>FreeType</strong>（FTL / GPLv2のデュアルライセンス）: <a href="./licenses/freetype-FTL.txt">FreeType License原文</a>、<a href="https://github.com/freetype/freetype/tree/de8b92dd7ec634e9e2b25ef534c54a3537555c11">使用ビルドのソース指定</a>。</li>
+<li><strong>RapidJSON</strong>（主にMIT、部分的に第三者許諾）: <a href="./licenses/rapidjson-license.txt">ライセンス原文・第三者通知</a>、<a href="https://github.com/Tencent/rapidjson/tree/24b5e7a8b27f42fa16b96fc70aade9106cf7102f">使用ビルドのソース指定</a>。</li>
+</ul>
 <h2>アプリ・文字組み</h2>
 <ul>
 <li>React / React DOM: MIT。<a href="https://github.com/fooping-tech/FabCAD/blob/main/licenses/react-MIT.txt">ライセンス本文</a>。</li>
