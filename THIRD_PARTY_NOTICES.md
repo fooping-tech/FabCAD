@@ -15,6 +15,12 @@ FabCAD の `LICENSE` は **FabCAD 著作権者が許諾できる独自コード*
 | [opentype.js](https://github.com/opentypejs/opentype.js) | MIT | [opentype.js MIT本文](licenses/opentype.js-MIT.txt) |
 | 標準搭載の8書体 | SIL Open Font License 1.1 | [フォント別の著作権表示](THIRD_PARTY_FONTS.md)、`apps/fabcad/public/fonts/*-OFL.txt` |
 
+## 本番依存パッケージの自動ライセンス表示
+
+ビルドで `npm run audit:licenses` を実行し、`package-lock.json` の本番外部依存に関する各パッケージの原文 `LICENSE`/`COPYING`/`NOTICE` を `dist/THIRD_PARTY_LICENSES.txt` に収集します。同時に `dist/third-party-components.json` を生成し、[第三者ライセンス画面](apps/fabcad/public/licenses.html)から参照できます。未知のライセンス種別や許諾原文が欠けるとCIを失敗させます。
+
+対象はnpmの `!dev && !devOptional` の外部依存で、2026-10-08 時点ではMIT、ISC、LGPL-2.1-onlyの3種です。**Viteの実際のトランジティブな配布コードの完全なSBOMやC++/WASMの依存を網羅するわけではありません。** フォントは別に `THIRD_PARTY_FONTS.md` で管理します。
+
 ## Open CASCADE / LGPL の取り扱い
 
 Open CASCADE の機能は、`replicad-opencascadejs` によりWebAssemblyとしてブラウザへ配信されます。上流[PR #263](https://github.com/sgenoud/replicad/pull/263)でOCCT 8.0.1の単一スレッドWASM用OCIイメージとSHA256ダイジェストを確認しました。追跡結果は[配布・再構築の技術文書](docs/occt-wasm-lgpl.md)に記録しています。**FabCAD独自コードのSource Availableライセンスは、LGPLコンポーネントの利用者の権利を制限しません**。
