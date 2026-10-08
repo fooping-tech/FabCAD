@@ -67,8 +67,8 @@ export function StatusBar(): ReactElement {
       </span>
       {autosave.status === "error" && <button className="btn small" onClick={retryAutosave}>Retry save</button>}
       <button className="btn small" onClick={() => void recoverPreviousAutosave()} title="Restore an earlier browser recovery snapshot">Recover</button>
-      {model.busy && computeSeconds >= 8 && (
-        <button className="btn small" onClick={() => void restartCadWorker()}>Stop / restart CAD ({computeSeconds}s)</button>
+      {((model.busy && computeSeconds >= 8) || model.kernel === "error") && (
+        <button className="btn small" onClick={() => void restartCadWorker()}>{model.kernel === "error" ? "Restart CAD" : `Stop / restart CAD (${computeSeconds}s)`}</button>
       )}
       <span>
         {model.cached && model.kernel !== "error"
