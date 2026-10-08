@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プライバシーポリシー | FabCAD</title>
+<style>body{margin:0;background:#f6f7f9;color:#253748;font:16px/1.9 system-ui,sans-serif}main{max-width:800px;margin:auto;padding:32px 20px 64px;overflow-wrap:anywhere}h1{font-size:28px}h2{font-size:20px;margin-top:32px}a{color:#2f6f9e}nav{display:flex;flex-wrap:wrap;gap:20px}</style>
+</head>
+<body>
+<main>
+<nav>
+<a href="./">FabCAD紹介</a>
+<a href="./app/" target="_blank" rel="noopener noreferrer">FabCADを開く</a>
+<a href="./terms.html">利用規約</a>
+<a href="./privacy.html">プライバシーポリシー</a>
+</nav>
+<h1>プライバシーポリシー</h1>
+<section>
+<h2>対象</h2>
+<p>このポリシーは fooping-tech が公開する FabCAD におけるデータの取り扱いを説明します。最終更新日は2026年10月8日です。</p>
+</section>
+<section>
+<h2>ブラウザ内の保存</h2>
+<p>設計データ（読み込んだ STEP 等を含む）と再計算結果のキャッシュを IndexedDB に保存し、再訪問時の復元と読み込みの高速化に利用します。利用規約の同意バージョンと同意日時を localStorage に保存し、同意済みかどうかの判定に利用します。同意履歴はサーバーに送信しません。保存内容はブラウザや端末ごとに管理され、ブラウザのサイトデータ消去で削除できます。削除前に必要な設計をファイル保存してください。</p>
+</section>
+<section>
+<h2>共有URLとファイル</h2>
+<p>共有URLには設計データが圧縮された状態で #project= 以降に含まれます。これは暗号化ではなく、URLを知る人は設計を復元できます。URLのフラグメント（# 以降）は通常の HTTP リクエストでは配信サーバーへ送られませんが、URLを貼り付けたサービスや受信者、ブラウザ履歴等には残る可能性があります。個人情報や機密情報を含む設計の共有には注意してください。Save project で保存するファイルにも設計データが含まれます。</p>
+</section>
+<section>
+<h2>読み込むファイル・フォント</h2>
+<p>読み込む設計ファイルやユーザー指定のフォントはブラウザ内で処理し、FabCAD が外部サーバーへ送信する処理はありません。ユーザー指定のフォント本体はプロジェクトに埋め込みませんが、生成された輪郭などは設計データに含まれる場合があります。標準搭載のフォントや計算用プログラムはサイトから取得します。</p>
+</section>
+<section>
+<h2>アクセス解析・配信に伴う通信</h2>
+<p>現在の FabCAD アプリにはアクセス解析、広告、設計データや操作履歴を外部送信する機能はありません。サイトの HTML・プログラム・画像・フォント等の取得時には、配信サービスである GitHub Pages に IP アドレス、リクエスト先、ブラウザ情報等の通信情報が伝わります。その取り扱いは GitHub のプライバシーに関する説明も確認してください。リンク先のサイトではそれぞれのポリシーが適用されます。</p>
+</section>
+<section>
+<h2>変更と問い合わせ</h2>
+<p>アクセス解析や外部送信を追加する場合は、送信項目・目的・送信先等をこのページに反映します。問い合わせは下記の GitHub リポジトリから行えます。公開の場に個人情報や機密情報を書かないでください。</p>
+</section>
+<p>
+<a href="https://github.com/fooping-tech/FabCAD">問い合わせ先: fooping-tech/FabCAD</a>
+</p>
+<p>
+<a href="https://docs.github.com/ja/site-policy/privacy-policies/github-general-privacy-statement">GitHub のプライバシーに関する説明</a>
+</p>
+</main>
+</body>
+</html>

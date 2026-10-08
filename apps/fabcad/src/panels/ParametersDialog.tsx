@@ -1,3 +1,4 @@
+import { LegalLinks } from "../legal/LegalLinks";
 import {
   type Parameter,
   type ParameterUnit,
@@ -260,12 +261,14 @@ export function AboutDialog(): ReactElement {
             compiler that turns bodies into parts you can actually cut.
           </p>
           <p>
-            Geometry kernel: OpenCASCADE through Replicad (LGPL-2.1). Rendering: Three.js. Nothing
-            leaves your computer; projects are saved as <code>.fabcad.json</code> files.
+            Geometry kernel: OpenCASCADE through Replicad (LGPL-2.1). Rendering: Three.js.
+            Projects are saved in this browser; export <code>.fabcad.json</code> files for backup.
+            Share links contain the project data.
           </p>
           <p style={{ marginBottom: 0 }} className="field-hint">
             Version {__APP_VERSION__}
           </p>
+          <LegalLinks />
         </div>
         <div className="modal-footer">
           <button className="btn primary" onClick={closeDialog}>
