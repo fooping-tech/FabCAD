@@ -581,6 +581,7 @@ table.grid td input { padding: 2px 5px; }
 .touch-btn.on { background: var(--active); color: var(--accent-strong); }
 .touch-btn.primary { background: var(--ok); border-color: var(--ok); color: #fff; }
 .touch-btn.danger { color: var(--danger); }
+.touch-status { display: none; gap: 6px; }
 
 @media (pointer: coarse) {
   .touch-bar { display: flex; }
@@ -607,6 +608,7 @@ table.grid td input { padding: 2px 5px; }
   }
   .status { display: none; }
   .touch-bar { display: flex; }
+  .touch-status { display: contents; }
 
   .header { gap: 6px; padding: 0 8px; }
   .brand { font-size: 0; gap: 0; }
