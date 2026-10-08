@@ -9,6 +9,7 @@ import {
   redo,
   run,
   saveProject,
+  recoverPreviousAutosave,
   undo,
   useDocument,
   useHistoryState,
@@ -123,6 +124,7 @@ export function Header({
           { label: "New project", icon: "new", onSelect: createProject },
           { label: "Open…", icon: "open", kbd: `${mod}O`, onSelect: () => void openProject() },
           { label: "Save project", icon: "save", kbd: `${mod}S`, onSelect: saveProject },
+          { label: "Recover previous autosave…", icon: "open", onSelect: () => void recoverPreviousAutosave() },
           {
             label: "Share link…",
             icon: "link",
