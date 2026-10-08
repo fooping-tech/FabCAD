@@ -34,12 +34,22 @@ jobs:
       - run: bash -n scripts/package-occt-sources.sh
       - run: bash -n scripts/stage-occt-source-site.sh
       - run: node --check scripts/verify-occt-publication.mjs
+      - run: bash -n scripts/publish-occt-source-release.sh
       # Serve the candidate source archive from the SAME Pages deployment as
       # the WASM. Never publish an executable without the documented source.
       # Packaging is release-only to avoid downloading 68 MiB on each PR.
       - name: Stage matching OCCT candidate sources for Pages
         if: github.event_name != 'pull_request'
         run: bash scripts/stage-occt-source-site.sh
+      # Archive source candidates outside Pages so past releases remain
+      # downloadable after subsequent site deployments replace dist/.
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: occt-source-for-release
+          path: dist/lgpl/
+          if-no-files-found: error
+          retention-days: 2
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
@@ -140,13 +150,33 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # Limit contents:write to the publication job, not the website build.
+  # Verify an existing digest-tagged release instead of overwriting assets.
+  archive-occt-source:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: occt-source-for-release
+          path: dist/lgpl/
+      - name: Publish and verify digest-tagged OCCT source archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: fooping-tech/FabCAD
+        run: bash scripts/publish-occt-source-release.sh
+
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, archive-occt-source]
     steps:
       - name: Deploy
         id: deployment
