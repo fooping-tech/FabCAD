@@ -52,6 +52,7 @@ if (provenance.replacementMode || provenance["replicad-opencascadejs"] !== "1.1.
 const bytes = await readFile(process.env.SOURCE_ARCHIVE);
 const report = {
   status: "candidate source archive: legal completeness and exact binary correspondence unverified",
+  siteBuildCommit: process.env.GITHUB_SHA || null,
   archive: "occt-corresponding-source-candidate.tar.gz",
   archiveSizeBytes: bytes.byteLength,
   archiveSha256: createHash("sha256").update(bytes).digest("hex"),
