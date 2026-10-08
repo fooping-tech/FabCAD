@@ -423,8 +423,16 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 
 ## ライセンスについて
 
-幾何カーネルの OpenCASCADE と Replicad は LGPL-2.1 です。
+**FabCADの独自ソースコードは [FabCAD Source Available License v1.0](LICENSE) で公開しています。OSIの定義するオープンソースではありません。**
 
-文字組みには opentype.js（MIT）と HarfBuzz（harfbuzzjs、MIT）を使っています。
+- コードの閲覧、個人・非商用での学習、改変、条件付きの再配布は許可しています。
+- 独自コードを自社製品・業務へ組み込むことや、第三者へWebサービスとして提供すること（無料を含む）には、別途書面による許諾が必要です。詳しくは [商用ライセンス案内](COMMERCIAL_LICENSE.md) を参照してください。
+- **公式FabCADで作成した設計データやSVG・DXF・STL等の成果物は、商用利用できます。** FabCADを使っただけで利用者の権利が運営者へ移転することはありません。第三者素材の権利や加工時の安全確認には注意してください。公式サイトの[利用規約](https://fooping-tech.github.io/FabCAD/terms.html)も参照してください。
 
-標準搭載のフォントは SIL Open Font License 1.1 です。フォントは変更せずに同梱しています。書体ごとの著作権表示、入手元、ライセンス本文の場所は [`THIRD_PARTY_FONTS.md`](THIRD_PARTY_FONTS.md) にあります。
+第三者製ライブラリ・フォントには独自のライセンスが適用され、上記の制限の対象外です。
+
+- [第三者コンポーネントとライセンス一覧](THIRD_PARTY_NOTICES.md)
+- Replicad本体は `LICENSE` とnpmのメタデータ上MIT、`replicad-opencascadejs`はLGPL-2.1-only、Open CASCADE TechnologyはLGPL-2.1と特別例外です。ReplicadのREADMEのAGPL記載とMIT表示には不整合があり、上流への確認が必要です。
+- 文字組みには opentype.js（MIT）と HarfBuzz（harfbuzzjs、MIT）を使っています。
+- 標準搭載フォントは SIL Open Font License 1.1 で、[書体ごとの表示・入手元](THIRD_PARTY_FONTS.md)とライセンス本文を保持しています。
+- **LGPLを含む実際のWASM配布物に対するソース公開・再リンク等の適合性確認は別途必要**です。未確認の項目は [第三者ライセンスのチェックリスト](THIRD_PARTY_NOTICES.md#配布前の確認事項) を参照してください。
