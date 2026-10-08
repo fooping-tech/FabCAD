@@ -133,6 +133,46 @@ export const HELP: Record<string, HelpEntry> = {
     limitations: ["Fonts you loaded yourself are not in it, as in a saved project."],
   },
 
+  "file.autosave": {
+    title: "Autosave",
+    summary: "The project is kept in this browser as you work; the status bar says whether it is.",
+    what: [
+      "A moment after each change, and when the tab is hidden or closed, the project is saved in this browser (IndexedDB). Opening FabCAD again in the same browser brings it back. Nothing is uploaded.",
+      "The status bar shows the state: Not autosaved yet, Autosaving…, Autosaved (the browser has confirmed the write), Autosave failed, or Autosave stopped: another tab.",
+      "Autosave failed: the browser refused the write (storage full, private browsing …). Saving is tried again with the next change; Retry tries now. When storage is full, the cached 3D models are cleared first, then the older autosaves.",
+      "Autosave stopped: another tab: FabCAD is open in another tab of this browser and saved there after this tab. This tab stops saving so that it does not overwrite the other one silently. Keep this tab saves this tab's project in its place; the other tab's version stays in File → Recover autosave….",
+      "A restored project counts as not saved to a file, so New and Open ask before replacing it.",
+    ],
+    limitations: [
+      "The autosave stays in this browser on this device. Clearing the site data removes it: use Save project to keep a file.",
+      "When the tab is closed or the phone suspends the browser, the last save is tried but cannot be guaranteed.",
+    ],
+  },
+  "file.recover": {
+    title: "Recover Autosave",
+    summary: "Open one of the earlier versions of the project that this browser keeps.",
+    what: [
+      "File → Recover autosave… lists the last 5 autosaves of this browser, newest first, with the time, the project name and the size. Open replaces the current project with that version, after asking if the current one has changes.",
+      "Every autosave is checked when it is read. If the latest one is damaged, FabCAD opens the newest intact one at start-up and says so.",
+    ],
+    limitations: [
+      "Only 5 versions are kept, and older ones may be removed when storage is full.",
+      "An opened version is not saved to a file: use Save project to keep it.",
+    ],
+  },
+  "model.stop": {
+    title: "Stop Computation",
+    summary: "Stop a computation of the model that takes too long, or restart the geometry kernel.",
+    what: [
+      "When the model has been computing for 8 seconds, Stop appears in the status bar. Stop ends the computation and starts the geometry kernel again; computing is then paused (the status bar reads Paused) so that the same model does not start the same long computation again.",
+      "While paused, change what took long: drag the end of the timeline back before the step, suppress or edit it. Resume computes the model again.",
+      "Restart CAD appears when the geometry kernel itself failed. It starts the kernel again and computes the model.",
+    ],
+    limitations: [
+      "Stopping discards the computation in progress; the project itself is not changed.",
+      "The 3D view is empty until the model has been computed again.",
+    ],
+  },
   "file.share-link": {
     title: "Share Link",
     summary: "A link that opens this project, for someone else or another browser.",

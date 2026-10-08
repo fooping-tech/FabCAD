@@ -5,6 +5,17 @@ import type {
   WorkerResponses,
 } from "./protocol";
 
+/**
+ * The worker itself failed (crashed, or was stopped): unlike an error the engine reports for a
+ * request, it leaves the worker unusable until it is restarted.
+ */
+export class WorkerFailure extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkerFailure";
+  }
+}
+
 /** Promise-based client for the CAD worker. */
 export class EngineClient {
   private worker: Worker;
@@ -25,7 +36,7 @@ export class EngineClient {
       else p.reject(new Error(msg.error));
     };
     this.worker.onerror = (event) => {
-      const error = new Error(event.message || "The CAD worker crashed.");
+      const error = new WorkerFailure(event.message || "The CAD worker crashed.");
       for (const p of this.pending.values()) p.reject(error);
       this.pending.clear();
     };
@@ -45,7 +56,7 @@ export class EngineClient {
 
   dispose(): void {
     this.worker.terminate();
-    const error = new Error("CAD worker stopped.");
+    const error = new WorkerFailure("CAD worker stopped.");
     for (const p of this.pending.values()) p.reject(error);
     this.pending.clear();
   }

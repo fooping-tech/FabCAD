@@ -61,7 +61,8 @@ export function openDb(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("IndexedDB is unavailable"));
-    request.onblocked = () => reject(new Error("IndexedDB upgrade blocked by another tab. Close other FabCAD tabs."));
+    // `onblocked` is not a failure: the open goes on once the other tab closes its connection
+    // (every connection here is short-lived).
   });
 }
 
@@ -82,13 +83,27 @@ export async function loadRecoverySnapshots(): Promise<AutosaveEntry[]> {
   }
 }
 
+const headToken = (head: unknown): string | null =>
+  head && typeof head === "object" && typeof (head as AutosaveEntry).token === "string"
+    ? (head as AutosaveEntry).token
+    : null;
+
+/** The token of the autosave kept now, to take over from another tab (see `AutosaveConflictError`). */
+export async function currentAutosaveToken(): Promise<string | null> {
+  const db = await openDb();
+  try {
+    return headToken(await read(db.transaction(STORE, "readonly").objectStore(STORE).get(KEY)));
+  } finally {
+    db.close();
+  }
+}
+
 export async function loadAutosave(): Promise<AutosaveLoad> {
   const db = await openDb();
   try {
     const head: unknown = await read(db.transaction(STORE, "readonly").objectStore(STORE).get(KEY));
     if (typeof head === "string") return { json: head, token: null, recovered: false }; // v2 migration
-    const token = head && typeof head === "object" && typeof (head as AutosaveEntry).token === "string"
-      ? (head as AutosaveEntry).token : null;
+    const token = headToken(head);
     if (valid(head)) return { json: head.json, token, recovered: false };
     const backups = await read(db.transaction(HISTORY_STORE, "readonly").objectStore(HISTORY_STORE).getAll()) as unknown[];
     const previous = backups.filter(valid).sort((a, b) => b.savedAt - a.savedAt)[0];
@@ -113,10 +128,7 @@ async function writeAutosave(json: string, expectedToken: string | null): Promis
       tx.onerror = () => { /* onabort reports the failure */ };
       const get = projects.get(KEY);
       get.onsuccess = () => {
-        const head: unknown = get.result;
-        const actual = head && typeof head === "object" && typeof (head as AutosaveEntry).token === "string"
-          ? (head as AutosaveEntry).token : null;
-        if (actual !== expectedToken) {
+        if (headToken(get.result) !== expectedToken) {
           failure = new AutosaveConflictError();
           tx.abort();
           return;
@@ -135,30 +147,40 @@ async function writeAutosave(json: string, expectedToken: string | null): Promis
   }
 }
 
-/** Only disposable geometry caches may be cleared when storage is full. */
-async function clearGeometryCache(): Promise<void> {
-  const db = await openDb();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(RESULT_STORE, "readwrite");
-      tx.objectStore(RESULT_STORE).clear();
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error ?? new Error("Could not clear model cache"));
-    });
-  } finally {
-    db.close();
-  }
+function clearStore(name: string): Promise<void> {
+  return openDb().then(async (db) => {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(name, "readwrite");
+        tx.objectStore(name).clear();
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error ?? new Error(`Could not clear ${name}`));
+      });
+    } finally {
+      db.close();
+    }
+  });
 }
 
+const isQuotaError = (error: unknown): boolean =>
+  error instanceof DOMException && error.name === "QuotaExceededError";
+
+/**
+ * When storage is full, the disposable geometry cache goes first, then the older recovery
+ * snapshots: the newest version of the project is what must be kept.
+ */
 export async function storeAutosave(json: string, expectedToken: string | null): Promise<string> {
   try {
     return await writeAutosave(json, expectedToken);
   } catch (error) {
-    if (error instanceof AutosaveConflictError) throw error;
-    if (error instanceof DOMException && error.name === "QuotaExceededError") {
-      await clearGeometryCache();
-      return writeAutosave(json, expectedToken);
-    }
-    throw error;
+    if (!isQuotaError(error)) throw error;
   }
+  await clearStore(RESULT_STORE);
+  try {
+    return await writeAutosave(json, expectedToken);
+  } catch (error) {
+    if (!isQuotaError(error)) throw error;
+  }
+  await clearStore(HISTORY_STORE);
+  return writeAutosave(json, expectedToken);
 }
