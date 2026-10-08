@@ -432,6 +432,7 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 第三者製ライブラリ・フォントには独自のライセンスが適用され、上記の制限の対象外です。
 
 - [第三者コンポーネントとライセンス一覧](THIRD_PARTY_NOTICES.md)
+- [ライセンス方針・権利者・LGPLのマージ前レビュー資料](docs/license-review-packet.md)
 - Replicad本体は `LICENSE` とnpmのメタデータ上MIT、`replicad-opencascadejs`はLGPL-2.1-only、Open CASCADE TechnologyはLGPL-2.1と特別例外です。Replicadは2023年8月14日の[公式コミット「Relicense everything to MIT」](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)でMITへ再ライセンスされています。README末尾のAGPL表記は旧記述が残存したものと判断できます。
 - 文字組みには opentype.js（MIT）と HarfBuzz（harfbuzzjs、MIT）を使っています。
 - 標準搭載フォントは SIL Open Font License 1.1 で、[書体ごとの表示・入手元](THIRD_PARTY_FONTS.md)とライセンス本文を保持しています。
