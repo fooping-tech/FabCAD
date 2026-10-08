@@ -1,0 +1,164 @@
+FabCAD Source Available License, Version 1.0
+Effective: 2026-10-08
+
+Copyright (c) 2026 the respective FabCAD copyright holders.
+
+IMPORTANT: THIS IS A SOURCE-AVAILABLE LICENSE, NOT AN OPEN-SOURCE LICENSE.
+Commercial software use and providing hosted services are not permitted
+without separate written authorization.
+
+1. Definitions
+
+"Licensor" means the copyright holder(s) who own and license the
+applicable FabCAD original code.
+
+"Licensed Code" means the original source code, object code, scripts,
+tests, and accompanying technical documentation in the FabCAD repository
+to the extent they are owned or validly licensable by the Licensor. It
+does not include Third-Party Materials or User Content.
+
+"Third-Party Materials" means software, libraries, fonts, assets, or
+other materials distributed with or used by FabCAD that are owned by
+others and subject to their own license terms.
+
+"User Content" means models, project files, drawings, sketches,
+manufacturing data, and other designs created or imported by a FabCAD
+user.
+
+"Commercial Use" means using, reproducing, adapting, incorporating,
+distributing, or making available Licensed Code in connection with any
+business, professional engagement, revenue-generating activity, paid
+product, paid service, or internal operation of an organization engaged
+in economic activity, whether or not the particular use is charged for.
+
+"Hosted Service" means making the functionality of Licensed Code
+available for use by other persons over a network, whether public or
+private and whether paid or free. This does not include accessing the
+Official FabCAD Service as an end user.
+
+"Official FabCAD Service" means the FabCAD application deployed by or
+with the express authorization of the Licensor, including the official
+web application identified by the project at
+https://fooping-tech.github.io/FabCAD/app/.
+
+2. Rights Granted
+
+Subject to compliance with this License, the Licensor grants you a
+non-exclusive, worldwide, royalty-free, non-sublicensable copyright
+license to:
+
+(a) view, download, inspect, and study the Licensed Code, including
+    for evaluation of its licensing and security;
+(b) reproduce, run, and modify the Licensed Code solely for your own
+    personal, educational, research, or hobby use that is not
+    Commercial Use and does not constitute a Hosted Service; and
+(c) redistribute unmodified or modified copies of the Licensed Code
+    for non-commercial purposes, in source or binary form, provided
+    that you comply with Section 4.
+
+You may access and use the Official FabCAD Service, including to design
+and produce items for sale or other commercial purposes, subject to
+the service's Terms of Use. This end-user permission does not authorize
+you to copy, deploy, modify, or commercially exploit Licensed Code
+outside the express grants above.
+
+3. Uses Requiring Separate Written Authorization
+
+Without a separate written agreement from the relevant copyright
+holder(s), you may not:
+
+(a) engage in Commercial Use of Licensed Code;
+(b) provide a Hosted Service using Licensed Code, including a free
+    public clone or an internal network service for other users;
+(c) sell, license, or incorporate Licensed Code in a commercial
+    application, product, or service; or
+(d) grant any other person rights broader than those granted here.
+
+Authorization for Licensed Code does not replace any permission
+required for Third-Party Materials.
+
+4. Conditions on Redistribution
+
+For every redistribution permitted under Section 2(c), you must:
+
+(a) retain this complete License and all existing copyright,
+    attribution, and license notices for Licensed Code;
+(b) identify your modifications and their dates in a reasonable way;
+(c) provide recipients a copy of this License and make clear that it
+    also governs redistributed modified Licensed Code;
+(d) preserve applicable Third-Party Materials notices and independently
+    satisfy their license requirements; and
+(e) not represent your copy as an Official FabCAD Service or as
+    endorsed by the Licensor.
+
+Any downstream recipient receives permissions to Licensed Code
+directly under this License from the relevant Licensor; you may not
+sublicense different permissions.
+
+5. User Content and Outputs
+
+No ownership of User Content is transferred to the Licensor merely
+because a person uses FabCAD. This License does not impose
+non-commercial restrictions on User Content or on SVG, DXF, STL, STEP,
+3MF, or other files generated from User Content. Users may
+commercially use their own designs and outputs, subject to applicable
+law and any rights or obligations associated with third-party input,
+fonts, artwork, or other materials.
+
+This section is not an assignment or warranty that any particular
+User Content is free of third-party rights.
+
+6. Third-Party Software and Statutory Rights
+
+Third-Party Materials remain governed solely by their respective
+licenses. In particular, nothing in this License limits permissions
+or rights granted under the LGPL, MIT License, SIL Open Font License,
+or other licenses for such materials. Where a third-party license
+allows use, replacement, modification, reverse engineering for
+debugging modifications, or redistribution, this License does not
+override those rights with respect to that third-party component.
+
+No trademark, service mark, or patent license is granted by this
+License beyond rights, if any, required by applicable law or provided
+by a separate agreement.
+
+7. Termination and Reinstatement
+
+Your rights under this License terminate automatically if you violate
+its terms. If you stop the violation and fully cure it within 30 days
+after first discovering it, your license is reinstated provisionally
+unless the Licensor explicitly terminates it for the violation within
+30 days after the cure. Rights already granted to compliant recipients
+are not terminated solely because your rights terminate.
+
+8. Disclaimer and Limitation of Liability
+
+THE LICENSED CODE IS PROVIDED "AS IS", WITHOUT WARRANTIES OF ANY KIND,
+INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT, TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR IS NOT
+LIABLE FOR INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL, OR PUNITIVE
+DAMAGES ARISING FROM THE LICENSED CODE. THIS SECTION DOES NOT EXCLUDE
+OR LIMIT LIABILITY THAT CANNOT LEGALLY BE EXCLUDED OR LIMITED.
+
+9. Governing Law and Severability
+
+This License is governed by the laws of Japan, without excluding
+mandatory protections that apply under other applicable law. If any
+part is unenforceable, the remaining parts continue to apply to the
+extent permitted by law.
+
+10. Later Versions and Separate Agreements
+
+A later license version applies only if the relevant Licensor expressly
+offers it for the applicable Licensed Code. No later change withdraws
+rights already granted for copies obtained under this Version 1.0,
+provided the licensee complies with its terms.
+
+The Licensor may offer separate commercial licenses or other written
+permissions. Any such agreement changes your rights only to the
+extent stated in that agreement.
+
+For commercial licensing requests and project information:
+https://github.com/fooping-tech/FabCAD
