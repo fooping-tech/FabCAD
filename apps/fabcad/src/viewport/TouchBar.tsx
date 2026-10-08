@@ -4,6 +4,7 @@ import { appState } from "../app/appState";
 import { pressEnter, pressEscape } from "../app/shortcuts";
 import { createTool } from "../sketch/createTools";
 import { useStore } from "../app/tinyStore";
+import { StatusActions } from "../panels/StatusActions";
 import { Icon } from "../ui/Icon";
 
 /**
@@ -34,6 +35,10 @@ export function TouchBar(): ReactElement | null {
         <Icon name="menu" size={16} />
         {workspace === "fabrication" ? "Settings" : "Browser"}
       </button>
+      {/* Small screens have no status bar: what autosave and the kernel need from the user is here. */}
+      <span className="touch-status">
+        <StatusActions touch />
+      </span>
       {workspace === "design" && (
         <>
           {(running || featureDialog) && (

@@ -38,7 +38,7 @@ import {
   storeAutosave,
 } from "./persistence";
 import { decodeShareFragment, isShareFragment } from "./shareLink";
-import { loadCachedModel, storeCachedModel } from "./resultCache";
+import { loadCachedModel, loadSlowestRecompute, storeCachedModel } from "./resultCache";
 import { startTextMaintenance } from "../text/typography";
 import { TinyStore } from "./tinyStore";
 
@@ -73,6 +73,12 @@ export interface ModelState {
   /** When the recompute running now started, to offer stopping it (`stopCadWorker()`). */
   computeStartedAt: number | null;
   /**
+   * The longest recompute of this document so far (wall time, ms), also from the last time it
+   * was open (`resultCache.ts`): a computation is offered to be stopped only when it takes
+   * clearly longer than that (`stopAfterSeconds()` in `stopThreshold.ts`).
+   */
+  slowestMs: number;
+  /**
    * Recompute is held after a computation was stopped, so that the model that hung is not
    * computed again right away. The document can still be changed (for example the timeline
    * rolled back) before `resumeRecompute()`.
@@ -96,6 +102,7 @@ export const modelState = new TinyStore<ModelState>({
   sketches: {},
   lastDurationMs: 0,
   computeStartedAt: null,
+  slowestMs: 0,
   paused: false,
   cached: false,
 });
@@ -272,8 +279,8 @@ function scheduleCacheStore(doc: CadDocument): void {
   cacheTimer = setTimeout(() => {
     cacheTimer = null;
     if (lastComputed !== doc || recomputeRunning) return;
-    const { bodies, planes, features, sketches } = modelState.get();
-    void storeCachedModel(doc, { bodies, planes, features, sketches });
+    const { bodies, planes, features, sketches, slowestMs } = modelState.get();
+    void storeCachedModel(doc, { bodies, planes, features, sketches }, slowestMs);
   }, 2000);
 }
 
@@ -316,12 +323,15 @@ async function recomputeLoop(): Promise<void> {
       recomputeQueued = false;
       const doc = documentStore.document;
       if (!geometryChanged(lastComputed, doc)) continue;
-      modelState.set({ busy: true, computeStartedAt: Date.now() });
+      const startedAt = Date.now();
+      modelState.set({ busy: true, computeStartedAt: startedAt });
       const known: Record<string, string> = {};
       for (const b of Object.values(modelState.get().bodies)) known[b.id] = b.hash;
       const result = await engine().request({ type: "recompute", document: doc, known });
       if (generation !== engineGeneration) return;
       lastComputed = doc;
+      const took = Date.now() - startedAt;
+      if (took > modelState.get().slowestMs) modelState.set({ slowestMs: took });
       const previous = modelState.get().bodies;
       const bodies: Record<string, BodyModel> = {};
       for (const b of result.bodies) {
@@ -479,9 +489,12 @@ function resetUi(): void {
 export function loadDocument(doc: CadDocument): void {
   resetUi();
   lastComputed = null;
-  modelState.set({ bodies: {}, planes: {}, features: {}, sketches: {}, cached: false });
+  modelState.set({ bodies: {}, planes: {}, features: {}, sketches: {}, cached: false, slowestMs: 0 });
   documentStore.load(doc);
   void showCachedModel(doc);
+  void loadSlowestRecompute(doc).then((ms) => {
+    if (documentStore.document.id === doc.id && ms > modelState.get().slowestMs) modelState.set({ slowestMs: ms });
+  });
   requestRecompute();
 }
 
