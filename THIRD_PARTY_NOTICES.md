@@ -9,7 +9,7 @@ FabCAD の `LICENSE` は **FabCAD 著作権者が許諾できる独自コード*
 | [Replicad](https://github.com/sgenoud/replicad) | `package.json` およびルート `LICENSE` は MIT | [Replicad MIT本文](licenses/replicad-MIT.txt)。**README末尾には AGPL-3.0-or-later の記述が残っており、上流との整合確認が必要** |
 | [replicad-opencascadejs](https://github.com/sgenoud/replicad/tree/main/packages/replicad-opencascadejs) | `package.json` は LGPL-2.1-only | [LGPL-2.1本文](licenses/LGPL-2.1.txt)。実配布するWASM/JSとソース・再リンク条件を要確認 |
 | [Open CASCADE Technology (OCCT)](https://github.com/Open-Cascade-SAS/OCCT) | LGPL-2.1 と Open CASCADE Exception 1.0 | [LGPL-2.1本文](licenses/LGPL-2.1.txt)、[OCCT特別例外](licenses/OCCT_LGPL_EXCEPTION.txt) |
-| [React / React DOM](https://github.com/facebook/react) | MIT | 上流 `LICENSE` およびnpm配布物の著作権表示を保持すること |
+| [React / React DOM](https://github.com/facebook/react) | MIT | [React MIT本文](licenses/react-MIT.txt)。npm配布物の著作権表示を保持すること |
 | [Three.js](https://github.com/mrdoob/three.js) | MIT | [Three.js MIT本文](licenses/three-MIT.txt) |
 | [harfbuzzjs](https://github.com/harfbuzz/harfbuzzjs) | MIT | [harfbuzzjs MIT本文](licenses/harfbuzzjs-MIT.txt) |
 | [opentype.js](https://github.com/opentypejs/opentype.js) | MIT | [opentype.js MIT本文](licenses/opentype.js-MIT.txt) |
