@@ -427,6 +427,8 @@ export interface AppState {
   historyLogOpen: boolean;
   /** The Share Link window (`panels/ShareLinkPanel.tsx`). */
   shareLinkOpen: boolean;
+  /** The Recover Autosave window (`panels/RecoveryPanel.tsx`). */
+  recoveryOpen: boolean;
   /** Sketch cursor position in sketch coordinates, for the status bar. */
   cursor: Vec2 | null;
   toasts: Toast[];
@@ -496,6 +498,7 @@ export const appState = new TinyStore<AppState>({
   commandPalette: null,
   historyLogOpen: false,
   shareLinkOpen: false,
+  recoveryOpen: false,
   shapeDimensions: null,
   sketchTransform: null,
   cursor: null,

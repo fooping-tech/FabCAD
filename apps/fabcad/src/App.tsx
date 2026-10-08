@@ -22,6 +22,7 @@ import { SketchToolPanel } from "./panels/SketchToolPanel";
 import { CommandPalette } from "./panels/CommandPalette";
 import { HistoryLogPanel } from "./panels/HistoryLogPanel";
 import { ShapeDimensionsPanel } from "./panels/ShapeDimensionsPanel";
+import { RecoveryPanel } from "./panels/RecoveryPanel";
 import { ShareLinkPanel } from "./panels/ShareLinkPanel";
 import { SketchTransformPanel } from "./panels/SketchTransformPanel";
 import { Header, openProject } from "./panels/Header";
@@ -160,6 +161,7 @@ export function App(): ReactElement {
       <ContextMenu />
       <HistoryLogPanel />
       <ShareLinkPanel />
+      <RecoveryPanel />
       <CommandPalette
         exportFabrication={(format) => exportHandler(format)}
         exportPrint={openPrintExport}

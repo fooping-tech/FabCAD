@@ -124,6 +124,12 @@ export function Header({
           { label: "Open…", icon: "open", kbd: `${mod}O`, onSelect: () => void openProject() },
           { label: "Save project", icon: "save", kbd: `${mod}S`, onSelect: saveProject },
           {
+            label: "Recover autosave…",
+            icon: "open",
+            onSelect: () => appState.set({ recoveryOpen: true }),
+            help: { id: "file.recover", title: "Recover Autosave" },
+          },
+          {
             label: "Share link…",
             icon: "link",
             onSelect: () => appState.set({ shareLinkOpen: true }),

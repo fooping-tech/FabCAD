@@ -28,9 +28,15 @@ import {
 import { type Sketch, type SketchRegion, detectProfiles } from "@fabcad/sketch";
 import { type DragTarget, createDefaultSolver } from "@fabcad/sketch-solver";
 import { useSyncExternalStore } from "react";
-import { EngineClient } from "../worker/engineClient";
+import { EngineClient, WorkerFailure } from "../worker/engineClient";
 import { appState, toast } from "./appState";
-import { loadAutosave, storeAutosave } from "./persistence";
+import {
+  AutosaveConflictError,
+  currentAutosaveToken,
+  loadAutosave,
+  loadRecoverySnapshots,
+  storeAutosave,
+} from "./persistence";
 import { decodeShareFragment, isShareFragment } from "./shareLink";
 import { loadCachedModel, storeCachedModel } from "./resultCache";
 import { startTextMaintenance } from "../text/typography";
@@ -64,6 +70,14 @@ export interface ModelState {
   features: Record<string, FeatureStatus>;
   sketches: Record<string, SketchStatus>;
   lastDurationMs: number;
+  /** When the recompute running now started, to offer stopping it (`stopCadWorker()`). */
+  computeStartedAt: number | null;
+  /**
+   * Recompute is held after a computation was stopped, so that the model that hung is not
+   * computed again right away. The document can still be changed (for example the timeline
+   * rolled back) before `resumeRecompute()`.
+   */
+  paused: boolean;
   /**
    * The model shown is the one kept from the last time this document was open: the engine is
    * still computing it (see `resultCache.ts`).
@@ -81,6 +95,8 @@ export const modelState = new TinyStore<ModelState>({
   features: {},
   sketches: {},
   lastDurationMs: 0,
+  computeStartedAt: null,
+  paused: false,
   cached: false,
 });
 
@@ -232,6 +248,7 @@ function afterHistoryJump(): void {
 // ---------------------------------------------------------------- recompute
 
 let client: EngineClient | null = null;
+let engineGeneration = 0;
 let recomputeRunning = false;
 let recomputeQueued = false;
 let lastComputed: CadDocument | null = null;
@@ -293,15 +310,17 @@ async function recomputeLoop(): Promise<void> {
     return;
   }
   recomputeRunning = true;
+  const generation = engineGeneration;
   try {
     do {
       recomputeQueued = false;
       const doc = documentStore.document;
       if (!geometryChanged(lastComputed, doc)) continue;
-      modelState.set({ busy: true });
+      modelState.set({ busy: true, computeStartedAt: Date.now() });
       const known: Record<string, string> = {};
       for (const b of Object.values(modelState.get().bodies)) known[b.id] = b.hash;
       const result = await engine().request({ type: "recompute", document: doc, known });
+      if (generation !== engineGeneration) return;
       lastComputed = doc;
       const previous = modelState.get().bodies;
       const bodies: Record<string, BodyModel> = {};
@@ -345,16 +364,64 @@ async function recomputeLoop(): Promise<void> {
       if (!changed) scheduleCacheStore(doc);
     } while (recomputeQueued);
   } catch (err) {
-    console.error(err);
-    toast(`Recompute failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+    if (generation === engineGeneration) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : String(err);
+      // Only a failed worker needs a restart; an error of the engine leaves it usable.
+      if (err instanceof WorkerFailure) modelState.set({ kernel: "error", kernelError: message });
+      toast(`Recompute failed: ${message}`, "error");
+    }
   } finally {
     recomputeRunning = false;
-    modelState.set({ busy: false });
+    modelState.set({ busy: false, computeStartedAt: null });
+    if (generation !== engineGeneration && modelState.get().kernel === "ready") requestRecompute();
   }
 }
 
+/**
+ * Starts a new CAD worker in place of the current one. `pause`: the worker was stopped while it
+ * computed (it may hang on this model), so the model is not computed again until
+ * `resumeRecompute()`.
+ */
+export async function restartCadWorker(pause = false): Promise<void> {
+  engineGeneration++;
+  client?.dispose();
+  client = null;
+  lastComputed = null;
+  modelState.set({
+    kernel: "loading",
+    busy: false,
+    computeStartedAt: null,
+    paused: pause,
+    cached: false,
+    bodies: {},
+    planes: {},
+    features: {},
+    sketches: {},
+  });
+  try {
+    await engine().request({ type: "init" });
+    modelState.set({ kernel: "ready" });
+    requestRecompute();
+  } catch (err) {
+    modelState.set({ kernel: "error", kernelError: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** Stops a computation that takes too long; recompute stays paused. */
+export function stopCadWorker(): Promise<void> {
+  toast("Stopped the computation. Roll back the timeline or change the model, then Resume.", "warning", 9000);
+  return restartCadWorker(true);
+}
+
+export function resumeRecompute(): void {
+  modelState.set({ paused: false });
+  requestRecompute();
+}
+
 export function requestRecompute(): void {
-  if (modelState.get().kernel !== "ready") return;
+  const { kernel, paused } = modelState.get();
+  if (kernel !== "ready" || paused) return;
   void recomputeLoop();
 }
 
@@ -392,7 +459,7 @@ export function saveProject(): void {
     "application/json",
   );
   documentStore.markSaved();
-  toast("Project saved.");
+  toast("Project download requested. Verify the file in Downloads.");
 }
 
 function resetUi(): void {
@@ -526,6 +593,106 @@ export async function fileToBase64(file: File): Promise<string> {
 
 let started = false;
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let autosaveToken: string | null = null;
+let autosaveRevision = 0;
+let savedRevision = 0;
+/** Saves one after another; it starts once the token of the kept autosave is known. */
+let saveQueue: Promise<void> = Promise.resolve();
+/** The document restored from this browser at start-up, kept there already (see `beforeunload`). */
+let restoredDocument: CadDocument | null = null;
+/** The document the kept autosave holds: saving it again would only push out a snapshot. */
+let autosavedDocument: CadDocument | null = null;
+
+/**
+ * `conflict`: another tab saved after this one read the autosave; this tab stops saving until
+ * the user chooses to keep its version (`keepThisTabsAutosave()`).
+ */
+export type AutosaveStatus = "unsaved" | "saving" | "saved" | "error" | "conflict";
+export const autosaveState = new TinyStore<{
+  status: AutosaveStatus;
+  message: string;
+  lastSavedAt: number | null;
+}>({ status: "unsaved", message: "", lastSavedAt: null });
+
+function flushAutosave(): void {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  const revision = autosaveRevision;
+  if (revision === savedRevision || autosaveState.get().status === "conflict") return;
+  const doc = documentStore.document;
+  if (doc === autosavedDocument) {
+    savedRevision = revision;
+    autosaveState.set({ status: "saved", message: "" });
+    return;
+  }
+  const json = serializeDocument(doc, false);
+  const failedBefore = autosaveState.get().status === "error";
+  autosaveState.set({ status: "saving" });
+  saveQueue = saveQueue.then(async () => {
+    // Skip an obsolete snapshot rather than saving it over a newer edit.
+    if (revision < autosaveRevision) return;
+    try {
+      const token = await storeAutosave(json, autosaveToken);
+      autosaveToken = token;
+      autosavedDocument = doc;
+      savedRevision = revision;
+      if (revision === autosaveRevision) {
+        autosaveState.set({ status: "saved", message: "", lastSavedAt: Date.now() });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof AutosaveConflictError) {
+        autosaveState.set({ status: "conflict", message });
+        toast("Another FabCAD tab saved its project in this browser. This tab no longer saves: choose Keep this tab in the status bar, or save the project as a file.", "error", 12000);
+        return;
+      }
+      autosaveState.set({ status: "error", message });
+      // Saving is tried again with the next change; the toast is shown once per failure.
+      if (!failedBefore) toast("Browser autosave failed. Save the project as a file to protect your work.", "error", 9000);
+    }
+  });
+}
+
+export function retryAutosave(): void {
+  autosaveRevision++;
+  flushAutosave();
+}
+
+/** After a conflict: this tab's project replaces what another tab saved (that stays in the snapshots). */
+export async function keepThisTabsAutosave(): Promise<void> {
+  try {
+    autosaveToken = await currentAutosaveToken();
+  } catch (err) {
+    autosaveState.set({ status: "error", message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  autosaveState.set({ status: "unsaved", message: "" });
+  autosavedDocument = null;
+  retryAutosave();
+}
+
+export { loadRecoverySnapshots };
+
+/** Opens a recovery snapshot (Recover Autosave window) in place of the current project. */
+export function restoreSnapshot(json: string): boolean {
+  try {
+    const recovered = deserializeDocument(json);
+    if (
+      documentStore.dirty &&
+      documentStore.document.timeline.length > 0 &&
+      !window.confirm("Replace the current project with this autosave? The current project stays in the autosave list.")
+    ) {
+      return false;
+    }
+    loadDocument(recovered);
+    documentStore.markUnsaved();
+    toast("Opened an earlier autosave. Save project to keep it as a file.");
+    return true;
+  } catch (err) {
+    toast(`Could not open this autosave: ${err instanceof Error ? err.message : String(err)}`, "error");
+    return false;
+  }
+}
 
 export function startSession(): void {
   if (started) return;
@@ -536,30 +703,55 @@ export function startSession(): void {
   documentStore.subscribe((doc) => {
     // While dragging, the 3D model is left alone; it catches up when the drag is committed.
     if (!documentStore.inTransaction) requestRecompute();
+    autosaveRevision++;
+    if (autosaveState.get().status !== "conflict") autosaveState.set({ status: "unsaved" });
     if (autosaveTimer) clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => {
-      void storeAutosave(serializeDocument(doc, false));
-    }, 1200);
+    autosaveTimer = setTimeout(flushAutosave, 1200);
   });
 
   const shared = isShareFragment(window.location.hash) ? window.location.hash : null;
-  void loadAutosave()
-    .then(async (json) => {
+  const loaded = loadAutosave();
+  // A save must know which autosave it replaces (see `AutosaveConflictError`).
+  saveQueue = loaded.then(
+    (snapshot) => {
+      autosaveToken = snapshot.token;
+    },
+    () => undefined,
+  );
+  void loaded
+    .then(async (snapshot) => {
       if (documentStore.canUndo) return;
       let saved: CadDocument | null = null;
+      let fellBack = false;
       try {
-        saved = json ? workIn(deserializeDocument(json)) : null;
+        saved = snapshot.json ? workIn(deserializeDocument(snapshot.json)) : null;
       } catch {
-        // A broken autosave is ignored.
+        // Try an earlier verified snapshot if the current one cannot be deserialized.
+        fellBack = true;
+        for (const previous of await loadRecoverySnapshots()) {
+          try {
+            saved = workIn(deserializeDocument(previous.json));
+            if (saved) break;
+          } catch { /* skip broken snapshot */ }
+        }
+        if (saved) toast("Latest recovery was invalid. Loaded an earlier version.", "warning");
       }
+      if (snapshot.recovered) toast("Latest autosave was damaged. Restored a previous version.", "warning");
       // A share link opens its project; the one kept here is replaced only if the user says so.
       if (shared && (await openSharedProject(shared, saved))) return;
       if (saved) {
         loadDocument(saved);
-        toast("Restored the automatically saved project.");
+        documentStore.markUnsaved();
+        restoredDocument = documentStore.document;
+        // Kept as it is, unless it came from an earlier snapshot than the damaged latest one.
+        if (!snapshot.recovered && !fellBack) autosavedDocument = restoredDocument;
+        toast("Restored the project kept in this browser. Save project to keep a file as well.");
       }
     })
-    .catch(() => undefined)
+    .catch((err: unknown) => {
+      autosaveState.set({ status: "error", message: err instanceof Error ? err.message : String(err) });
+      toast("Could not read browser recovery data.", "error");
+    })
     .finally(() => modelState.set({ restoring: false }));
 
   engine()
@@ -582,8 +774,15 @@ export function startSession(): void {
     }
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAutosave();
+  });
+  window.addEventListener("pagehide", flushAutosave);
+
   window.addEventListener("beforeunload", (event) => {
-    if (documentStore.dirty && documentStore.document.timeline.length > 0) {
+    // A restored project that was not changed is still kept in this browser as it is.
+    const doc = documentStore.document;
+    if (documentStore.dirty && doc !== restoredDocument && doc.timeline.length > 0) {
       event.preventDefault();
     }
   });
