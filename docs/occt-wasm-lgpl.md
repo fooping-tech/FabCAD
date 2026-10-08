@@ -102,6 +102,18 @@ The script:
    FabCAD using its explicit same-origin replacement path. CI records the
    source patch as an artifact when available.
 
+### Verified CI result (2026-10-08)
+
+[GitHub Actions #37777431664](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664) **completed successfully** on commit `c5f00abbfe9e01c92e3d0b9e816a8172e470821d`.
+
+- Source patch: a change to Replicad's real `shape-hasher.cpp` C++ wrapper; the job uploaded its patch as [artifact #11550523221](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664/artifacts/11550523221) (GitHub retention is limited).
+- OCI source image: the exact upstream digest was pulled; generated C++/WASM bindings compiled and linked.
+- The generated modified WASM had a SHA-256 distinct from npm's original; `WebAssembly.validate()` passed.
+- The modified WASM initialized through `replicad-opencascadejs@1.1.0` JS glue and completed box-volume, Boolean cut, STEP and STL test operations.
+- The explicit alternate-WASM FabCAD Vite build and its output byte-for-byte hash check passed.
+- The normal `build` and `occt-replacement-smoke` CI jobs also passed.
+- **Not yet shown:** a before/after runtime assertion of the intended hash-label difference, automated browser interaction with the source-modified binary, or recompiling upstream OCCT sources. This confirms the **C++ wrapper recompilation / linkage / runtime compatibility path**, not full LGPL-2.1 compliance.
+
 **This is not a full rebuild of OCCT C++ sources**: the pinned builder
 contains separately compiled OCCT libraries. It tests changes to a C++
 wrapper and a genuine WASM relink. An independent reconstruction of all
@@ -120,10 +132,11 @@ binary provenance/compatibility conclusion can be reached.
 - [x] Identify the upstream Replicad v1.1.0 build entry points, single-threaded OCI image and its recorded digest.
 - [x] Document how FabCAD loads the separately distributed WASM, and provide an opt-in same-origin replacement path with automated URL-selection tests.
 - [x] Run a CI integration smoke with a bitwise-altered WASM (non-semantic custom section), initialize CAD, execute Boolean and STEP/STL exports, and verify the override build output.
+- [x] Recompile a source-modified Replicad C++ wrapper and re-link OCCT WASM from the pinned upstream OCI image; load it in Replicad, run Boolean and STEP/STL and build FabCAD with it ([successful CI](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664)).
 - [x] Automate a hash/size check of the `dist/` WASM in CI.
 - [ ] Verify the full corresponding source chain, including OCCT 8.0.1 commit, any C++ changes/patches, the pinned upstream toolchain, and the license of each relevant component.
 - [ ] Obtain or rebuild from the *same sources/configuration* as the published `replicad-opencascadejs@1.1.0` artifacts; compare hashes when reproducibility is expected, and otherwise document functional provenance.
-- [ ] Verify with a **genuinely modified/rebuilt** WASM that users can replace it in a deployed FabCAD client, and whether all necessary materials for modified-library use/relinking are available to recipients as required by LGPL-2.1 §6.
+- [ ] Verify source-modified WASM use in a real **browser session** and whether all necessary materials for modified-library use/relinking are available to recipients as required by LGPL-2.1 §6. The Node/CAD + Vite integration smoke is already successful.
 - [ ] Confirm applicable source-delivery, relinking, and reverse-engineering conditions, including exceptions, notices and accessibility of license texts. Get legal review for distribution compliance; do not assume the existence of this recipe is sufficient.
 - [ ] Audit all additional executable third-party components and required notices in the released build.
 
