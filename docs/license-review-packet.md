@@ -23,6 +23,7 @@ FabCADの独自コードに対するSource Available許諾と、第三者製ソ�
 ## 2. 現時点で確認した技術・ライセンスの証拠
 
 - **Replicad JS本体**: [開発者本人の2023-08-14「Relicense everything to MIT」コミット](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)。READMEのAGPL記述は旧記述と判断。[詳細](../THIRD_PARTY_NOTICES.md)。
+- **LGPL第6条の対応ソース提供の論点**: [供給条件・固定ソース候補と現時点の未完了事項](lgpl-source-delivery.md)を別文書化。Webに別ファイルのWASMを配布するだけでは第6条(b)のshared library機構を満たしたことにはならない可能性があり、対応ソースと再リンク素材を同等の方法で配布する案（6(a)/(d)）を最終確認する。
 - **OCCT WASM**: [Replicad v1.1.0](https://github.com/sgenoud/replicad/tree/v1.1.0/packages/replicad-opencascadejs)、OCCT `V8_0_1` ソースコミット `b8f597c677811d1f9f4d8a97f5ae2825c0353a42`、固定OCJSビルドイメージとソース入力。[来歴・再ビルドと差し替え手順](occt-wasm-lgpl.md)。
 - **改変C++ラッパーWASMでの動作**: [GitHub Actions #37777431664](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664)で、C++ラッパーの改変、固定OCIビルダーによる再リンク、Box/Boolean/STEP/STL、FabCADへの代替WASM組込みがすべて成功。**OCCT本体の完全再コンパイルではない**。
 - **配布するWASMの証拠**: `npm run audit:occt`により`dist/occt-wasm-provenance.json`（SHA-256、サイズ、上流ソース参照、OCIダイジェスト）を生成・公開。
