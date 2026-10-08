@@ -32,6 +32,13 @@ jobs:
       - run: npm run audit:occt
       - run: npm run audit:licenses
       - run: bash -n scripts/package-occt-sources.sh
+      - run: bash -n scripts/stage-occt-source-site.sh
+      # Serve the candidate source archive from the SAME Pages deployment as
+      # the WASM. Never publish an executable without the documented source.
+      # Packaging is release-only to avoid downloading 68 MiB on each PR.
+      - name: Stage matching OCCT candidate sources for Pages
+        if: github.event_name != 'pull_request'
+        run: bash scripts/stage-occt-source-site.sh
       - uses: actions/configure-pages@v5
         if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
@@ -85,19 +92,26 @@ jobs:
           retention-days: 14
 
 
-  # Candidate corresponding-source archive, not a permanent LGPL source offer.
+  # Label-gated end-to-end source-to-site test. PR artifacts remain temporary;
+  # on main the identical stage script embeds the candidate in the Pages site.
   occt-source-bundle:
     if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'occt-source-bundle')
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n scripts/package-occt-sources.sh
-      - run: bash scripts/package-occt-sources.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run audit:occt
+      - run: bash scripts/stage-occt-source-site.sh
       - uses: actions/upload-artifact@v4
         with:
           name: occt-lgpl-corresponding-source-candidate
-          path: occt-corresponding-source-candidate.tar.gz
+          path: dist/lgpl/
           retention-days: 14
           if-no-files-found: error
 
