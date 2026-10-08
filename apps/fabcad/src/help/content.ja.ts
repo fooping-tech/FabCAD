@@ -31,6 +31,12 @@ const OPERATION = {
 const EXPRESSIONS = "値はすべて式で入力できます。数値、パラメータ名、width / 2 + 3 のような計算式です。";
 
 export const HELP_JA: Record<string, HelpEntry> = {
+  legal: {
+    title: "Terms & Privacy",
+    summary: "File または About FabCAD から利用規約とプライバシーポリシーを確認できます。",
+    what: ["初回利用前に同意します。同意した規約バージョンと日時をブラウザに保存し、再同意が必要な変更では初回画面を再表示します。", "設計と計算結果は IndexedDB に保存されます。共有URLには設計情報が含まれ、リンクを知る人が読み取れます。バックアップには Save project を使ってください。"],
+    limitations: ["ブラウザ保存が利用できない場合、同意は今回の利用中のみ有効です。加工前に寸法・強度・安全性を確認してください。"],
+  },
   // ------------------------------------------------------------------ general
   select: {
     title: "Select",

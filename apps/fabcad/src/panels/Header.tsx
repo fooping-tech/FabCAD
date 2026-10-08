@@ -21,6 +21,8 @@ import { useHelpTrigger } from "../help/useHelpTrigger";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
 
+import { legalUrl } from "../legal/urls";
+
 const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
 export async function openProject(): Promise<void> {
@@ -132,6 +134,16 @@ export function Header({
           { label: "Import DXF…", icon: "import", onSelect: () => void pickDxf() },
           { separator: true },
           { label: "Parameters…", icon: "parameters", onSelect: () => openDialog("parameters") },
+          {
+            label: "利用規約 / Terms", icon: "info",
+            onSelect: () => window.open(legalUrl("terms"), "_blank", "noopener,noreferrer"),
+            help: { id: "legal", title: "Terms & Privacy" },
+          },
+          {
+            label: "プライバシーポリシー / Privacy", icon: "info",
+            onSelect: () => window.open(legalUrl("privacy"), "_blank", "noopener,noreferrer"),
+            help: { id: "legal", title: "Terms & Privacy" },
+          },
           { label: "About FabCAD", icon: "info", onSelect: () => openDialog("about") },
         ]}
       />

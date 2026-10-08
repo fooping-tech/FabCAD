@@ -41,6 +41,12 @@ const EXPRESSIONS =
   "Every value is an expression: a number, a parameter name or a formula such as width / 2 + 3.";
 
 export const HELP: Record<string, HelpEntry> = {
+  legal: {
+    title: "Terms & Privacy",
+    summary: "Read the service terms and privacy policy from File or About FabCAD.",
+    what: ["Agree before first use. Agreement is stored locally with a version and date; changes requiring renewed agreement show the welcome screen again.", "Projects and computed results are stored in IndexedDB. Share URLs contain design data readable by anyone with the link. Save project files for backup."],
+    limitations: ["When browser storage is unavailable, agreement lasts for this visit only. Verify dimensions, strength and safety before manufacturing."],
+  },
   // ------------------------------------------------------------------ general
   select: {
     title: "Select",
