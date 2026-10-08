@@ -8,6 +8,8 @@ FabCAD uses `replicad@1.1.0` (MIT for the Replicad JavaScript code) and `replica
 ## 1. Exact upstream lineage known so far
 
 - [Upstream Replicad release tag `v1.1.0`](https://github.com/sgenoud/replicad/tree/v1.1.0).
+- The official [OCCT `V8_0_1` tag](https://github.com/Open-Cascade-SAS/OCCT/releases/tag/V8_0_1) resolves to source commit [`b8f597c677811d1f9f4d8a97f5ae2825c0353a42`](https://github.com/Open-Cascade-SAS/OCCT/commit/b8f597c677811d1f9f4d8a97f5ae2825c0353a42) (verified from the annotated upstream Git tag).
+- The pinned `taucad/opencascade.js` canary label matches upstream commit [`ebd263f15337b440b391492af073662707e86482`](https://github.com/taucad/opencascade.js/commit/ebd263f15337b440b391492af073662707e86482), `Upgrade OCCT to 8.0.1`; that upstream contains OCCT patch tooling. The exact source image provenance still needs a build-level verification.
 - [Migration PR #263](https://github.com/sgenoud/replicad/pull/263): explicitly says it migrated to **OCCT 8.0.1** and regenerated the single-threaded and multi-threaded WebAssembly modules with pinned build images.
 - [Upstream `replicad-opencascadejs` package and build commands](https://github.com/sgenoud/replicad/blob/v1.1.0/packages/replicad-opencascadejs/package.json): `npm run generateConfig` (`ytt`), `npm run buildSingle`, `npm run buildMulti`.
 - [Single-threaded ytt build configuration](https://github.com/sgenoud/replicad/tree/v1.1.0/packages/replicad-opencascadejs/build-source), plus checked-in [generated build configuration and C++ wrappers](https://github.com/sgenoud/replicad/tree/v1.1.0/packages/replicad-opencascadejs/build-config).
