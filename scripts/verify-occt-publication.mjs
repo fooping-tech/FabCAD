@@ -45,6 +45,9 @@ async function verify() {
   const source = await digestAt("lgpl/" + manifest.archive);
   assert.equal(source.sha256, manifest.archiveSha256, "published source archive hash mismatch");
   assert.equal(source.sizeBytes, manifest.archiveSizeBytes, "published source archive size mismatch");
+  const archivedSource = await digestAt(releaseUrl);
+  assert.equal(archivedSource.sha256, manifest.archiveSha256, "release source hash mismatch");
+  assert.equal(archivedSource.sizeBytes, manifest.archiveSizeBytes, "release source size mismatch");
   assert.ok(provenance.selectedWasm.startsWith("dist/"), "untrusted WASM relative path");
   const wasmPath = provenance.selectedWasm.slice(5);
   assert.ok(!wasmPath.includes("..") && !wasmPath.startsWith("/"), "invalid WASM asset path");
@@ -58,7 +61,7 @@ async function verify() {
   console.log(JSON.stringify({
     status: "public bytes and release manifest verified (not LGPL compliance)",
     siteBuildCommit: manifest.siteBuildCommit,
-    source, wasm,
+    source, archivedSource, wasm,
     sourceToOriginalBinaryReproducible: "not established by this check"
   }, null, 2));
 }
