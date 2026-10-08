@@ -7,7 +7,7 @@ FabCAD の `LICENSE` は **FabCAD 著作権者が許諾できる独自コード*
 | コンポーネント | ライセンス・確認先 | 配布する許諾本文・注意 |
 | --- | --- | --- |
 | [Replicad](https://github.com/sgenoud/replicad) | `package.json` およびルート `LICENSE` は MIT | [Replicad MIT本文](licenses/replicad-MIT.txt)。[2023-08-14の上流MIT移行コミット](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)で `packages/replicad/LICENSE` がAGPLからMITへ変更されたことを確認済み。READMEのAGPL表記は更新漏れと判断。 |
-| [replicad-opencascadejs](https://github.com/sgenoud/replicad/tree/main/packages/replicad-opencascadejs) | `package.json` は LGPL-2.1-only | [LGPL-2.1本文](licenses/LGPL-2.1.txt)。[OCCT WASMの生成元と置換手順](docs/occt-wasm-lgpl.md)を記録。実際の互換WASMでの置換・対応ソース配布条件は未検証 |
+| [replicad-opencascadejs](https://github.com/sgenoud/replicad/tree/main/packages/replicad-opencascadejs) | `package.json` は LGPL-2.1-only | [LGPL-2.1本文](licenses/LGPL-2.1.txt)。[OCCT WASMの生成元と置換手順](docs/occt-wasm-lgpl.md)を記録。[C++ソース変更→WASM再リンクのCI実行](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664)は成功。ブラウザ実操作および対応ソース配布条件は未検証 |
 | [Open CASCADE Technology (OCCT)](https://github.com/Open-Cascade-SAS/OCCT) | LGPL-2.1 と Open CASCADE Exception 1.0 | [LGPL-2.1本文](licenses/LGPL-2.1.txt)、[OCCT特別例外](licenses/OCCT_LGPL_EXCEPTION.txt) |
 | [React / React DOM](https://github.com/facebook/react) | MIT | [React MIT本文](licenses/react-MIT.txt)。npm配布物の著作権表示を保持すること |
 | [Three.js](https://github.com/mrdoob/three.js) | MIT | [Three.js MIT本文](licenses/three-MIT.txt) |
@@ -38,7 +38,8 @@ Open CASCADE の公式説明では、LGPLのライブラリについて、少な
 - [x] 本番ビルドで`replicad-opencascadejs@1.1.0`のWASMを検出し、ヘッダ・SHA256・サイズを記録する`npm run audit:occt`をCIに追加。
 - [ ] 実配布WASMに対応する完全なOCCTソース・パッチ・ツールチェーン・再現ビルドを確認する。
 - [x] 改変互換WASMを同一オリジン上で読み込むためのビルド時オプションと単体テストを追加（[手順](docs/occt-wasm-lgpl.md)）。
-- [ ] LGPLに従った対象ソース提供条件を確認し、**改変した実物WASM**の差し替え・再リンク動作を検証する。
+- [x] **C++ラッパー改変WASMの再リンク・読み込み・CAD操作**: 固定OCIイメージで再リンク後、Box/Boolean/STEP/STL/差し替えビルドのCIに成功（[Actions](https://github.com/fooping-tech/FabCAD/actions/runs/37777431664)）。
+- [ ] **ブラウザ実動作とLGPL配布条件**: source-modified WASMのブラウザ上での操作、OCCT本体の完全な対応ソースと再リンク素材の提供方式を確認する。
 - [ ] 著作権表示・本文へのリンクをユーザーが参照できる画面に設置し、ビルド後も利用できることを確認する。
 - [x] **Replicad本体のライセンス確認**: [2023-08-14の上流コミット](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)で開発者本人がAGPLからMITへ変更。現在の `replicad@1.1.0` はMITであることをGit履歴、LICENSE、package.json、npm公開情報で裏付け済み。READMEのAGPL文言は旧記述。なお、`replicad-opencascadejs` に含まれるOCCTのLGPL対応は別途未完了。
 - [ ] ReactなどMIT系ライブラリの配布先への著作権表示の引き継ぎを検証し、トランジティブ依存を網羅する。
