@@ -8,11 +8,9 @@ import {
   retryAutosave,
   stopCadWorker,
 } from "../app/session";
+import { stopAfterSeconds } from "../app/stopThreshold";
 import { useStore } from "../app/tinyStore";
 import { useHelpTrigger } from "../help/useHelpTrigger";
-
-/** A computation running this long can be stopped. */
-const STOP_AFTER_S = 8;
 
 /** Help on right-click or long press. */
 function useHelpHandlers(id: string, title: string) {
@@ -62,7 +60,7 @@ export function StatusActions({ touch = false }: { touch?: boolean }): ReactElem
           Keep this tab
         </button>
       )}
-      {model.busy && computeSeconds >= STOP_AFTER_S && (
+      {model.busy && computeSeconds >= stopAfterSeconds(model.slowestMs) && (
         <button className={cls} {...stopHelp.handlers} onClick={stopHelp.guard(() => void stopCadWorker())}>
           Stop ({computeSeconds} s)
         </button>

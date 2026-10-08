@@ -164,7 +164,7 @@ export const HELP: Record<string, HelpEntry> = {
     title: "Stop Computation",
     summary: "Stop a computation of the model that takes too long, or restart the geometry kernel.",
     what: [
-      "When the model has been computing for 8 seconds, Stop appears in the status bar. Stop ends the computation and starts the geometry kernel again; computing is then paused (the status bar reads Paused) so that the same model does not start the same long computation again.",
+      "When the model has been computing for 8 seconds, or for twice as long as its longest computation so far (whichever is longer), Stop appears in the status bar (in the bar at the bottom of the view on a phone). A large model is thus not offered to be stopped while it computes as long as usual. Stop ends the computation and starts the geometry kernel again; computing is then paused (the status bar reads Paused) so that the same model does not start the same long computation again.",
       "While paused, change what took long: drag the end of the timeline back before the step, suppress or edit it. Resume computes the model again.",
       "Restart CAD appears when the geometry kernel itself failed. It starts the kernel again and computes the model.",
     ],

@@ -19,6 +19,8 @@ interface Entry {
   key: string;
   savedAt: number;
   model: CachedModel;
+  /** The longest recompute of the document (`ModelState.slowestMs`); missing in older entries. */
+  slowestMs?: number;
 }
 
 const KEEP = 4;
@@ -54,13 +56,33 @@ export async function loadCachedModel(doc: CadDocument): Promise<CachedModel | n
   }
 }
 
+/**
+ * How long the longest recompute of this document took the last time it was open, even if it
+ * has changed since: what to expect before a computation looks stuck. 0 when unknown.
+ */
+export async function loadSlowestRecompute(doc: CadDocument): Promise<number> {
+  try {
+    const db = await openDb();
+    try {
+      const entry = (await request(db.transaction(RESULT_STORE, "readonly").objectStore(RESULT_STORE).get(doc.id))) as
+        | Entry
+        | undefined;
+      return entry?.slowestMs ?? 0;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return 0;
+  }
+}
+
 /** Keep the model computed for `doc`, and drop the entries of documents opened long ago. */
-export async function storeCachedModel(doc: CadDocument, model: CachedModel): Promise<void> {
+export async function storeCachedModel(doc: CadDocument, model: CachedModel, slowestMs = 0): Promise<void> {
   try {
     const db = await openDb();
     try {
       const store = db.transaction(RESULT_STORE, "readwrite").objectStore(RESULT_STORE);
-      const entry: Entry = { key: geometryKey(doc), savedAt: Date.now(), model };
+      const entry: Entry = { key: geometryKey(doc), savedAt: Date.now(), model, slowestMs };
       await request(store.put(entry, doc.id));
       const keys = (await request(store.getAllKeys())) as IDBValidKey[];
       if (keys.length > KEEP) {
