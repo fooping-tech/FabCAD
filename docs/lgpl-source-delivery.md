@@ -84,4 +84,4 @@ Qt mainly documents LGPLv3; LGPL-2.1's own text governs FabCAD.
 - [ ] Confirm the first published Release asset and its matching Pages manifest after merge, and periodically audit retention.
 - [ ] Detailed legal determination of applicable LGPL §§4–6 and custom license permissions.
 
-**Release gate**: Keep PR #49 in Draft pending source-to-binary/relink-material validation and legal sign-off. CI green and a same-origin candidate archive are not an LGPL compliance verdict.
+**Release gate**: Keep PR #49 in Draft until the source-to-binary provenance and materials needed to rebuild/relink the shipped library are technically reviewed and any confirmed LGPL distribution gaps are resolved. An external legal review is advisable for uncertain terms, but it is not a licence-mandated sign-off. CI green, versioned archives and a same-origin candidate bundle do not by themselves prove licence conditions are satisfied.
