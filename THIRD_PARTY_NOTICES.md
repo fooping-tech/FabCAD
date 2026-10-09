@@ -50,6 +50,7 @@ Open CASCADE の公式説明では、LGPLのライブラリについて、少な
 - [x] **改変C++由来WASMのブラウザ起動**: [Chromium CI #37782658677](https://github.com/fooping-tech/FabCAD/actions/runs/37782658677)でWASM読み込みと空文書再計算が成功。非空モデルのブラウザ検証は未完了。
 - [x] **対応ソースの候補生成**: [CI #37783285458](https://github.com/fooping-tech/FabCAD/actions/runs/37783285458)で固定コミット由来の約68 MiBの候補アーカイブを作成。
 - [x] **Pages配布への組込み実装**: mainへのデプロイ時に対応ソース候補とSHA-256マニフェストをWASMと同一サイトへ配置するステップを追加。公開URLの疎通はマージ後に要確認。
+- [x] **旧バージョンの候補ソース保持処理**: 配布WASMとソース候補のSHA-256に紐づけたGitHub Releaseを生成し、変更せず保存する。既存Releaseのアーカイブを再取得・ハッシュ検証してからPagesを更新する。公開サイトにあるマニフェストの`archiveReleaseUrl`で当該版の固定取得先を案内する。実際のRelease作成はマージ後の本番実行で検証する。
 - [ ] **完全性の最終確認**: 元WASMと適用パッチの対応関係、再構築・再リンク素材の十分性、LGPL §6の適用方式を確認。
 - [ ] 著作権表示・本文へのリンクをユーザーが参照できる画面に設置し、ビルド後も利用できることを確認する。
 - [x] **Replicad本体のライセンス確認**: [2023-08-14の上流コミット](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)で開発者本人がAGPLからMITへ変更。現在の `replicad@1.1.0` はMITであることをGit履歴、LICENSE、package.json、npm公開情報で裏付け済み。READMEのAGPL文言は旧記述。なお、`replicad-opencascadejs` に含まれるOCCTのLGPL対応は別途未完了。
