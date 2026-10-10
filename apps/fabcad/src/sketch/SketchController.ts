@@ -458,6 +458,9 @@ export class SketchController {
   hitsSomething(p: PointerInfo): boolean {
     const feature = this.activeFeature();
     if (!feature) return false;
+    if (appState.get().tool === "node-edit") {
+      return this.hitEditableNode(feature.sketch, p) !== null;
+    }
     return (
       this.hitLabel(p) !== null ||
       this.hitEntity(feature.sketch, p) !== null ||
