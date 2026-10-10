@@ -13,7 +13,9 @@
     "preview": "npm --workspace apps/fabcad run preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:occt": "node scripts/audit-occt-dist.mjs",
+    "audit:licenses": "node scripts/audit-runtime-licenses.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",
