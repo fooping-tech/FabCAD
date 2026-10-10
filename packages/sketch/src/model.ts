@@ -280,7 +280,7 @@ export interface Sketch {
   /** Texts by id. Absent in sketches without text. */
   texts?: Record<string, SketchText>;
   /** Per-anchor outline node mode. Missing entries behave as corner nodes. */
-  nodeModes?: Record<EntityId, "smooth" | "symmetric">;
+  nodeModes?: Record<EntityId, "smooth" | "symmetric" | "sharp">;
   /** The fixed point at the sketch origin, if the sketch has one. */
   originId?: EntityId;
   /** Monotonic counter used to allocate entity / constraint / dimension ids. */
