@@ -5,6 +5,7 @@ import {
   expandNodeDrag,
   getPoint,
   nodeHandlePair,
+  releaseSharpOnHandleDrag,
   setNodeMode,
 } from "../src";
 
@@ -87,6 +88,54 @@ describe("Bézier outline node modes", () => {
     const moved = expandNodeDrag(symmetric, [{ pointId: anchor, target: { x: 2, y: -1 } }]);
     expect(targetOf(moved, incoming)).toEqual({ x: p.x + 2, y: p.y - 1 });
     expect(targetOf(moved, outgoing)).toEqual({ x: q.x + 2, y: q.y - 1 });
+  });
+
+  it("Sharp collapses both Bézier handles onto the anchor without changing the original sketch", () => {
+    const { sketch, anchor, incoming, outgoing } = example();
+    const sharp = setNodeMode(sketch, anchor, "sharp");
+    expect(sharp.nodeModes?.[anchor]).toBe("sharp");
+    expect(getPoint(sharp, incoming)).toEqual(getPoint(sharp, anchor));
+    expect(getPoint(sharp, outgoing)).toEqual(getPoint(sharp, anchor));
+    expect(getPoint(sketch, incoming)).not.toEqual(getPoint(sketch, anchor));
+    expect(getPoint(sketch, outgoing)).not.toEqual(getPoint(sketch, anchor));
+    expect((JSON.parse(JSON.stringify(sharp)) as typeof sharp).nodeModes?.[anchor]).toBe("sharp");
+    expect(setNodeMode(sharp, anchor, "sharp")).toBe(sharp);
+  });
+
+  it("dragging a Sharp anchor carries both collapsed handles without opening a curve", () => {
+    const { sketch, anchor, incoming, outgoing } = example();
+    const sharp = setNodeMode(sketch, anchor, "sharp");
+    const moved = { x: 5, y: -4 };
+    const direct = [{ pointId: anchor, target: moved }];
+    const expanded = expandNodeDrag(sharp, direct);
+    expect(targetOf(expanded, incoming)).toEqual(moved);
+    expect(targetOf(expanded, outgoing)).toEqual(moved);
+    expect(releaseSharpOnHandleDrag(sharp, direct)).toBe(sharp);
+  });
+
+  it("releases Sharp into Corner when the user drags out one of the handles", () => {
+    const { sketch, anchor, incoming, outgoing } = example();
+    const sharp = setNodeMode(sketch, anchor, "sharp");
+    const builder = new SketchBuilder(sharp);
+    builder.movePoint(incoming, { x: -4, y: 3 });
+    const moved = builder.build();
+    const corner = releaseSharpOnHandleDrag(moved, [{
+      pointId: incoming,
+      target: { x: -4, y: 3 },
+    }]);
+    expect(corner.nodeModes?.[anchor]).toBeUndefined();
+    expect(getPoint(corner, incoming)).toEqual({ x: -4, y: 3 });
+    expect(getPoint(corner, outgoing)).toEqual(getPoint(corner, anchor));
+    expect(sharp.nodeModes?.[anchor]).toBe("sharp");
+  });
+
+  it("switching Sharp back to Corner removes the mode but leaves the sharpened path", () => {
+    const { sketch, anchor, incoming, outgoing } = example();
+    const sharp = setNodeMode(sketch, anchor, "sharp");
+    const corner = setNodeMode(sharp, anchor, "corner");
+    expect(corner.nodeModes?.[anchor]).toBeUndefined();
+    expect(getPoint(corner, incoming)).toEqual(getPoint(corner, anchor));
+    expect(getPoint(corner, outgoing)).toEqual(getPoint(corner, anchor));
   });
 
   it("drops node mode metadata when the anchor is removed", () => {
