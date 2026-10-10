@@ -74,6 +74,7 @@ import { editSketch } from "@fabcad/sketch";
 import { createDoubleTapDetector, createWheelClassifier, sketchTouchUsesDrag } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
+import { shouldAutoFrameSketchEdit } from "./sketchAutoFrame";
 import { PointEntry } from "../panels/PointEntry";
 import { dragStep, extrudeManipulator } from "./extrudeManipulator";
 import { type Highlight, type Pick3D, type ViewName, ViewportScene } from "./scene";
@@ -1486,13 +1487,23 @@ export function Viewport(): ReactElement {
     controllerRef.current?.requestDraw();
   }, [doc, app.showConstraints, app.showDimensions, app.workspace, app.toolOptions, app.sketchOffset]);
 
-  // Keep the sketch in view: a dimension can push geometry far outside the window.
+  // Keep geometry in view after a dimensional change, but never steal camera position
+  // during node/curve edits. Zoomed-in lettering intentionally has off-screen bounds.
+  const autoFramePreviousDoc = useRef(doc);
   useEffect(() => {
+    const previous = autoFramePreviousDoc.current;
+    autoFramePreviousDoc.current = doc;
     const scene = sceneRef.current;
     const id = appState.get().activeSketchId;
     if (!scene || !id || documentStore.inTransaction) return;
     const f = doc.features[id];
     if (f?.type !== "sketch") return;
+    const before = previous.features[id];
+    if (!shouldAutoFrameSketchEdit(
+      before?.type === "sketch" ? before.sketch : undefined,
+      f.sketch,
+      previous.parameters !== doc.parameters,
+    )) return;
     const b = sketchBounds(f.sketch);
     if (!b) return;
     const plane = resolveSketchPlane(f.sketch.plane);
