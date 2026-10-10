@@ -26,7 +26,7 @@ describe("sketch auto-frame", () => {
     expect(smooth).not.toBe(sketch);
     expect(symmetric).not.toBe(smooth);
     expect(corner).not.toBe(symmetric);
-    for (const [before, after] of [[sketch, smooth], [smooth, symmetric], [symmetric, corner]]) {
+    for (const [before, after] of [[sketch, smooth], [smooth, symmetric], [symmetric, corner]] as const) {
       expect(shouldAutoFrameSketchEdit(before, after, false)).toBe(false);
       expect(shouldAutoFrameSketchEdit(after, before, false)).toBe(false);
     }
