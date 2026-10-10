@@ -357,6 +357,19 @@ export const HELP: Record<string, HelpEntry> = {
     what: ["Click to place a point.", SNAP_NOTE],
     when: ["To mark where holes are drilled: Hole takes sketch points."],
   },
+  "sketch.node-edit": {
+    title: "Node Edit",
+    summary: "Move individual outline anchors and Bézier handles precisely.",
+    what: [
+      "Right-click selected text and choose Convert to Path & Edit Nodes. The text becomes ordinary sketch lines and cubic control splines. Select Node Edit in the sketch ribbon to edit existing paths.",
+      "Square nodes are outline anchors shared by adjoining segments; round nodes are Bézier control handles. Drag any node to move just that point, without 1 mm grid or alignment snapping.",
+    ],
+    when: ["Customising letter outlines or changing individual line and spline points."],
+    limitations: [
+      "Converting to paths replaces editable text. Undo returns to the original text; save a copy before converting if the wording or font must remain editable.",
+      "Node Edit does not insert or delete nodes. Verify that changed paths remain closed and do not cross themselves before extruding or exporting.",
+    ],
+  },
   "sketch.text": {
     title: "Text",
     summary: "Text set in a font, as outlines that can be extruded or cut.",
@@ -366,7 +379,7 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     limitations: [
       "Fonts you load yourself are used on this computer only; they are neither saved in the project nor sent anywhere. A project opened without the font still shows and builds the text.",
-      "Explode Text turns a text into plain curves, which can no longer be edited as text.",
+      "Explode Text and Convert to Path & Edit Nodes turn text into ordinary curves. Undo to return to editable text.",
     ],
   },
   "sketch.point-entry": {
