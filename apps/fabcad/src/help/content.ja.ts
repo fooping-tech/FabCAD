@@ -329,6 +329,19 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: ["クリックした位置に点を置きます。", SNAP_NOTE],
     when: ["穴をあける位置の指定。Hole はスケッチの点を使います。"],
   },
+  "sketch.node-add": {
+    title: "Add Node（ノード追加）",
+    summary: "線や Bézier 曲線の途中に編集可能なアンカーを追加します。",
+    what: [
+      "スケッチ編集中にリボンの Node Edit の隣にある Add Node を選び、直線または3次 Bézier 曲線をタップします。挿入後は Node Edit に戻り、新しいアンカーが選択されます。",
+      "直線を分割すると、新しいアンカーを曲げて角を作れます。Bézier 曲線は元の形を維持したまま分割し、新しい接続点は Smooth として作られます。",
+    ],
+    when: ["文字の輪郭に編集点を増やしたいとき、直線の途中に角を付けたいとき。"],
+    limitations: [
+      "通常の直線と4点の3次制御点スプラインに対応します。投影された線や制約付きの曲線、端点には追加できません。円・円弧・楕円・フィットスプラインは未対応です。",
+      "Undo でノード追加を取り消せます。ノードの個別削除はまだ未対応です。",
+    ],
+  },
   "sketch.node-edit": {
     title: "Node Edit",
     summary: "輪郭のアンカーを Corner・Smooth・Symmetric・Sharp に切り替えて編集します。",
@@ -340,7 +353,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     when: ["文字の輪郭を調整するときや、直線・スプラインの点を個別に編集するとき。"],
     limitations: [
       "Convert to Path は編集可能な文字列を通常の曲線で置き換えます。Undo で元の文字に戻せます。文字列やフォントの編集を残したい場合は変換前にコピーしてください。",
-      "Sharp は左右のハンドルをアンカー位置に縮めます。Sharp から Corner に戻すと直前のハンドル位置を復元できます。Smooth・Symmetric に戻す場合は位置を復元したうえで接線をそろえます。Undo でも以前の形状に戻せます。Node Edit は点の追加・削除に未対応です。直線の接続点や端点は Smooth・Symmetric・Sharp に変更できません。押し出しや書き出し前にパスの閉鎖性と自己交差を確認してください。",
+      "Sharp は左右のハンドルをアンカー位置に縮めます。Sharp から Corner に戻すと直前のハンドル位置を復元できます。Smooth・Symmetric に戻す場合は位置を復元したうえで接線をそろえます。Undo でも以前の形状に戻せます。線上へのノード追加は Add Node で行えますが、点の個別削除は未対応です。直線の接続点や端点は Smooth・Symmetric・Sharp に変更できません。押し出しや書き出し前にパスの閉鎖性と自己交差を確認してください。",
     ],
   },
   "sketch.text": {
