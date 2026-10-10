@@ -27,6 +27,7 @@ import {
   breakCurve,
   editSketch,
   expandNodeDrag,
+  releaseSharpOnHandleDrag,
   entityPointIds,
   entityToCurves,
   extendCurve,
@@ -389,7 +390,7 @@ export class SketchController {
     }
     const hints: Record<string, string> = {
       select: "Click to select, drag geometry to move it. Double-click a dimension to edit it.",
-      "node-edit": "Node Edit: drag square outline anchors or round Bézier handles. Drag precisely without snapping; Esc exits.",
+      "node-edit": "Node Edit: tap an anchor to choose Corner, Smooth, Symmetric or Sharp. Drag nodes without snapping; Esc exits.",
       dimension:
         this.entityPicks.length === 0
           ? "Dimension: pick a line, circle, arc or point"
@@ -1130,6 +1131,7 @@ export class SketchController {
         }
       }
       next = solveDrag(drag.base, preciseNode ? expandNodeDrag(drag.base, targets) : targets);
+      if (next && preciseNode) next = releaseSharpOnHandleDrag(next, targets);
       // Constraints may have kept the point from getting there: no guide to where it is not.
       if (this.dragAlignment && next) {
         const moved = next.entities[drag.points[0]!.id];
