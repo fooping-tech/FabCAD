@@ -330,7 +330,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     when: ["穴をあける位置の指定。Hole はスケッチの点を使います。"],
   },
   "sketch.node-add": {
-    title: "Add Node（ノード追加）",
+    title: "Add Node",
     summary: "線や Bézier 曲線の途中に編集可能なアンカーを追加します。",
     what: [
       "スケッチ編集中にリボンの Node Edit の隣にある Add Node を選び、直線または3次 Bézier 曲線をタップします。挿入後は Node Edit に戻り、新しいアンカーが選択されます。",
