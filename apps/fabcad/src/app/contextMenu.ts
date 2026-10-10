@@ -17,8 +17,9 @@ import {
   openInstanceMove,
   openNewComponent,
 } from "./components";
-import { SKETCH_MODIFY_TOOLS, toggleConstruction } from "@fabcad/sketch";
+import { SKETCH_MODIFY_TOOLS, nodeHandlePair, toggleConstruction } from "@fabcad/sketch";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
+import { setSelectedNodeMode } from "../sketch/nodeModeCommands";
 import { CREATE_TOOLS, createTool } from "../sketch/createTools";
 import { exportSketchDxf, exportSketchSvg } from "../sketch/exportSketch";
 import type { MenuItem } from "../ui/Menu";
@@ -138,6 +139,13 @@ export function buildContextMenu(): MenuItem[] {
       const texts = selection.flatMap((s) =>
         s.kind === "text" && s.sketchId === sketchId ? [s.textId] : [],
       );
+      if (entities.some((id) => nodeHandlePair(feature.sketch, id))) {
+        items.push(
+          { label: "Node Type: Corner", icon: "rectangle-2point", onSelect: () => void setSelectedNodeMode("corner") },
+          { label: "Node Type: Smooth", icon: "spline-control", onSelect: () => void setSelectedNodeMode("smooth") },
+          { label: "Node Type: Symmetric", icon: "circle", onSelect: () => void setSelectedNodeMode("symmetric") },
+        );
+      }
       if (texts.length > 0) {
         if (texts.length === 1) {
           items.push({ label: "Edit Text", icon: "text", onSelect: () => editText(sketchId, texts[0]!) });
