@@ -368,7 +368,7 @@ export const HELP: Record<string, HelpEntry> = {
     when: ["Customising letter outlines or changing individual line and spline points."],
     limitations: [
       "Converting to paths replaces editable text. Undo returns to the original text; save a copy before converting if the wording or font must remain editable.",
-      "Sharp changes the path by collapsing handles; switching back to Corner does not restore their previous positions. Use Undo to restore the original curves. Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot use Smooth, Symmetric or Sharp. Check that edited paths remain closed before extruding or exporting.",
+      "Sharp temporarily collapses both handles. Switching from Sharp back to Corner restores their previous positions; Smooth or Symmetric restores and aligns them. Undo also restores the preceding shape. Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot use Smooth, Symmetric or Sharp. Check that edited paths remain closed before extruding or exporting.",
     ],
   },
   "sketch.text": {
