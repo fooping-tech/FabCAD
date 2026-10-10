@@ -10,6 +10,10 @@
  * and times, which keeps them testable without a browser.
  */
 
+/** Selection and Node Edit start their drag on touch-down; creation tools place on release. */
+export const sketchTouchUsesDrag = (tool: string): boolean =>
+  tool === "select" || tool === "node-edit";
+
 export interface TapPoint {
   x: number;
   y: number;
