@@ -10,7 +10,9 @@ import {
   addText,
   createSketch,
   detectProfiles,
+  entityToCurves,
   explodeText,
+  getPoint,
   hitTestText,
   profileRefOf,
   removeTexts,
@@ -246,6 +248,31 @@ describe("sketch text", () => {
     const ink = after.filter((r) => r.profile.holes.length > 0);
     expect(ink.length).toBe(before.length);
     expect(total(ink)).toBeCloseTo(total(before), 3);
+  });
+
+  it("allows individual Bézier handle edits after exploding, without breaking the closed text region", () => {
+    const { sketch, id } = make("O");
+    const result = explodeText(sketch, id)!;
+    const cubic = result.created
+      .map((entityId) => result.sketch.entities[entityId])
+      .find((entity) => entity?.type === "spline" && entity.points.length === 4);
+    if (!cubic || cubic.type !== "spline") throw new Error("Expected a cubic outline");
+
+    const before = entityToCurves(result.sketch, cubic)[0]!;
+    const handle = cubic.points[1]!;
+    const position = getPoint(result.sketch, handle);
+    const b = new SketchBuilder(result.sketch);
+    b.movePoint(handle, { x: position.x + 0.2, y: position.y + 0.15 });
+    const moved = b.build();
+    const updated = moved.entities[cubic.id]!;
+    if (updated.type !== "spline") throw new Error("Spline missing after edit");
+    const after = entityToCurves(moved, updated)[0]!;
+
+    expect(after).not.toEqual(before);
+    expect(moved.texts?.[id]).toBeUndefined();
+    expect(detectProfiles(moved).some((region) => region.profile.holes.length > 0)).toBe(true);
+    const restored = JSON.parse(JSON.stringify(moved)) as Sketch;
+    expect(entityToCurves(restored, restored.entities[cubic.id] as typeof cubic)).toEqual(entityToCurves(moved, updated));
   });
 
   it("picks a text by its box and removes it with its origin", () => {
