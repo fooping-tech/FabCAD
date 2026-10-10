@@ -31,6 +31,16 @@ describe("guide for AI agents", () => {
     expect(html).toContain("<pre>Introduction page");
   });
 
+  it("instructs agents to share URLs byte-for-byte and fall back to project files", () => {
+    expect(md).toContain("## Sharing a project URL with a user");
+    expect(md).toContain("Transfer the complete captured URL byte-for-byte");
+    expect(md).toContain("actual clickable link destination (href)");
+    expect(md).toContain("Do not manually type, predict, reconstruct");
+    expect(md).toContain(".fabcad.json file instead");
+    expect(html).toContain("Sharing a project URL with a user");
+    expect(html).toContain("Transfer the complete captured URL byte-for-byte");
+  });
+
   it("is a complete HTML page with the same content, escaped", () => {
     expect(html.startsWith("<!doctype html>")).toBe(true);
     expect(html).toContain("<title>FabCAD Agent Guide</title>");
