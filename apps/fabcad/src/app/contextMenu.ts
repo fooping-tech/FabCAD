@@ -143,6 +143,14 @@ export function buildContextMenu(): MenuItem[] {
           items.push({ label: "Edit Text", icon: "text", onSelect: () => editText(sketchId, texts[0]!) });
         }
         items.push({
+          label: "Convert to Path & Edit Nodes",
+          icon: "spline-control",
+          help: { id: "sketch.node-edit", title: "Node Edit", summary: "Convert the text to editable outlines, then drag individual nodes." },
+          onSelect: () => {
+            if (explodeTexts(sketchId, texts)) setTool("node-edit");
+          },
+        });
+        items.push({
           label: "Explode Text",
           icon: "explode",
           onSelect: () => void explodeTexts(sketchId, texts),
@@ -165,6 +173,12 @@ export function buildContextMenu(): MenuItem[] {
         return e && e.type !== "point";
       });
       if (curves.length > 0) {
+        items.push({
+          label: "Edit Nodes",
+          icon: "spline-control",
+          help: { id: "sketch.node-edit", title: "Node Edit", summary: "Move individual line or spline points." },
+          onSelect: () => setTool("node-edit"),
+        });
         items.push({
           label: "Normal / Construction",
           icon: "toggle-construction",
