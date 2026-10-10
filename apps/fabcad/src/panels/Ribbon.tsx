@@ -116,7 +116,7 @@ function SketchRibbon(): ReactElement {
   const anchors = sketch && sketchId
     ? selection.flatMap((s) => s.kind === "entity" && s.sketchId === sketchId && nodeHandlePair(sketch, s.entityId) ? [s.entityId] : [])
     : [];
-  const modes: NodeMode[] = ["corner", "smooth", "symmetric"];
+  const modes: NodeMode[] = ["corner", "smooth", "symmetric", "sharp"];
   const activeMode = anchors.length && sketch
     ? modes.find((mode) => anchors.every((id) => (sketch.nodeModes?.[id] ?? "corner") === mode))
     : undefined;
@@ -160,11 +160,12 @@ function SketchRibbon(): ReactElement {
             detached
             buttonClass="tool"
             title={anchors.length ? "Change the selected anchor node type" : "Tap an outline anchor to choose its node type"}
-            label={<><Icon name="spline-control" /> <span>{activeMode === "smooth" ? "Smooth" : activeMode === "symmetric" ? "Symmetric" : "Node Type"}</span></>}
+            label={<><Icon name="spline-control" /> <span>{activeMode === "smooth" ? "Smooth" : activeMode === "symmetric" ? "Symmetric" : activeMode === "sharp" ? "Sharp" : activeMode === "corner" ? "Corner" : "Node Type"}</span></>}
             items={[
               { label: "Corner", icon: "rectangle-2point", active: activeMode === "corner", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("corner") },
               { label: "Smooth", icon: "spline-control", active: activeMode === "smooth", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("smooth") },
               { label: "Symmetric", icon: "circle", active: activeMode === "symmetric", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("symmetric") },
+              { label: "Sharp", icon: "triangle", active: activeMode === "sharp", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("sharp") },
             ]}
           />
         </Group>

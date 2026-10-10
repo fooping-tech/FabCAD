@@ -144,6 +144,7 @@ export function buildContextMenu(): MenuItem[] {
           { label: "Node Type: Corner", icon: "rectangle-2point", onSelect: () => void setSelectedNodeMode("corner") },
           { label: "Node Type: Smooth", icon: "spline-control", onSelect: () => void setSelectedNodeMode("smooth") },
           { label: "Node Type: Symmetric", icon: "circle", onSelect: () => void setSelectedNodeMode("symmetric") },
+          { label: "Node Type: Sharp", icon: "triangle", onSelect: () => void setSelectedNodeMode("sharp") },
         );
       }
       if (texts.length > 0) {

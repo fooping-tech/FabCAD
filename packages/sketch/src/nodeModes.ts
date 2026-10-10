@@ -3,7 +3,7 @@ import { SketchBuilder, entityPointIds, getPoint } from "./edit";
 import type { EntityId, Sketch } from "./model";
 
 /** Corner is implicit to preserve compatibility with existing sketches. */
-export type NodeMode = "corner" | "smooth" | "symmetric";
+export type NodeMode = "corner" | "smooth" | "symmetric" | "sharp";
 export interface NodeDragTarget {
   pointId: EntityId;
   target: Vec2;
@@ -44,7 +44,7 @@ export function nodeHandlePair(sketch: Sketch, anchorId: EntityId): NodeHandlePa
   return incoming && outgoing && incoming !== outgoing ? { incoming, outgoing } : null;
 }
 
-/** Choose the node mode and immediately make the two tangents collinear. */
+/** Choose the node mode and immediately reshape the two tangents, or collapse them for Sharp. */
 export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode): Sketch {
   if (sketch.entities[anchorId]?.type !== "point") return sketch;
   const pair = nodeHandlePair(sketch, anchorId);
@@ -53,10 +53,27 @@ export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode):
   if (mode === current) return sketch;
 
   const b = new SketchBuilder(sketch);
-  if (mode !== "corner") {
-    const at = getPoint(sketch, anchorId);
-    const inPos = getPoint(sketch, pair.incoming);
-    const outPos = getPoint(sketch, pair.outgoing);
+  const at = getPoint(sketch, anchorId);
+  const backups = { ...sketch.nodeSharpBackups };
+  if (mode === "sharp") {
+    // Keep offsets relative to the anchor so restoring works even after the Sharp point moves.
+    backups[anchorId] = {
+      incoming: diff(getPoint(sketch, pair.incoming), at),
+      outgoing: diff(getPoint(sketch, pair.outgoing), at),
+    };
+    b.movePoint(pair.incoming, at);
+    b.movePoint(pair.outgoing, at);
+  } else {
+    const backup = current === "sharp" ? backups[anchorId] : undefined;
+    if (backup) {
+      b.movePoint(pair.incoming, shift(at, backup.incoming));
+      b.movePoint(pair.outgoing, shift(at, backup.outgoing));
+    }
+    delete backups[anchorId];
+  }
+  if (mode === "smooth" || mode === "symmetric") {
+    const inPos = getPoint(b.current, pair.incoming);
+    const outPos = getPoint(b.current, pair.outgoing);
     const incomingVector = diff(at, inPos);
     const outgoingVector = diff(outPos, at);
     const inLength = length(incomingVector);
@@ -72,7 +89,7 @@ export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode):
   const modes = { ...sketch.nodeModes };
   if (mode === "corner") delete modes[anchorId];
   else modes[anchorId] = mode;
-  return { ...b.build(), nodeModes: modes };
+  return { ...b.build(), nodeModes: modes, nodeSharpBackups: backups };
 }
 
 /**
@@ -81,7 +98,7 @@ export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode):
  * - Moving an anchor carries its attached handles by the same displacement, regardless of mode.
  * - Moving a handle on Smooth keeps the opposite tangent collinear at its previous length.
  * - Moving a handle on Symmetric also keeps the opposite length equal.
- * - Corner handles remain independent.
+ * - Corner handles remain independent. Sharp handles remain at their anchor until edited.
  *
  * Explicit user-dragged points always take priority over generated targets.
  */
@@ -127,4 +144,25 @@ export function expandNodeDrag(sketch: Sketch, direct: NodeDragTarget[]): NodeDr
   }
 
   return [...targets].map(([pointId, target]) => ({ pointId, target }));
+}
+
+/** Pulling a Sharp handle out of its anchor turns the node back into an editable Corner.
+ * This is an immutable edit, made in the same document transaction as the drag.
+ */
+export function releaseSharpOnHandleDrag(sketch: Sketch, direct: readonly NodeDragTarget[]): Sketch {
+  const ids = new Set(direct.map((t) => t.pointId));
+  const modes = { ...sketch.nodeModes };
+  const backups = { ...sketch.nodeSharpBackups };
+  let changed = false;
+  for (const [anchorId, mode] of Object.entries(sketch.nodeModes ?? {})) {
+    if (mode !== "sharp") continue;
+    const pair = nodeHandlePair(sketch, anchorId);
+    if (pair && (ids.has(pair.incoming) || ids.has(pair.outgoing))) {
+      // Keep the handle where the user pulled it rather than restoring the Sharp backup.
+      delete modes[anchorId];
+      delete backups[anchorId];
+      changed = true;
+    }
+  }
+  return changed ? { ...sketch, nodeModes: modes, nodeSharpBackups: backups } : sketch;
 }

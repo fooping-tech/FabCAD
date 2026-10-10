@@ -248,6 +248,11 @@ export class SketchBuilder {
       for (const id of doomed) delete modes[id];
       this.sketch.nodeModes = modes;
     }
+    if (this.sketch.nodeSharpBackups) {
+      const backups = { ...this.sketch.nodeSharpBackups };
+      for (const id of doomed) delete backups[id];
+      this.sketch.nodeSharpBackups = backups;
+    }
     // A projection that lost one of its entities is released: what remains is plain geometry.
     if (this.sketch.projections.some((r) => r.entityIds.some((id) => doomed.has(id)))) {
       this.sketch.projections = this.sketch.projections.filter(

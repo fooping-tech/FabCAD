@@ -359,16 +359,16 @@ export const HELP: Record<string, HelpEntry> = {
   },
   "sketch.node-edit": {
     title: "Node Edit",
-    summary: "Edit outline nodes as corner, smooth or symmetric Bézier joins.",
+    summary: "Edit outline nodes as Corner, Smooth, Symmetric or Sharp Bézier joins.",
     what: [
       "Right-click selected text and choose Convert to Path & Edit Nodes. The text becomes ordinary sketch lines and cubic control splines. Select Node Edit in the sketch ribbon to edit existing paths.",
-      "Tap an anchor in Node Edit, then use the Node Type menu in the sketch ribbon to choose Corner (independent handles), Smooth (handles stay collinear but can differ in length), or Symmetric (collinear handles with matching lengths). Only anchors between exactly two cubic Bézier curves offer all three modes.",
-      "Corner anchors are square, Smooth anchors round, and Symmetric anchors diamond-shaped. Small round points are Bézier handles. Dragging an anchor carries its handles; dragging one handle on Smooth or Symmetric automatically updates the opposite handle. Node dragging ignores the 1 mm grid.",
+      "Tap an anchor in Node Edit, then use Node Type to choose Corner (independent handles), Smooth (collinear handles of independent lengths), Symmetric (equal-length collinear handles), or Sharp (collapse both handles to the anchor for a pointed corner). The four modes apply to anchors joining two cubic Bézier spans.",
+      "Corner anchors are square, Smooth anchors round, Symmetric anchors diamond-shaped, and Sharp anchors triangular. Small round points are Bézier handles. Sharp hides handles collapsed at the anchor. Dragging an anchor carries its handles; dragging a handle on Smooth or Symmetric updates the opposite handle. Node dragging ignores the 1 mm grid.",
     ],
     when: ["Customising letter outlines or changing individual line and spline points."],
     limitations: [
       "Converting to paths replaces editable text. Undo returns to the original text; save a copy before converting if the wording or font must remain editable.",
-      "Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot be converted to Smooth or Symmetric. Verify that changed paths remain closed and do not cross themselves before extruding or exporting.",
+      "Sharp temporarily collapses both handles. Switching from Sharp back to Corner restores their previous positions; Smooth or Symmetric restores and aligns them. Undo also restores the preceding shape. Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot use Smooth, Symmetric or Sharp. Check that edited paths remain closed before extruding or exporting.",
     ],
   },
   "sketch.text": {
