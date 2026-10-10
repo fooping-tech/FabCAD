@@ -340,7 +340,7 @@ export const HELP_JA: Record<string, HelpEntry> = {
     when: ["文字の輪郭を調整するときや、直線・スプラインの点を個別に編集するとき。"],
     limitations: [
       "Convert to Path は編集可能な文字列を通常の曲線で置き換えます。Undo で元の文字に戻せます。文字列やフォントの編集を残したい場合は変換前にコピーしてください。",
-      "Sharp はハンドルを縮めて輪郭自体を変更します。Corner に戻しても以前のハンドル位置は戻りません。元の曲線に戻すには Undo を使ってください。Node Edit は点の追加・削除に未対応です。直線の接続点や端点は Smooth・Symmetric・Sharp に変更できません。押し出しや書き出し前にパスの閉鎖性と自己交差を確認してください。",
+      "Sharp は左右のハンドルをアンカー位置に縮めます。Sharp から Corner に戻すと直前のハンドル位置を復元できます。Smooth・Symmetric に戻す場合は位置を復元したうえで接線をそろえます。Undo でも以前の形状に戻せます。Node Edit は点の追加・削除に未対応です。直線の接続点や端点は Smooth・Symmetric・Sharp に変更できません。押し出しや書き出し前にパスの閉鎖性と自己交差を確認してください。",
     ],
   },
   "sketch.text": {
