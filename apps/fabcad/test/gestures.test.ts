@@ -5,11 +5,25 @@ import {
   createDoubleTapDetector,
   createLongPress,
   createWheelClassifier,
+  sketchTouchUsesDrag,
 } from "../src/ui/gestures";
 
 const tap = (x: number, y: number, at: number, held = 60) => ({
   down: { x, y, time: at },
   up: { x, y, time: at + held },
+});
+
+describe("sketch touch drag routing", () => {
+  it("starts selecting and node editing on touch-down, not release", () => {
+    expect(sketchTouchUsesDrag("select")).toBe(true);
+    expect(sketchTouchUsesDrag("node-edit")).toBe(true);
+  });
+
+  it("keeps shape creation as release-to-place", () => {
+    for (const tool of ["text", "line", "spline-fit", "offset", "project"]) {
+      expect(sketchTouchUsesDrag(tool)).toBe(false);
+    }
+  });
 });
 
 describe("double tap", () => {
