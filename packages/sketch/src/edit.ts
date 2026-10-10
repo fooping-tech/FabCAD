@@ -242,6 +242,12 @@ export class SketchBuilder {
       this.sketch.texts = kept;
     }
     for (const id of doomed) delete this.sketch.entities[id];
+    // Modes refer to anchor point IDs; never leave settings for deleted geometry behind.
+    if (this.sketch.nodeModes) {
+      const modes = { ...this.sketch.nodeModes };
+      for (const id of doomed) delete modes[id];
+      this.sketch.nodeModes = modes;
+    }
     // A projection that lost one of its entities is released: what remains is plain geometry.
     if (this.sketch.projections.some((r) => r.entityIds.some((id) => doomed.has(id)))) {
       this.sketch.projections = this.sketch.projections.filter(
