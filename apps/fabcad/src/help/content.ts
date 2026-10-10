@@ -357,6 +357,19 @@ export const HELP: Record<string, HelpEntry> = {
     what: ["Click to place a point.", SNAP_NOTE],
     when: ["To mark where holes are drilled: Hole takes sketch points."],
   },
+  "sketch.node-add": {
+    title: "Add Node",
+    summary: "Insert an editable anchor on a line or cubic Bézier outline.",
+    what: [
+      "While editing a sketch, choose Add Node beside Node Edit in the ribbon, then tap or click a line or a cubic Bézier curve. You return to Node Edit with the inserted anchor selected.",
+      "Splitting a straight line creates two joined lines that can bend at the new anchor. Splitting a Bézier curve preserves the exact shape and creates a Smooth anchor with editable handles on both sides.",
+    ],
+    when: ["Adding detail to a letter outline, turning a straight segment into a corner, or reshaping part of a curve."],
+    limitations: [
+      "Only ordinary lines and four-point cubic control splines are supported. Projected or constrained curves and endpoints cannot be split. Circles, arcs, ellipses and fit splines are not supported.",
+      "Use Undo to remove a new node. Existing node deletion is not yet supported.",
+    ],
+  },
   "sketch.node-edit": {
     title: "Node Edit",
     summary: "Edit outline nodes as Corner, Smooth, Symmetric or Sharp Bézier joins.",
@@ -368,7 +381,7 @@ export const HELP: Record<string, HelpEntry> = {
     when: ["Customising letter outlines or changing individual line and spline points."],
     limitations: [
       "Converting to paths replaces editable text. Undo returns to the original text; save a copy before converting if the wording or font must remain editable.",
-      "Sharp temporarily collapses both handles. Switching from Sharp back to Corner restores their previous positions; Smooth or Symmetric restores and aligns them. Undo also restores the preceding shape. Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot use Smooth, Symmetric or Sharp. Check that edited paths remain closed before extruding or exporting.",
+      "Sharp temporarily collapses both handles. Switching from Sharp back to Corner restores their previous positions; Smooth or Symmetric restores and aligns them. Undo also restores the preceding shape. Add Node inserts points into lines and cubic Bézier curves. Node deletion is not yet supported. Straight-line joins and endpoints cannot use Smooth, Symmetric or Sharp. Check that edited paths remain closed before extruding or exporting.",
     ],
   },
   "sketch.text": {

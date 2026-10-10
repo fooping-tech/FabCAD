@@ -32,6 +32,7 @@ import {
   entityToCurves,
   extendCurve,
   getPoint,
+  insertNodeOnCurve,
   hitTestSketch,
   hitTestText,
   isCurve,
@@ -85,6 +86,7 @@ import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension }
 import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "./offsetGeometry";
 import { cancelOffset, commitOffset, patchOffset } from "./offsetTool";
 import { editableNodes } from "./nodeEdit";
+import { setTool } from "../app/actions";
 import { TOOLS_WITH_WINDOW } from "./toolWindows";
 import { shapeAnchor, shapeDimensions } from "./shapeDimensions";
 import {
@@ -390,7 +392,8 @@ export class SketchController {
     }
     const hints: Record<string, string> = {
       select: "Click to select, drag geometry to move it. Double-click a dimension to edit it.",
-      "node-edit": "Node Edit: tap an anchor to choose Corner, Smooth, Symmetric or Sharp. Drag nodes without snapping; Esc exits.",
+      "node-edit": "Node Edit: drag an anchor or handle; choose Add Node to tap on an outline segment.",
+      "node-add": "Add Node: tap a line or Bézier curve to insert an anchor. Drag the new point in Node Edit.",
       dimension:
         this.entityPicks.length === 0
           ? "Dimension: pick a line, circle, arc or point"
@@ -633,7 +636,7 @@ export class SketchController {
           ? { kind: "dimension", sketchId: feature.id, id: label.id }
           : { kind: "constraint", sketchId: feature.id, id: label.id };
     } else {
-      const curvesOnly = tool === "trim" || tool === "extend" || tool === "break" || tool === "offset";
+      const curvesOnly = tool === "trim" || tool === "extend" || tool === "break" || tool === "offset" || tool === "node-add";
       const e = tool === "node-edit"
         ? this.hitEditableNode(sketch, p)
         : this.hitEntity(sketch, p, curvesOnly ? { points: false } : undefined);
@@ -1310,6 +1313,24 @@ export class SketchController {
     };
 
     switch (tool) {
+      case "node-add": {
+        if (!curve) return;
+        const result = insertNodeOnCurve(sketch, curve.id, at);
+        if (!result.nodeId) {
+          toast("Pick an unconstrained line or cubic Bézier away from its endpoints.", "warning");
+          return;
+        }
+        if (editSketchSolved(feature.id, "Add Node", () => result.sketch)) {
+          appState.set({
+            selection: [{ kind: "entity", sketchId: feature.id, entityId: result.nodeId }],
+            hover: null,
+          });
+          // Return to editing the inserted point, including on touch screens.
+          setTool("node-edit");
+          this.requestDraw();
+        }
+        return;
+      }
       case "trim":
         if (curve) apply("Trim", (s) => trimCurve(s, curve.id, at));
         return;

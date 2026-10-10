@@ -28,6 +28,7 @@ const P: Record<string, ReactElement> = {
   check: <path d="M4 10.5l4 4 8-9" />,
   warning: <path d="M10 3l8 14H2zM10 8v4.5M10 14.8v.4" />,
   triangle: <path d="M10 3l8 14H2z" />,
+  "add-node": <><path d="M2 15C6 4 11 4 18 8" /><circle cx="10" cy="7" r="2.2" /><path d="M10 3v8M6 7h8" /></>,
   info: (
     <>
       <circle cx="10" cy="10" r="7" />

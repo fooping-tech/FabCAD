@@ -9,3 +9,4 @@ export * from "./project";
 export * from "./window";
 export * from "./text";
 export * from "./nodeModes";
+export * from "./insertNode";
