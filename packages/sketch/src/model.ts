@@ -281,6 +281,8 @@ export interface Sketch {
   texts?: Record<string, SketchText>;
   /** Per-anchor outline node mode. Missing entries behave as corner nodes. */
   nodeModes?: Record<EntityId, "smooth" | "symmetric" | "sharp">;
+  /** Previous handle offsets from anchors sharpened via Sharp; used to restore editable curves. */
+  nodeSharpBackups?: Record<EntityId, { incoming: Vec2; outgoing: Vec2 }>;
   /** The fixed point at the sketch origin, if the sketch has one. */
   originId?: EntityId;
   /** Monotonic counter used to allocate entity / constraint / dimension ids. */
