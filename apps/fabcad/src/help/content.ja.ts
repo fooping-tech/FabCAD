@@ -331,16 +331,16 @@ export const HELP_JA: Record<string, HelpEntry> = {
   },
   "sketch.node-edit": {
     title: "Node Edit",
-    summary: "輪郭のアンカーを Corner・Smooth・Symmetric に切り替えて編集します。",
+    summary: "輪郭のアンカーを Corner・Smooth・Symmetric・Sharp に切り替えて編集します。",
     what: [
       "テキストを選択して右クリックし、Convert to Path & Edit Nodes を選ぶと、文字が通常の直線と制御点スプラインに変わります。既存のパスなら、スケッチのリボンで Node Edit を選びます。",
-      "Node Edit でアンカーをタップし、スケッチのリボンの Node Type メニューから Corner（左右のハンドルは独立）、Smooth（同一直線上だが長さは独立）、Symmetric（同一直線上で長さも同じ）を選びます。2 本の3次 Bézier 曲線をつなぐアンカーのみ3種類を選べます。",
-      "Corner は四角、Smooth は丸、Symmetric はひし形のアンカーです。小さな丸は Bézier のハンドルです。アンカーを動かすと隣のハンドルも一緒に移動し、Smooth・Symmetric の片側ハンドルを動かすともう一方も連動します。ノードの移動に 1 mm グリッドは適用しません。",
+      "Node Edit でアンカーをタップし、Node Type メニューから Corner（左右独立）、Smooth（同一直線上で長さ独立）、Symmetric（同一直線上で長さも一致）、Sharp（左右のハンドルをアンカーに重ねて鋭角化）を選びます。4種類を選べるのは2本の3次 Bézier 曲線をつなぐアンカーです。",
+      "Corner は四角、Smooth は丸、Symmetric はひし形、Sharp は三角で表示します。小さな丸は Bézier のハンドルです。Sharp ではアンカーと重なったハンドルは表示しません。アンカーを動かすと隣のハンドルも移動し、Smooth・Symmetric の片側ハンドルを動かすともう片方も連動します。ノードの移動に 1 mm グリッドは適用しません。",
     ],
     when: ["文字の輪郭を調整するときや、直線・スプラインの点を個別に編集するとき。"],
     limitations: [
       "Convert to Path は編集可能な文字列を通常の曲線で置き換えます。Undo で元の文字に戻せます。文字列やフォントの編集を残したい場合は変換前にコピーしてください。",
-      "Node Edit では点の追加・削除はできません。直線の接続点や端点は Smooth・Symmetric に変更できません。押し出しや書き出しの前に、パスが閉じていて自己交差していないか確認してください。",
+      "Sharp はハンドルを縮めて輪郭自体を変更します。Corner に戻しても以前のハンドル位置は戻りません。元の曲線に戻すには Undo を使ってください。Node Edit は点の追加・削除に未対応です。直線の接続点や端点は Smooth・Symmetric・Sharp に変更できません。押し出しや書き出し前にパスの閉鎖性と自己交差を確認してください。",
     ],
   },
   "sketch.text": {
