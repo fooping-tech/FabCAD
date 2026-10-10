@@ -132,6 +132,13 @@ function SketchRibbon(): ReactElement {
     <>
       <Group label="Select">
         <Tool icon="select" help="select" title="Select (Esc)" active={tool === "select"} onClick={() => setTool("select")} />
+        <Tool
+          icon="spline-control"
+          help="sketch.node-edit"
+          title="Node Edit — drag outline anchors and Bézier handles"
+          active={tool === "node-edit"}
+          onClick={() => setTool("node-edit")}
+        />
         <MultiSelectTool />
       </Group>
       <Group label="Create">
