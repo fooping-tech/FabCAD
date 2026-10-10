@@ -1,4 +1,4 @@
-import { SKETCH_MODIFY_TOOLS } from "@fabcad/sketch";
+import { SKETCH_MODIFY_TOOLS, nodeHandlePair, type NodeMode } from "@fabcad/sketch";
 import type { ReactElement } from "react";
 import {
   DIALOG_COMMANDS,
@@ -26,6 +26,7 @@ import {
 } from "../app/components";
 import { CONSTRAINT_TOOLS } from "../sketch/constraintTools";
 import { CREATE_TOOLS } from "../sketch/createTools";
+import { setSelectedNodeMode } from "../sketch/nodeModeCommands";
 import { useHelpTrigger } from "../help/useHelpTrigger";
 import { applyConstraintToSelection, toggleSelectedConstruction } from "../app/sketchCommands";
 import { Icon } from "../ui/Icon";
@@ -107,6 +108,18 @@ const PRIMARY_MODIFY = ["trim", "extend", "offset", "mirror", "move", "copy", "f
 
 function SketchRibbon(): ReactElement {
   const tool = useStore(appState, (s) => s.tool);
+  const selection = useStore(appState, (s) => s.selection);
+  const sketchId = useStore(appState, (s) => s.activeSketchId);
+  const doc = useDocument();
+  const feature = sketchId ? doc.features[sketchId] : undefined;
+  const sketch = feature?.type === "sketch" ? feature.sketch : null;
+  const anchors = sketch && sketchId
+    ? selection.flatMap((s) => s.kind === "entity" && s.sketchId === sketchId && nodeHandlePair(sketch, s.entityId) ? [s.entityId] : [])
+    : [];
+  const modes: NodeMode[] = ["corner", "smooth", "symmetric"];
+  const activeMode = anchors.length && sketch
+    ? modes.find((mode) => anchors.every((id) => (sketch.nodeModes?.[id] ?? "corner") === mode))
+    : undefined;
   const options = useStore(appState, (s) => s.toolOptions);
   const showConstraints = useStore(appState, (s) => s.showConstraints);
   const measuring = useStore(appState, (s) => s.measuring);
@@ -141,6 +154,21 @@ function SketchRibbon(): ReactElement {
         />
         <MultiSelectTool />
       </Group>
+      {tool === "node-edit" && (
+        <Group label="Node Type">
+          <Menu
+            detached
+            buttonClass="tool"
+            title={anchors.length ? "Change the selected anchor node type" : "Tap an outline anchor to choose its node type"}
+            label={<><Icon name="spline-control" /> <span>{activeMode === "smooth" ? "Smooth" : activeMode === "symmetric" ? "Symmetric" : "Node Type"}</span></>}
+            items={[
+              { label: "Corner", icon: "rectangle-2point", active: activeMode === "corner", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("corner") },
+              { label: "Smooth", icon: "spline-control", active: activeMode === "smooth", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("smooth") },
+              { label: "Symmetric", icon: "circle", active: activeMode === "symmetric", disabled: anchors.length === 0, onSelect: () => setSelectedNodeMode("symmetric") },
+            ]}
+          />
+        </Group>
+      )}
       <Group label="Create">
         {primary.map((t) => (
           <Tool
