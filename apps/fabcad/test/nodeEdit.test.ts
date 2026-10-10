@@ -22,11 +22,15 @@ describe("Node Edit", () => {
     expect(nodes.get(right)).toBe("handle");
     expect(nodes.size).toBe(4);
 
-    const before = entityToCurves(sketch, sketch.entities[spline]!)[0]!;
+    const entity = sketch.entities[spline]!;
+    if (entity.type !== "spline") throw new Error("Expected a spline");
+    const before = entityToCurves(sketch, entity)[0]!;
     const edit = new SketchBuilder(sketch);
     edit.movePoint(right, { x: 6.5, y: 6 });
     const changed = edit.build();
-    const after = entityToCurves(changed, changed.entities[spline]!)[0]!;
+    const updated = changed.entities[spline]!;
+    if (updated.type !== "spline") throw new Error("Expected an edited spline");
+    const after = entityToCurves(changed, updated)[0]!;
     expect(after.type).toBe("bezier");
     expect(after).not.toEqual(before);
     expect(getPoint(changed, start)).toEqual(getPoint(sketch, start));
