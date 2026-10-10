@@ -152,6 +152,13 @@ function SketchRibbon(): ReactElement {
           active={tool === "node-edit"}
           onClick={() => setTool("node-edit")}
         />
+        <Tool
+          icon="add-node"
+          help="sketch.node-add"
+          title="Add Node — tap a line or Bézier outline to insert an editable anchor"
+          active={tool === "node-add"}
+          onClick={() => setTool("node-add")}
+        />
         <MultiSelectTool />
       </Group>
       {tool === "node-edit" && (
