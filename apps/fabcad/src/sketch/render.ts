@@ -337,11 +337,19 @@ export function drawSketchGeometry(
     }
     const r = highlighted ? 4.5 : role === "anchor" ? 4 : 3;
     ctx.beginPath();
-    if (state.nodeEdit && role === "anchor") {
-      // Square = a node on the outline. Moving it keeps adjacent segments joined.
+    const mode = role === "anchor" ? (sketch.nodeModes?.[e.id] ?? "corner") : null;
+    if (state.nodeEdit && role === "anchor" && mode === "corner") {
+      // Corner: square (independent tangents).
       ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+    } else if (state.nodeEdit && role === "anchor" && mode === "symmetric") {
+      // Symmetric: diamond (opposite handles have the same length).
+      ctx.moveTo(s.x, s.y - r - 1);
+      ctx.lineTo(s.x + r + 1, s.y);
+      ctx.lineTo(s.x, s.y + r + 1);
+      ctx.lineTo(s.x - r - 1, s.y);
+      ctx.closePath();
     } else {
-      // Circle = a cubic Bézier handle, independently draggable.
+      // Smooth: round anchor, slightly larger than round Bézier handles.
       ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
     }
     ctx.fillStyle = centres.has(e.id) && !highlighted ? "#fff" : entityColor(e.id, false, state);
