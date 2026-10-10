@@ -20,6 +20,7 @@ import {
   getPoint,
   isCurve,
   measureDimension,
+  nodeHandlePair,
   sketchTexts,
   textBox,
   textLoops,
@@ -295,6 +296,23 @@ export function drawSketchGeometry(
   const shown = state.shownPoints;
   if (!state.active && !shown) return;
   const nodes = state.nodeEdit ? editableNodes(sketch) : null;
+  // Sharp collapses both adjacent Bézier handles onto the anchor.
+  // Hide coincident handle dots so that the Sharp marker stays visible.
+  const collapsedSharpHandles = new Set<string>();
+  if (state.nodeEdit) {
+    for (const [anchorId, mode] of Object.entries(sketch.nodeModes ?? {})) {
+      if (mode !== "sharp") continue;
+      const pair = nodeHandlePair(sketch, anchorId);
+      const anchor = sketch.entities[anchorId];
+      if (!pair || anchor?.type !== "point") continue;
+      for (const id of [pair.incoming, pair.outgoing]) {
+        const handle = sketch.entities[id];
+        if (handle?.type === "point" && dist2(anchor, handle) < 1e-8) {
+          collapsedSharpHandles.add(id);
+        }
+      }
+    }
+  }
   // Centres of circles etc. are drawn hollow so that end points stand out.
   const centres = new Set<string>();
   for (const e of Object.values(sketch.entities)) {
@@ -316,6 +334,7 @@ export function drawSketchGeometry(
     if (e.type !== "point") continue;
     const role = nodes?.get(e.id);
     if (state.nodeEdit && !role && e.id !== sketch.originId) continue;
+    if (state.nodeEdit && collapsedSharpHandles.has(e.id)) continue;
     const highlighted = state.selectedEntities.has(e.id) || state.hoverEntity === e.id;
     if (inner.has(e.id) && !highlighted) continue;
     if (!state.active && shown !== "all" && !highlighted && !shown?.has(e.id)) continue;
@@ -341,6 +360,12 @@ export function drawSketchGeometry(
     if (state.nodeEdit && role === "anchor" && mode === "corner") {
       // Corner: square (independent tangents).
       ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+    } else if (state.nodeEdit && role === "anchor" && mode === "sharp") {
+      // Sharp: triangle (both adjacent handles collapsed to the anchor).
+      ctx.moveTo(s.x, s.y - r - 2);
+      ctx.lineTo(s.x + r + 2, s.y + r + 1);
+      ctx.lineTo(s.x - r - 2, s.y + r + 1);
+      ctx.closePath();
     } else if (state.nodeEdit && role === "anchor" && mode === "symmetric") {
       // Symmetric: diamond (opposite handles have the same length).
       ctx.moveTo(s.x, s.y - r - 1);
