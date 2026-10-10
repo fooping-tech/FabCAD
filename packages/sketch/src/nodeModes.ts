@@ -3,7 +3,7 @@ import { SketchBuilder, entityPointIds, getPoint } from "./edit";
 import type { EntityId, Sketch } from "./model";
 
 /** Corner is implicit to preserve compatibility with existing sketches. */
-export type NodeMode = "corner" | "smooth" | "symmetric";
+export type NodeMode = "corner" | "smooth" | "symmetric" | "sharp";
 export interface NodeDragTarget {
   pointId: EntityId;
   target: Vec2;
@@ -44,7 +44,7 @@ export function nodeHandlePair(sketch: Sketch, anchorId: EntityId): NodeHandlePa
   return incoming && outgoing && incoming !== outgoing ? { incoming, outgoing } : null;
 }
 
-/** Choose the node mode and immediately make the two tangents collinear. */
+/** Choose the node mode and immediately reshape the two tangents, or collapse them for Sharp. */
 export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode): Sketch {
   if (sketch.entities[anchorId]?.type !== "point") return sketch;
   const pair = nodeHandlePair(sketch, anchorId);
@@ -53,7 +53,11 @@ export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode):
   if (mode === current) return sketch;
 
   const b = new SketchBuilder(sketch);
-  if (mode !== "corner") {
+  if (mode === "sharp") {
+    const at = getPoint(sketch, anchorId);
+    b.movePoint(pair.incoming, at);
+    b.movePoint(pair.outgoing, at);
+  } else if (mode !== "corner") {
     const at = getPoint(sketch, anchorId);
     const inPos = getPoint(sketch, pair.incoming);
     const outPos = getPoint(sketch, pair.outgoing);
@@ -81,7 +85,7 @@ export function setNodeMode(sketch: Sketch, anchorId: EntityId, mode: NodeMode):
  * - Moving an anchor carries its attached handles by the same displacement, regardless of mode.
  * - Moving a handle on Smooth keeps the opposite tangent collinear at its previous length.
  * - Moving a handle on Symmetric also keeps the opposite length equal.
- * - Corner handles remain independent.
+ * - Corner handles remain independent. Sharp handles remain at their anchor until edited.
  *
  * Explicit user-dragged points always take priority over generated targets.
  */
@@ -127,4 +131,20 @@ export function expandNodeDrag(sketch: Sketch, direct: NodeDragTarget[]): NodeDr
   }
 
   return [...targets].map(([pointId, target]) => ({ pointId, target }));
+}
+
+/** Pulling a Sharp handle out of its anchor turns the node back into an editable Corner.
+ * This is an immutable edit, made in the same document transaction as the drag.
+ */
+export function releaseSharpOnHandleDrag(sketch: Sketch, direct: readonly NodeDragTarget[]): Sketch {
+  const ids = new Set(direct.map((t) => t.pointId));
+  let next = sketch;
+  for (const [anchorId, mode] of Object.entries(sketch.nodeModes ?? {})) {
+    if (mode !== "sharp") continue;
+    const pair = nodeHandlePair(sketch, anchorId);
+    if (pair && (ids.has(pair.incoming) || ids.has(pair.outgoing))) {
+      next = setNodeMode(next, anchorId, "corner");
+    }
+  }
+  return next;
 }
