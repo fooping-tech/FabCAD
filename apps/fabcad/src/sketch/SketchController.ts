@@ -26,6 +26,7 @@ import {
   type WindowItem,
   breakCurve,
   editSketch,
+  expandNodeDrag,
   entityPointIds,
   entityToCurves,
   extendCurve,
@@ -309,10 +310,21 @@ export class SketchController {
     return hit ? (sketch.entities[hit.id] ?? null) : null;
   }
 
-  /** In Node Edit, curves cannot accidentally be moved: only their defining points are picked. */
+  /** Pick the nearest *visible, editable* node, ignoring other sketch points. */
   private hitEditableNode(sketch: Sketch, p: PointerInfo): SketchEntity | null {
-    const point = this.hitEntity(sketch, p, { curves: false });
-    return point && editableNodes(sketch).has(point.id) ? point : null;
+    const projector = this.projectorFor(sketch);
+    const raw = projector.toSketch(p.x, p.y);
+    if (!raw) return null;
+    const threshold = projector.pixel(raw) * HIT_PX * this.reach;
+    let closest: SketchEntity | null = null;
+    let best = threshold;
+    for (const id of editableNodes(sketch).keys()) {
+      const node = sketch.entities[id];
+      if (node?.type !== "point") continue;
+      const d = dist2(node, raw);
+      if (d <= best) { closest = node; best = d; }
+    }
+    return closest;
   }
 
   private hitText(sketch: Sketch, p: PointerInfo): string | null {
@@ -1020,7 +1032,11 @@ export class SketchController {
     // Dragging a selected entity moves the whole selection.
     const hit: Selection = { kind: "entity", sketchId: feature.id, entityId: e.id };
     const selected = this.selectedEntityIds(feature.id);
-    const moving = selected.includes(e.id) ? selected : [e.id];
+    const moving = editingNodes
+      ? (selected.includes(e.id)
+        ? selected.filter((id) => editableNodes(sketch).has(id))
+        : [e.id])
+      : (selected.includes(e.id) ? selected : [e.id]);
     const ids = new Set<EntityId>();
     for (const id of moving) {
       const ent = sketch.entities[id];
@@ -1113,7 +1129,7 @@ export class SketchController {
           if (lined.aligned) this.dragAlignment = { at: lined.position, aligned: lined.aligned };
         }
       }
-      next = solveDrag(drag.base, targets);
+      next = solveDrag(drag.base, preciseNode ? expandNodeDrag(drag.base, targets) : targets);
       // Constraints may have kept the point from getting there: no guide to where it is not.
       if (this.dragAlignment && next) {
         const moved = next.entities[drag.points[0]!.id];
