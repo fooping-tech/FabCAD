@@ -82,6 +82,7 @@ import { SKETCH_COLORS } from "../viewport/theme";
 import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension } from "./constraintTools";
 import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "./offsetGeometry";
 import { cancelOffset, commitOffset, patchOffset } from "./offsetTool";
+import { editableNodes } from "./nodeEdit";
 import { TOOLS_WITH_WINDOW } from "./toolWindows";
 import { shapeAnchor, shapeDimensions } from "./shapeDimensions";
 import {
@@ -308,6 +309,12 @@ export class SketchController {
     return hit ? (sketch.entities[hit.id] ?? null) : null;
   }
 
+  /** In Node Edit, curves cannot accidentally be moved: only their defining points are picked. */
+  private hitEditableNode(sketch: Sketch, p: PointerInfo): SketchEntity | null {
+    const point = this.hitEntity(sketch, p, { curves: false });
+    return point && editableNodes(sketch).has(point.id) ? point : null;
+  }
+
   private hitText(sketch: Sketch, p: PointerInfo): string | null {
     if (!sketch.texts) return null;
     const projector = this.projectorFor(sketch);
@@ -370,6 +377,7 @@ export class SketchController {
     }
     const hints: Record<string, string> = {
       select: "Click to select, drag geometry to move it. Double-click a dimension to edit it.",
+      "node-edit": "Node Edit: drag square outline anchors or round Bézier handles. Drag precisely without snapping; Esc exits.",
       dimension:
         this.entityPicks.length === 0
           ? "Dimension: pick a line, circle, arc or point"
@@ -610,7 +618,9 @@ export class SketchController {
           : { kind: "constraint", sketchId: feature.id, id: label.id };
     } else {
       const curvesOnly = tool === "trim" || tool === "extend" || tool === "break" || tool === "offset";
-      const e = this.hitEntity(sketch, p, curvesOnly ? { points: false } : undefined);
+      const e = tool === "node-edit"
+        ? this.hitEditableNode(sketch, p)
+        : this.hitEntity(sketch, p, curvesOnly ? { points: false } : undefined);
       if (e) hover = { kind: "entity", sketchId: feature.id, entityId: e.id };
       else if (tool === "select") {
         const text = this.hitText(sketch, p);
@@ -694,7 +704,7 @@ export class SketchController {
       return true;
     }
 
-    if (tool === "select") {
+    if (tool === "select" || tool === "node-edit") {
       this.beginDrag(feature, p);
       return true;
     }
@@ -951,7 +961,9 @@ export class SketchController {
 
   private beginDrag(feature: SketchFeature, p: PointerInfo): void {
     // A point under the pointer wins over the glyphs and labels drawn next to it.
-    const onPoint = this.hitEntity(feature.sketch, p, { curves: false }) !== null;
+    const onPoint = (appState.get().tool === "node-edit"
+      ? this.hitEditableNode(feature.sketch, p)
+      : this.hitEntity(feature.sketch, p, { curves: false })) !== null;
     const label = onPoint ? null : this.hitLabel(p);
     if (label?.kind === "dimension") {
       this.drag = {
@@ -967,9 +979,10 @@ export class SketchController {
       return;
     }
     const sketch = feature.sketch;
-    const e = this.hitEntity(sketch, p);
+    const editingNodes = appState.get().tool === "node-edit";
+    const e = editingNodes ? this.hitEditableNode(sketch, p) : this.hitEntity(sketch, p);
     const start = this.projectorFor(sketch).toSketch(p.x, p.y);
-    const textId = !e && start ? this.hitText(sketch, p) : null;
+    const textId = !editingNodes && !e && start ? this.hitText(sketch, p) : null;
     const text = textId ? sketch.texts?.[textId] : undefined;
     if (text && start) {
       // A text is moved by its origin point.
@@ -988,7 +1001,7 @@ export class SketchController {
     }
     if (!e || !start) {
       // Empty space: a profile can still be selected.
-      const region = start ? this.regionAt(sketch, start) : null;
+      const region = start && !editingNodes ? this.regionAt(sketch, start) : null;
       this.drag = {
         kind: "window",
         startScreen: { x: p.x, y: p.y },
@@ -1070,7 +1083,10 @@ export class SketchController {
       next = solveDrag(resized, []);
     } else {
       const free = sub2(now, drag.startSketch);
-      const grid = this.gridSnap(p);
+      // Lettering often uses sub-millimetre control handles. Node Edit intentionally moves
+      // them without the sketch's default 1 mm grid or alignment snapping.
+      const preciseNode = appState.get().tool === "node-edit";
+      const grid = !preciseNode && this.gridSnap(p);
       // One point lands on the grid itself; several points move together by whole millimetres.
       const delta = grid && drag.points.length > 1 ? snapToGrid(free) : free;
       let targets = drag.points.map((pt) => {
@@ -1081,7 +1097,7 @@ export class SketchController {
         };
       });
       // A single dragged point snaps to other geometry, and lines up with other points.
-      if (targets.length === 1 && !p.meta) {
+      if (targets.length === 1 && !p.meta && !preciseNode) {
         const only = targets[0]!;
         const at = add2(drag.points[0]!.start, free);
         const px = this.projectorFor(drag.base).pixel(at);
@@ -1646,6 +1662,7 @@ export class SketchController {
       const hover = state.hover;
       const drawState: SketchDrawState = {
         active,
+        nodeEdit: active && state.tool === "node-edit",
         fullyConstrained: view.status === "fully-constrained",
         selectedEntities,
         selectedLabels,
