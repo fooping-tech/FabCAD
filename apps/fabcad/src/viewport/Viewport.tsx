@@ -71,7 +71,7 @@ import { useNumericKeypad } from "../panels/ExpressionInput";
 import { projectPick } from "../sketch/projectTool";
 import { type HoverProfile, SketchController } from "../sketch/SketchController";
 import { editSketch } from "@fabcad/sketch";
-import { createDoubleTapDetector, createWheelClassifier } from "../ui/gestures";
+import { createDoubleTapDetector, createWheelClassifier, sketchTouchUsesDrag } from "../ui/gestures";
 import { Icon } from "../ui/Icon";
 import { registerViewport } from "./api";
 import { PointEntry } from "../panels/PointEntry";
@@ -939,13 +939,13 @@ export function Viewport(): ReactElement {
         if (touch) scene.setOneFingerGesture("rotate");
         return;
       }
-      if (touch && appState.get().tool !== "select" && controller.grabs(p)) {
+      if (touch && !sketchTouchUsesDrag(appState.get().tool) && controller.grabs(p)) {
         // The previewed Offset curve follows the finger right away.
         scene.setOneFingerGesture("none");
         controller.pointerDown(p);
         return;
       }
-      if (touch && appState.get().tool !== "select") {
+      if (touch && !sketchTouchUsesDrag(appState.get().tool)) {
         scene.setOneFingerGesture("none");
         touchPick = { id: e.pointerId, aborted: false };
         if (projecting()) projectHover(p.x, p.y);
@@ -957,6 +957,7 @@ export function Viewport(): ReactElement {
         return;
       }
       if (touch && !controller.hitsSomething(p)) {
+        // Select and Node Edit start drags only on hit targets. Empty space pans the view.
         // Swiping over empty space moves the view; a tap still selects.
         scene.setOneFingerGesture("pan");
         touchPan = { id: e.pointerId, x: e.clientX, y: e.clientY };
