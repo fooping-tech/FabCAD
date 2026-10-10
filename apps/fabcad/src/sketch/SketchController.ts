@@ -86,6 +86,7 @@ import { CONSTRAINT_TOOLS, constraintRefs, formatDimensionValue, planDimension }
 import { offsetSideAt, offsetSketch, offsetThrough, onOffsetPreview } from "./offsetGeometry";
 import { cancelOffset, commitOffset, patchOffset } from "./offsetTool";
 import { editableNodes } from "./nodeEdit";
+import { setTool } from "../app/actions";
 import { TOOLS_WITH_WINDOW } from "./toolWindows";
 import { shapeAnchor, shapeDimensions } from "./shapeDimensions";
 import {
