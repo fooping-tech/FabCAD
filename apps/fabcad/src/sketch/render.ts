@@ -27,6 +27,7 @@ import {
 import type { ViewportScene } from "../viewport/scene";
 import { SKETCH_COLORS } from "../viewport/theme";
 import { constraintGlyph } from "./constraintTools";
+import { editableNodes } from "./nodeEdit";
 
 /** Drawing of sketches onto the 2D overlay canvas, using the 3D camera for projection. */
 
@@ -46,6 +47,8 @@ export interface LabelHit {
 
 export interface SketchDrawState {
   active: boolean;
+  /** Show draggable outline anchors and cubic Bézier handles. */
+  nodeEdit?: boolean;
   fullyConstrained: boolean;
   selectedEntities: Set<string>;
   selectedLabels: Set<string>;
@@ -291,6 +294,7 @@ export function drawSketchGeometry(
 
   const shown = state.shownPoints;
   if (!state.active && !shown) return;
+  const nodes = state.nodeEdit ? editableNodes(sketch) : null;
   // Centres of circles etc. are drawn hollow so that end points stand out.
   const centres = new Set<string>();
   for (const e of Object.values(sketch.entities)) {
@@ -310,6 +314,8 @@ export function drawSketchGeometry(
   }
   for (const e of Object.values(sketch.entities)) {
     if (e.type !== "point") continue;
+    const role = nodes?.get(e.id);
+    if (state.nodeEdit && !role && e.id !== sketch.originId) continue;
     const highlighted = state.selectedEntities.has(e.id) || state.hoverEntity === e.id;
     if (inner.has(e.id) && !highlighted) continue;
     if (!state.active && shown !== "all" && !highlighted && !shown?.has(e.id)) continue;
@@ -329,9 +335,15 @@ export function drawSketchGeometry(
       ctx.fill();
       continue;
     }
-    const r = highlighted ? 4.5 : 3;
+    const r = highlighted ? 4.5 : role === "anchor" ? 4 : 3;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    if (state.nodeEdit && role === "anchor") {
+      // Square = a node on the outline. Moving it keeps adjacent segments joined.
+      ctx.rect(s.x - r, s.y - r, 2 * r, 2 * r);
+    } else {
+      // Circle = a cubic Bézier handle, independently draggable.
+      ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    }
     ctx.fillStyle = centres.has(e.id) && !highlighted ? "#fff" : entityColor(e.id, false, state);
     ctx.fill();
     ctx.lineWidth = 1.2;
