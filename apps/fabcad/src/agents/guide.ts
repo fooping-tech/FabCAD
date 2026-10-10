@@ -41,6 +41,20 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: "Sharing a project URL with a user",
+    blocks: [
+      { p: "Use File → Share link… and wait for the generated URL. Click Copy link, or read the exact value of the read-only Share link text area using browser automation. Treat that value as data, not text for an AI to compose: the #project=v1.… fragment holds the project, and even one changed character can break it." },
+      {
+        list: [
+          "Transfer the complete captured URL byte-for-byte as the actual clickable link destination (href). Do not manually type, predict, reconstruct, summarize, truncate, split into pieces, insert ellipses, or otherwise rewrite it. Do not turn it into only a .txt attachment when the user asked for a link.",
+          "A label such as 'Open in FabCAD' is fine, but its underlying link destination must be identical to the copied URL. Do not assume that displaying a URL or generating Markdown has preserved its target; verify the destination if your output environment allows it.",
+          "If the chat or link renderer cannot preserve the entire URL, or the URL is too long to share reliably, do not fabricate a shorter one. Use File → Save project and share the .fabcad.json file instead, explaining that the link channel may truncate long URLs.",
+          "When possible, open the exact copied link in another tab to check it loads the intended project. A shared link may ask to replace an existing project, so protect the user's current work.",
+        ],
+      },
+    ],
+  },
+  {
     title: "Screen layout",
     blocks: [
       {
