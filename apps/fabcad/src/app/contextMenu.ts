@@ -188,6 +188,17 @@ export function buildContextMenu(): MenuItem[] {
           help: { id: "sketch.node-edit", title: "Node Edit", summary: "Move individual line or spline points." },
           onSelect: () => setTool("node-edit"),
         });
+        if (curves.some((id) => {
+          const e = feature.sketch.entities[id];
+          return e?.type === "line" || (e?.type === "spline" && e.kind === "control" && e.points.length === 4 && !e.closed);
+        })) {
+          items.push({
+            label: "Add Node on Curve",
+            icon: "add-node",
+            help: { id: "sketch.node-add", title: "Add Node", summary: "Tap a line or Bézier curve to insert an anchor." },
+            onSelect: () => setTool("node-add"),
+          });
+        }
         items.push({
           label: "Normal / Construction",
           icon: "toggle-construction",
