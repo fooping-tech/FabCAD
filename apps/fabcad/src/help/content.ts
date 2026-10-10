@@ -359,15 +359,16 @@ export const HELP: Record<string, HelpEntry> = {
   },
   "sketch.node-edit": {
     title: "Node Edit",
-    summary: "Move individual outline anchors and Bézier handles precisely.",
+    summary: "Edit outline nodes as corner, smooth or symmetric Bézier joins.",
     what: [
       "Right-click selected text and choose Convert to Path & Edit Nodes. The text becomes ordinary sketch lines and cubic control splines. Select Node Edit in the sketch ribbon to edit existing paths.",
-      "Square nodes are outline anchors shared by adjoining segments; round nodes are Bézier control handles. Drag any node to move just that point, without 1 mm grid or alignment snapping.",
+      "Tap an anchor in Node Edit, then use the Node Type menu in the sketch ribbon to choose Corner (independent handles), Smooth (handles stay collinear but can differ in length), or Symmetric (collinear handles with matching lengths). Only anchors between exactly two cubic Bézier curves offer all three modes.",
+      "Corner anchors are square, Smooth anchors round, and Symmetric anchors diamond-shaped. Small round points are Bézier handles. Dragging an anchor carries its handles; dragging one handle on Smooth or Symmetric automatically updates the opposite handle. Node dragging ignores the 1 mm grid.",
     ],
     when: ["Customising letter outlines or changing individual line and spline points."],
     limitations: [
       "Converting to paths replaces editable text. Undo returns to the original text; save a copy before converting if the wording or font must remain editable.",
-      "Node Edit does not insert or delete nodes. Verify that changed paths remain closed and do not cross themselves before extruding or exporting.",
+      "Node Edit does not insert or delete nodes. Straight-line joins and endpoints cannot be converted to Smooth or Symmetric. Verify that changed paths remain closed and do not cross themselves before extruding or exporting.",
     ],
   },
   "sketch.text": {
