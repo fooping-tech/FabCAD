@@ -28,6 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: node --test scripts/tests/compare-occt-wasm.test.mjs
       - run: npm run build
       - run: npm run audit:occt
       - run: npm run audit:licenses
@@ -117,6 +118,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: node --test scripts/tests/compare-occt-wasm.test.mjs
       - run: bash -n scripts/verify-occt-original-wasm.sh
       - run: bash scripts/verify-occt-original-wasm.sh
       - uses: actions/upload-artifact@v4
