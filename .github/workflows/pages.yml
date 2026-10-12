@@ -28,7 +28,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: node --test scripts/tests/compare-occt-wasm.test.mjs
+      - run: node --test scripts/tests/compare-occt-wasm.test.mjs scripts/tests/compare-occt-wasm-functions.test.mjs
       - run: npm run build
       - run: npm run audit:occt
       - run: npm run audit:licenses
@@ -118,7 +118,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node --test scripts/tests/compare-occt-wasm.test.mjs
+      - run: node --test scripts/tests/compare-occt-wasm.test.mjs scripts/tests/compare-occt-wasm-functions.test.mjs
       - run: bash -n scripts/verify-occt-original-wasm.sh
       - run: bash scripts/verify-occt-original-wasm.sh
       - uses: actions/upload-artifact@v4
@@ -128,6 +128,26 @@ jobs:
           path: ${{ runner.temp }}/fabcad-occt-origin-compare/original-wasm-comparison.json
           retention-days: 14
           if-no-files-found: warn
+
+  # Extract builder OCCT patch state from the fixed image (rather than
+  # assuming that upstream patch scripts alone are corresponding source).
+  # This is *not* a full OCCT compilation, npm WASM provenance or LGPL verdict.
+  occt-builder-patch-evidence:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'occt-builder-patches')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n scripts/export-occt-image-patches.sh
+      - name: Extract builder OCCT modifications and patch-state manifests
+        run: bash scripts/export-occt-image-patches.sh "$RUNNER_TEMP/occt-image-patches"
+      - name: Upload exact fixed-image patch evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: occt-image-patches-and-state
+          path: "$RUNNER_TEMP/occt-image-patches/"
+          retention-days: 14
+          if-no-files-found: error
 
   # Label-gated end-to-end source-to-site test. PR artifacts remain temporary;
   # on main the identical stage script embeds the candidate in the Pages site.
