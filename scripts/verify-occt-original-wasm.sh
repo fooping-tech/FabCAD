@@ -35,6 +35,7 @@ export COMPARE_REPORT="$work/original-wasm-comparison.json"
 node --input-type=module <<'NODE'
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { compareWasmSections } from "./scripts/compare-occt-wasm.mjs";
 const info = async path => {
   const buffer = await readFile(process.env[path]);
   return { sha256: createHash("sha256").update(buffer).digest("hex"), sizeBytes: buffer.length };
@@ -43,6 +44,10 @@ const npmWasm = await info("COMPARE_NPM_WASM");
 const rebuiltWasm = await info("COMPARE_REBUILT_WASM");
 const npmJs = await info("COMPARE_NPM_JS");
 const rebuiltJs = await info("COMPARE_REBUILT_JS");
+const wasmSectionComparison = compareWasmSections(
+  await readFile(process.env.COMPARE_NPM_WASM),
+  await readFile(process.env.COMPARE_REBUILT_WASM),
+);
 const data = {
   result: "comparison only, not LGPL compliance proof",
   exactUpstreamReplicadCommit: "e4b05f67dc4e2393a876ce8c5064a9c93db05bf1",
@@ -50,10 +55,19 @@ const data = {
   occtFullyRecompiledFromSource: false,
   npmWasm, rebuiltWasm, wasmByteIdentical: npmWasm.sha256 === rebuiltWasm.sha256,
   npmJs, rebuiltJs, jsByteIdentical: npmJs.sha256 === rebuiltJs.sha256,
+  wasmSectionComparison,
   qualification: "A mismatch may reflect nondeterminism or differences in the original published build. A match demonstrates only the upstream wrapper/OCI linker regeneration, not exact source provenance of the precompiled OCCT libraries in the OCI image."
 };
 await writeFile(process.env.COMPARE_REPORT, JSON.stringify(data, null, 2) + "\n");
 console.log(JSON.stringify(data, null, 2));
-if (!data.wasmByteIdentical) console.warn("WASM BITWISE MISMATCH: original npm WASM not exactly reproduced from pinned wrapper and OCI linker.");
+if (!data.wasmByteIdentical) {
+  console.warn("WASM BITWISE MISMATCH: original npm WASM not exactly reproduced from pinned wrapper and OCI linker.");
+  console.warn(wasmSectionComparison.coreSectionsByteIdentical
+    ? "Core WASM sections match byte-for-byte; review custom metadata section differences."
+    : "NON-CUSTOM WASM SECTION DIFFERENCES: investigate code/data/toolchain and actual upstream build provenance.");
+}
+// Comparison evidence only. A green job must NOT be interpreted as a
+// source-to-binary provenance claim or as LGPL compliance.
+
 NODE
 echo "Comparison report saved: $work/original-wasm-comparison.json"
