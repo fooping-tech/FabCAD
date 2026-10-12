@@ -126,9 +126,69 @@ try {
         const recomputed = await request({ type: "recompute", document: doc, known: {} });
         if (!recomputed || !Array.isArray(recomputed.bodies))
           throw new Error("Browser feature-engine recompute failed");
+
+        // A real closed profile, extrusion, B-Rep mesh and STEP/STL export
+        // exercise the patched WASM beyond the empty-document loader smoke.
+        // This fixture uses the documented CadDocument / SketchFeature shape.
+        const solidDoc = {
+          ...doc,
+          id: "browser-wasm-solid",
+          name: "Browser WASM solid",
+          features: {
+            "sketch-1": {
+              id: "sketch-1", name: "Sketch001", type: "sketch",
+              componentId: "component-root", suppressed: false, visible: true,
+              sketch: {
+                id: "sketch-1", name: "Sketch001",
+                plane: { type: "origin", plane: "XY" },
+                entities: {
+                  "point-1": { id: "point-1", type: "point", x: 0, y: 0 },
+                  "circle-2": { id: "circle-2", type: "circle", center: "point-1", radius: 10 },
+                },
+                constraints: { "constraint-3": { id: "constraint-3", type: "fix", refs: ["point-1"] } },
+                dimensions: {}, projections: [], nextId: 4,
+              },
+            },
+            "extrude-2": {
+              id: "extrude-2", name: "Extrude001", type: "extrude",
+              componentId: "component-root", suppressed: false,
+              sketchId: "sketch-1",
+              profiles: [{ entityIds: ["circle-2"], point: { x: 5, y: 0 } }],
+              distance: "10", direction: "positive", operation: "new",
+              targetBodyIds: [], bodyId: "body-3",
+            },
+          },
+          timeline: ["sketch-1", "extrude-2"],
+          bodies: {
+            "body-3": {
+              id: "body-3", name: "Body001", componentId: "component-root",
+              visible: true, createdBy: "extrude-2",
+            },
+          },
+          nextId: 4,
+        };
+        const solid = await request({ type: "recompute", document: solidDoc, known: {} });
+        if (solid.features["extrude-2"]?.state !== "ok")
+          throw new Error("Browser extrusion failed: " + JSON.stringify(solid.features["extrude-2"]));
+        if (solid.bodies.length !== 1 || !solid.bodies[0].geometry?.positions?.length)
+          throw new Error("Browser extrusion returned no tessellated B-Rep");
+        const step = await request({ type: "export-step", bodies: [{ id: "body-3" }] });
+        if (!(step instanceof Uint8Array) || step.byteLength < 100 ||
+            !new TextDecoder().decode(step.subarray(0, 100)).includes("ISO-10303-21"))
+          throw new Error("Browser STEP export is missing/invalid");
+        const stl = await request({ type: "export-stl", bodies: [{ id: "body-3" }], binary: true });
+        if (!(stl instanceof Uint8Array) || stl.byteLength < 84)
+          throw new Error("Browser STL export is missing/invalid");
         clearTimeout(timeout);
         worker.terminate();
-        resolve({ kernel: init.kernel, bodyCount: recomputed.bodies.length });
+        resolve({
+          kernel: init.kernel,
+          emptyBodyCount: recomputed.bodies.length,
+          solidBodyCount: solid.bodies.length,
+          meshPositions: solid.bodies[0].geometry.positions.length,
+          stepBytes: step.byteLength,
+          stlBytes: stl.byteLength,
+        });
       })().catch(fail);
     });
   }, { workerPath });
