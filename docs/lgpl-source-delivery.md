@@ -85,3 +85,15 @@ Qt mainly documents LGPLv3; LGPL-2.1's own text governs FabCAD.
 - [ ] Detailed legal determination of applicable LGPL §§4–6 and custom license permissions.
 
 **Release gate**: Keep PR #49 in Draft until the source-to-binary provenance and materials needed to rebuild/relink the shipped library are technically reviewed and any confirmed LGPL distribution gaps are resolved. An external legal review is advisable for uncertain terms, but it is not a licence-mandated sign-off. CI green, versioned archives and a same-origin candidate bundle do not by themselves prove licence conditions are satisfied.
+
+## 2026-10-12: 固定OCIビルダーの実パッチを同梱（追加CI検証中）
+
+単にOCCT本家ソースとOpenCascade.jsのパッチプログラムを置くだけでは、実際のビルダーに使われたソースを示したことにならない。
+
+- `scripts/export-occt-image-patches.sh` で固定ビルダー内のOCCT Git HEADを公式OCCT 8.0.1の固定SHAに照合し、追跡対象の全変更を `git diff --binary HEAD` として抽出する。未追跡ソースが残っていればアーカイブ作成を拒否する。
+- `scripts/package-occt-sources.sh` はビルダーの実パッチをOCCT公式ソースへ `git apply --check` / `git apply` し、差分ファイルとパッチ適用状態JSONを同じアーカイブに保存する。これにより同梱ソースの内容は固定ビルダーの追跡対象変更を反映する。
+- `occt-builder-patches` PRラベルは固定イメージの変更履歴を証拠アーティファクトとして保存する検証を有効にする。
+
+**注意:** 現在はCI実行結果の確認待ち。イメージの未追跡・ignore対象の生成ファイル、元npm配布WASMとの対応、OCCT本体の独立ソース再ビルド、LGPL第6条のアプリケーション再リンク資材の完全性はこの仕組みだけで証明されない。
+
+現行 `main` が配布済みの過去版にもソース提供の検討が必要であり、PR #49のマージ後の配布準備だけでは過去版に関する懸念は解消しない。
