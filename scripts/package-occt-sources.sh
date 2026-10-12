@@ -31,6 +31,18 @@ checkout opencascade.js "https://github.com/taucad/opencascade.js.git" "ebd263f1
 checkout freetype "https://github.com/freetype/freetype.git" "de8b92dd7ec634e9e2b25ef534c54a3537555c11"
 checkout rapidjson "https://github.com/Tencent/rapidjson.git" "24b5e7a8b27f42fa16b96fc70aade9106cf7102f"
 
+# Ship OCCT as actually patched inside the pinned build image, instead of
+# merely archiving unpatched upstream sources and patch-tool source scripts.
+# Fail closed if image provenance, untracked files or patch replay disagree.
+mkdir -p "$tmp/documentation/occt-builder-evidence"
+bash "$repo_root/scripts/export-occt-image-patches.sh" "$tmp/documentation/occt-builder-evidence"
+(
+  cd "$tmp/source/occt"
+  git apply --check "$tmp/documentation/occt-builder-evidence/occt-image-applied.patch"
+  git apply "$tmp/documentation/occt-builder-evidence/occt-image-applied.patch"
+)
+echo "Pinned OCCT builder patch successfully replayed into distributed source tree"
+
 cat > "$tmp/README.txt" <<'EOF'
 FabCAD OCCT corresponding-source candidate bundle
 ===============================================
@@ -48,8 +60,15 @@ Source trees:
 
 Look under source/opencascade.js/src/patches/ for upstream patch tooling and
 under source/opencascade.js/DEPS.json for the Emscripten version/digest.
-The OCCT upstream build, applied patches, LGPL source delivery and the exact
-FabCAD-distributed npm WASM remain subject to review.
+The OCCT source under source/occt/ includes the tracked edits extracted
+from the exact pinned build image (not just the pristine OCCT checkout).
+See documentation/occt-builder-evidence/occt-image-applied.patch,
+ocjs-patches-applied.json and ocjs-builder-image.txt for fixed builder inputs.
+Their patch replay is verified against pristine pinned OCCT source at
+archive-generation time. This does not prove the original npm WASM was
+compiled with these inputs, nor include a successful independent rebuild
+of OCCT from the bundled sources. LGPL section 6 linking/relinking
+materials and the original distributed binary remain subject to review.
 
 Original binary linking image:
   ghcr.io/taucad/opencascade.js@sha256:215198af0e2ca4c5f308e5540869f2419784dc290062d3eb03d34e4f22e0188c
@@ -58,6 +77,7 @@ See FabCAD docs/occt-wasm-lgpl.md and docs/lgpl-source-delivery.md.
 EOF
 
 mkdir -p "$tmp/documentation"
+cp "$repo_root/scripts/export-occt-image-patches.sh" "$tmp/documentation/"
 cp "$repo_root/docs/occt-wasm-lgpl.md" "$tmp/documentation/"
 cp "$repo_root/docs/lgpl-source-delivery.md" "$tmp/documentation/"
 cp "$repo_root/THIRD_PARTY_NOTICES.md" "$tmp/documentation/"
