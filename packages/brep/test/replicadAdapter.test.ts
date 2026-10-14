@@ -248,24 +248,18 @@ describe("replicad adapter", () => {
     expect(kernel.tessellate(joined).volume).toBeCloseTo(2000, 3);
   });
 
-  it("identifies the location of a pinched edge in an extrusion", () => {
-    // Two diagonal square profiles meet only along the Z edge (10, 10, 0..2).
-    // Report the actual topology fault rather than an unhelpful Boolean error.
+  it("distinguishes coincident geometry from a topologically shared edge", () => {
+    // A planar fuse can preserve two separately owned solids whose boundaries meet
+    // geometrically along a vertical edge. This is not the same as a topological
+    // edge used by 3+ B-Rep faces, and must not be reported as one.
     const shape = kernel.extrude(
       [rect(10, 10, 0, 0), rect(10, 10, 10, 10)],
       ORIGIN_PLANES.XY,
       0,
       2,
     );
-    expect(kernel.solidProblem(shape)).toBe("non-manifold");
-    const pinches = kernel.nonManifoldEdges?.(shape, 3) ?? [];
-    expect(pinches.length).toBeGreaterThan(0);
-    expect(pinches.some((e) =>
-      Math.abs(e.midpoint.x - 10) < 1e-5 &&
-      Math.abs(e.midpoint.y - 10) < 1e-5 &&
-      Math.abs(e.midpoint.z - 1) < 1e-5 &&
-      e.adjacentFaces > 2,
-    )).toBe(true);
+    expect(kernel.solidProblem(shape)).toBeNull();
+    expect(kernel.nonManifoldEdges?.(shape, 3)).toEqual([]);
   });
 
   it("joins a box whose walls touch a cylinder tangentially into a closed solid", () => {
