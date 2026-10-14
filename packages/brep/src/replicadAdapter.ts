@@ -567,11 +567,18 @@ class ReplicadKernel implements GeometryKernel {
     const hi = Math.max(from, to);
     if (hi - lo < 1e-9) throw new KernelError("Extrude distance must not be zero.");
     return guard("Extrude", () => {
-      const solids = profiles.map((p) => {
-        const sketch = profileToDrawing(p).sketchOnPlane(toReplicadPlane(plane, lo));
-        return (sketch as replicad.Sketch).extrude(hi - lo) as Shape3D;
-      });
-      return wrap(fuseAll(solids));
+      // Union coplanar selected regions *before* giving them thickness. Fusing extruded
+      // regions one at a time leaves intermediate edge-only contacts (non-manifold), even
+      // when a later region would connect them through a shared face. A planar union
+      // removes the selection boundaries and is independent of the selection order.
+      const first = profiles[0];
+      if (!first) throw new KernelError("Nothing to build: no profile selected.");
+      let drawing = profileToDrawing(first);
+      for (const profile of profiles.slice(1)) {
+        drawing = drawing.fuse(profileToDrawing(profile));
+      }
+      const sketch = drawing.sketchOnPlane(toReplicadPlane(plane, lo));
+      return wrap((sketch as replicad.Sketch).extrude(hi - lo) as Shape3D);
     });
   }
 

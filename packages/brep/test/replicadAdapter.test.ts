@@ -59,6 +59,42 @@ describe("replicad adapter", () => {
     }
   });
 
+  it("unions neighboring selected regions before extrusion", () => {
+    const shape = kernel.extrude(
+      [rect(10, 10, 0, 0), rect(10, 10, 10, 0)],
+      ORIGIN_PLANES.XY,
+      0,
+      2,
+    );
+    expect(kernel.solidProblem(shape)).toBeNull();
+    expect(kernel.tessellate(shape).volume).toBeCloseTo(400, 3);
+    expect(kernel.topology(shape).edges.every((edge) => edge.faces.length === 2)).toBe(true);
+  });
+
+  it("removes overlapping selection boundaries instead of double-counting volume", () => {
+    const shape = kernel.extrude(
+      [rect(10, 10, 0, 0), rect(10, 10, 5, 0)],
+      ORIGIN_PLANES.XY,
+      0,
+      2,
+    );
+    expect(kernel.solidProblem(shape)).toBeNull();
+    expect(kernel.tessellate(shape).volume).toBeCloseTo(300, 3);
+  });
+
+  it("unions bridged regions independently of profile order", () => {
+    // The first two squares share only a corner. The third square fills the
+    // bridge so that the final L-shaped cross section is one regular solid.
+    const a = rect(10, 10, 0, 0);
+    const corner = rect(10, 10, 10, 10);
+    const bridge = rect(10, 10, 10, 0);
+    for (const profiles of [[a, corner, bridge], [bridge, a, corner], [corner, bridge, a]]) {
+      const shape = kernel.extrude(profiles, ORIGIN_PLANES.XY, 0, 2);
+      expect(kernel.solidProblem(shape)).toBeNull();
+      expect(kernel.tessellate(shape).volume).toBeCloseTo(600, 3);
+    }
+  });
+
   it("extrudes on other planes and in both directions", () => {
     const a = kernel.tessellate(kernel.extrude([rect(10, 20)], ORIGIN_PLANES.XZ, 0, 5));
     expect(a.bounds.min.y).toBeCloseTo(-5, 6);
