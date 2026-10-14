@@ -248,6 +248,20 @@ describe("replicad adapter", () => {
     expect(kernel.tessellate(joined).volume).toBeCloseTo(2000, 3);
   });
 
+  it("distinguishes coincident geometry from a topologically shared edge", () => {
+    // A planar fuse can preserve two separately owned solids whose boundaries meet
+    // geometrically along a vertical edge. This is not the same as a topological
+    // edge used by 3+ B-Rep faces, and must not be reported as one.
+    const shape = kernel.extrude(
+      [rect(10, 10, 0, 0), rect(10, 10, 10, 10)],
+      ORIGIN_PLANES.XY,
+      0,
+      2,
+    );
+    expect(kernel.solidProblem(shape)).toBeNull();
+    expect(kernel.nonManifoldEdges?.(shape, 3)).toEqual([]);
+  });
+
   it("joins a box whose walls touch a cylinder tangentially into a closed solid", () => {
     // A wall drawn on the projected outline of a cylinder: exactly on the tangent, or a few
     // micrometres off it. Without a tolerance the Boolean leaves a sliver that does not mesh.

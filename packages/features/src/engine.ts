@@ -281,7 +281,12 @@ function requireSolid(kernel: GeometryKernel, shape: KernelShape, empty: string)
   }
   if (problem === "invalid") throw new Error("The result is not a valid solid.");
   if (problem === "non-manifold") {
-    throw new Error("The result touches itself only along an edge, so it is not a solid.");
+    const edges = kernel.nonManifoldEdges?.(shape, 3) ?? [];
+    const sites = edges.map(({ midpoint, adjacentFaces }) =>
+      `(${midpoint.x.toFixed(5)}, ${midpoint.y.toFixed(5)}, ${midpoint.z.toFixed(5)}) mm [${adjacentFaces} faces]`,
+    );
+    const detail = sites.length > 0 ? ` Pinched edge midpoint(s): ${sites.join("; ")}.` : "";
+    throw new Error(`The result touches itself only along an edge, so it is not a solid.${detail}`);
   }
 }
 

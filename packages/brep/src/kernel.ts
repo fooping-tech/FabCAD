@@ -175,6 +175,12 @@ export class KernelError extends Error {
  */
 export type SolidProblem = "empty" | "open" | "invalid" | "non-manifold";
 
+/** Location of an edge shared by more than two distinct faces (millimetres). */
+export interface NonManifoldEdge {
+  midpoint: Vec3;
+  adjacentFaces: number;
+}
+
 export interface GeometryKernel {
   readonly name: string;
 
@@ -242,5 +248,7 @@ export interface GeometryKernel {
    * rejects (`invalid`). Null for a closed, valid solid.
    */
   solidProblem(shape: KernelShape): SolidProblem | null;
+  /** Optional CAD-kernel diagnostic, not a repair: coordinates of pinched edges. */
+  nonManifoldEdges?(shape: KernelShape, limit?: number): NonManifoldEdge[];
   dispose(shape: KernelShape): void;
 }
