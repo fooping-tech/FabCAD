@@ -96,7 +96,7 @@ const BOOLEAN_FUZZY = 1e-5;
  * Whether an edge of the shape borders more than two faces: the solid is pinched there (two
  * parts touch only along that edge). A seam, which a face meets twice, counts once.
  */
-function hasNonManifoldEdge(s: Shape3D): boolean {
+function nonManifoldEdgesOf(s: Shape3D, limit = Infinity): { edge: replicad.Edge; faces: number }[] {
   const seen = new Map<number, { edge: replicad.Edge; faces: number }[]>();
   s.faces.forEach((face) => {
     const counted: replicad.Edge[] = [];
@@ -110,8 +110,16 @@ function hasNonManifoldEdge(s: Shape3D): boolean {
       seen.set(edge.hashCode, bucket);
     }
   });
-  for (const bucket of seen.values()) if (bucket.some((b) => b.faces > 2)) return true;
-  return false;
+  const bad: { edge: replicad.Edge; faces: number }[] = [];
+  for (const bucket of seen.values()) {
+    for (const item of bucket) {
+      if (item.faces > 2) {
+        bad.push(item);
+        if (bad.length >= limit) return bad;
+      }
+    }
+  }
+  return bad;
 }
 
 /** `a` op `b` with the fuzzy tolerance; same simplification as replicad's own Booleans. */
@@ -1167,6 +1175,14 @@ class ReplicadKernel implements GeometryKernel {
     return this.solidProblem(shape) === null;
   }
 
+  nonManifoldEdges(shape: KernelShape, limit = 3): { midpoint: Vec3; adjacentFaces: number }[] {
+    const count = Math.max(1, Math.min(20, Math.floor(limit)));
+    return nonManifoldEdgesOf(unwrap(shape), count).map(({ edge, faces }) => ({
+      midpoint: vec(edge.pointAt(0.5)),
+      adjacentFaces: faces,
+    }));
+  }
+
   solidProblem(shape: KernelShape): SolidProblem | null {
     // A shape never changes once made, and the check is costly: inputs of one operation are
     // the results of the previous ones, which were checked already.
@@ -1195,7 +1211,7 @@ class ReplicadKernel implements GeometryKernel {
       const valid = analyzer.IsValid();
       analyzer.delete();
       if (!valid) return "invalid";
-      return hasNonManifoldEdge(s) ? "non-manifold" : null;
+      return nonManifoldEdgesOf(s, 1).length > 0 ? "non-manifold" : null;
     } catch {
       return "invalid";
     }
