@@ -2,7 +2,8 @@
 import { createReplicadKernel } from "@fabcad/brep/replicad";
 import { FeatureEngine } from "@fabcad/features";
 import { createDefaultSolver } from "@fabcad/sketch-solver";
-import wasmUrl from "replicad-opencascadejs/wasm?url";
+import bundledWasmUrl from "replicad-opencascadejs/wasm?url";
+import { resolveOcctWasmUrl } from "./occtWasmUrl";
 import type { RequestEnvelope, ResponseEnvelope, WorkerRequest } from "./protocol";
 
 /**
@@ -16,6 +17,12 @@ let kernelName = "";
 
 function engine(): Promise<FeatureEngine> {
   if (!enginePromise) {
+    // Explicit opt-in only; default hosting continues to use the bundled OCCT WASM.
+    const wasmUrl = resolveOcctWasmUrl(
+      bundledWasmUrl,
+      import.meta.env.BASE_URL,
+      import.meta.env.VITE_FABCAD_OCCT_WASM_OVERRIDE === "1",
+    );
     enginePromise = createReplicadKernel({ wasmUrl }).then((kernel) => {
       kernelName = kernel.name;
       return new FeatureEngine(kernel, createDefaultSolver());

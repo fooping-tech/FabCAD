@@ -6,3 +6,9 @@ output/
 .DS_Store
 .env
 .env.*
+
+# Local packaging of LGPL candidate source (do not commit large bundles).
+occt-corresponding-source-candidate.tar.gz
+
+# Locally compiled OCCT wasm for LGPL-compatible replacement testing.
+apps/fabcad/public/occt-override.wasm

@@ -423,8 +423,19 @@ SPA ルーティングは使っていません。Vite のマルチページ構�
 
 ## ライセンスについて
 
-幾何カーネルの OpenCASCADE と Replicad は LGPL-2.1 です。
+**FabCADの独自ソースコードは [FabCAD Source Available License v1.0](LICENSE) で公開しています。OSIの定義するオープンソースではありません。**
 
-文字組みには opentype.js（MIT）と HarfBuzz（harfbuzzjs、MIT）を使っています。
+- コードの閲覧、個人の学習・改変、条件付きの非商用再配布に加え、**企業内での継続的な利用・改造・社内配備・PoCも無料**で許可しています。
+- **非営利かつ無料の第三者向けWebサービスとしての再提供も許可**します。独立運営の明示、ライセンス・著作権表示、第三者ライセンス遵守などの条件があります。
+- **FabCAD独自コードを含む商用製品の販売や、商業目的のSaaS再提供**には別途書面による許諾が必要です。利用者への提供が無料でも、広告・販促・収益化目的なら商用に該当します。詳しくは [商用ライセンス案内](COMMERCIAL_LICENSE.md) を参照してください。
+- **公式FabCADで作成した設計データやSVG・DXF・STL等の成果物は、商用利用できます。** FabCADを使っただけで利用者の権利が運営者へ移転することはありません。第三者素材の権利や加工時の安全確認には注意してください。公式サイトの[利用規約](https://fooping-tech.github.io/FabCAD/terms.html)も参照してください。
 
-標準搭載のフォントは SIL Open Font License 1.1 です。フォントは変更せずに同梱しています。書体ごとの著作権表示、入手元、ライセンス本文の場所は [`THIRD_PARTY_FONTS.md`](THIRD_PARTY_FONTS.md) にあります。
+第三者製ライブラリ・フォントには独自のライセンスが適用され、上記の制限の対象外です。
+
+- [第三者コンポーネントとライセンス一覧](THIRD_PARTY_NOTICES.md)
+- [ライセンス方針・権利者・LGPLのマージ前レビュー資料](docs/license-review-packet.md)
+- [LGPL対応ソース提供の具体的計画と再ビルド素材](docs/lgpl-source-delivery.md)
+- Replicad本体は `LICENSE` とnpmのメタデータ上MIT、`replicad-opencascadejs`はLGPL-2.1-only、Open CASCADE TechnologyはLGPL-2.1と特別例外です。Replicadは2023年8月14日の[公式コミット「Relicense everything to MIT」](https://github.com/sgenoud/replicad/commit/c2c63cae2177d0b978a5cfdd9fd38f27fbc9e69b)でMITへ再ライセンスされています。README末尾のAGPL表記は旧記述が残存したものと判断できます。
+- 文字組みには opentype.js（MIT）と HarfBuzz（harfbuzzjs、MIT）を使っています。
+- 標準搭載フォントは SIL Open Font License 1.1 で、[書体ごとの表示・入手元](THIRD_PARTY_FONTS.md)とライセンス本文を保持しています。
+- **LGPLを含む実際のWASM配布物に対するソース公開・再リンク等の適合性確認は別途必要**です。公開サイトへOCCT対応ソースの候補アーカイブ（約68 MB）とWASM/SHA-256照合表を同梱する仕組みを追加していますが、完全なソース対応関係とLGPL §6適合は未検証です。[OCCT WASMの出所・変更版の試験手順](docs/occt-wasm-lgpl.md) と `npm run audit:occt` を追加しました。未確認の項目は [第三者ライセンスのチェックリスト](THIRD_PARTY_NOTICES.md#配布前の確認事項) を参照してください。

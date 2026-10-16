@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Plugin, defineConfig } from "vite";
 import { agentGuideHtml, agentGuideMarkdown } from "./src/agents/guide";
@@ -14,6 +14,13 @@ const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), 
 const base = process.env.FABCAD_BASE ?? "/FabCAD/";
 
 const page = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+
+// A custom OCCT binary is permitted only as an explicit build/development opt-in.
+// Avoid silently publishing a build that references a nonexistent replacement.
+if (process.env.VITE_FABCAD_OCCT_WASM_OVERRIDE === "1" &&
+    !existsSync(page("public/occt-override.wasm"))) {
+  throw new Error("VITE_FABCAD_OCCT_WASM_OVERRIDE=1 requires apps/fabcad/public/occt-override.wasm");
+}
 
 /**
  * The guide for AI agents, generated from the in-app help: `llms.txt` (Markdown) and
