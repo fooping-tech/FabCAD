@@ -25,6 +25,7 @@ export type Workspace = "design" | "fabrication";
 export type FabricationTab = "model" | "parts" | "sheet";
 export type SelectionFilter = "auto" | "body" | "face" | "edge" | "vertex";
 export type Projection = "perspective" | "orthographic";
+export type Stereogram = "off" | "parallel" | "cross";
 
 export type Selection =
   | { kind: "body"; bodyId: string }
@@ -397,6 +398,8 @@ export interface AppState {
   hover: Selection | null;
   selectionFilter: SelectionFilter;
   projection: Projection;
+  /** Two images side by side (see `viewport/stereogram.ts`). Not used while sketching. */
+  stereogram: Stereogram;
   dialog: Dialog | null;
   dimensionEdit: DimensionEdit | null;
   /**
@@ -490,6 +493,7 @@ export const appState = new TinyStore<AppState>({
   hover: null,
   selectionFilter: "auto",
   projection: "perspective",
+  stereogram: "off",
   dialog: null,
   dimensionEdit: null,
   toolPanel: null,

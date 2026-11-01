@@ -9,7 +9,9 @@ import {
 import type { PlanePatch } from "@fabcad/features";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { createViewRenderer, type ViewRenderer } from "./softwareRenderer";
+import { createViewRenderer, renderPanels, type ViewRenderer } from "./softwareRenderer";
+import type { Stereogram } from "../app/appState";
+import { panelAt, panelEyes, placeEye } from "./stereogram";
 import { COLORS } from "./theme";
 
 /**
@@ -107,6 +109,12 @@ export class ViewportScene {
   readonly orthographic: THREE.OrthographicCamera;
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
   readonly controls: OrbitControls;
+  /** The two eyes of the stereogram, in the order of `panelEyes`, kept current by `updateEyes`. */
+  private perspectiveEyes: [THREE.PerspectiveCamera, THREE.PerspectiveCamera];
+  private orthographicEyes: [THREE.OrthographicCamera, THREE.OrthographicCamera];
+  private stereogram: Stereogram = "off";
+  /** The panel `project` and `viewCamera` speak of: the pointer's, or the one being drawn. */
+  private panel: 0 | 1 = 0;
 
   private bodies = new Map<string, BodyEntry>();
   private bodyRoot = new THREE.Group();
@@ -146,6 +154,8 @@ export class ViewportScene {
       cam.position.set(260, -320, 240);
     }
     this.camera = this.perspective;
+    this.perspectiveEyes = [this.perspective.clone(), this.perspective.clone()];
+    this.orthographicEyes = [this.orthographic.clone(), this.orthographic.clone()];
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = false;
@@ -196,6 +206,7 @@ export class ViewportScene {
   }
 
   private emit(): void {
+    this.updateEyes();
     for (const l of this.listeners) l();
   }
 
@@ -210,7 +221,12 @@ export class ViewportScene {
     if (!this.needsRender) return;
     this.needsRender = false;
     this.lightRig.quaternion.copy(this.camera.quaternion);
-    this.renderer.render(this.scene, this.camera);
+    if (this.stereogram === "off") {
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      this.updateEyes();
+      renderPanels(this.renderer, this.scene, this.panelCameras());
+    }
   };
 
   resize(width: number, height: number): void {
@@ -260,6 +276,70 @@ export class ViewportScene {
       this.orthographic.right = halfH * aspect;
     }
     this.orthographic.updateProjectionMatrix();
+  }
+
+  // --------------------------------------------------------------- stereogram
+
+  /** Show the view as two images side by side, or as one (`off`). */
+  setStereogram(mode: Stereogram): void {
+    if (mode === this.stereogram) return;
+    this.stereogram = mode;
+    this.panel = 0;
+    // OrbitControls takes the pointer as a position in the whole canvas.
+    this.controls.zoomToCursor = mode === "off";
+    this.invalidate();
+    this.emit();
+  }
+
+  private panelCameras(): THREE.Camera[] {
+    return this.camera === this.perspective ? this.perspectiveEyes : this.orthographicEyes;
+  }
+
+  private updateEyes(): void {
+    if (this.stereogram === "off") return;
+    const aspect = this.panelWidth / this.height;
+    const eyes = this.panelCameras();
+    panelEyes(this.stereogram).forEach((side, i) => {
+      const eye = eyes[i]!;
+      if (eye instanceof THREE.PerspectiveCamera) {
+        eye.copy(this.perspective);
+        eye.aspect = aspect;
+      } else if (eye instanceof THREE.OrthographicCamera) {
+        eye.copy(this.orthographic);
+        eye.left = eye.bottom * aspect;
+        eye.right = eye.top * aspect;
+      }
+      placeEye(eye, this.camera, this.controls.target, side);
+      (eye as THREE.PerspectiveCamera | THREE.OrthographicCamera).updateProjectionMatrix();
+    });
+  }
+
+  /** The camera of the current panel. */
+  private get viewCamera(): THREE.Camera {
+    return this.stereogram === "off" ? this.camera : this.panelCameras()[this.panel]!;
+  }
+
+  private get panelWidth(): number {
+    return this.stereogram === "off" ? this.width : this.width / 2;
+  }
+
+  /** The pointer is at pixel column `x`: `project` answers for the panel it is over. */
+  notePointer(x: number): void {
+    if (this.stereogram !== "off") this.panel = panelAt(x, this.width);
+  }
+
+  /** Run `draw` once per panel, with `project` answering for that panel. */
+  forEachPanel(draw: (left: number, width: number) => void): void {
+    if (this.stereogram === "off") {
+      draw(0, this.width);
+      return;
+    }
+    const pointer = this.panel;
+    for (const panel of [0, 1] as const) {
+      this.panel = panel;
+      draw(panel * this.panelWidth, this.panelWidth);
+    }
+    this.panel = pointer;
   }
 
   setProjection(mode: "perspective" | "orthographic"): void {
@@ -598,7 +678,7 @@ export class ViewportScene {
 
   private fitDistance(radius: number): number {
     const fov = THREE.MathUtils.degToRad(this.perspective.fov / 2);
-    const aspect = Math.min(1, this.width / this.height);
+    const aspect = Math.min(1, this.panelWidth / this.height);
     return (Math.max(radius, 1) / Math.sin(fov)) * (1 / aspect) * 1.35;
   }
 
@@ -625,10 +705,12 @@ export class ViewportScene {
     if (!bounds) return;
     const c = this.project(bounds.center);
     const r = bounds.radius / Math.max(this.pixelSize(bounds.center), 1e-9);
-    const limit = Math.min(this.width, this.height);
+    const width = this.panelWidth;
+    const limit = Math.min(width, this.height);
+    const x = c.x - this.panel * width;
     const outside =
-      c.x < this.width * 0.1 ||
-      c.x > this.width * 0.9 ||
+      x < width * 0.1 ||
+      x > width * 0.9 ||
       c.y < this.height * 0.1 ||
       c.y > this.height * 0.9;
     if (outside || r > limit * 0.7 || r < 24) this.fitAll(extra);
@@ -1173,17 +1255,20 @@ export class ViewportScene {
 
   /** Project a world point to viewport pixels. `visible` is false behind the camera. */
   project(p: Vec3): { x: number; y: number; visible: boolean } {
-    const v = toV3(p).project(this.camera);
+    const v = toV3(p).project(this.viewCamera);
+    const width = this.panelWidth;
     return {
-      x: (v.x * 0.5 + 0.5) * this.width,
+      x: (this.panel + v.x * 0.5 + 0.5) * width,
       y: (-v.y * 0.5 + 0.5) * this.height,
       visible: v.z > -1 && v.z < 1,
     };
   }
 
   private setRay(x: number, y: number): THREE.Ray {
-    const ndc = new THREE.Vector2((x / this.width) * 2 - 1, -(y / this.height) * 2 + 1);
-    this.raycaster.setFromCamera(ndc, this.camera);
+    this.notePointer(x);
+    const width = this.panelWidth;
+    const ndc = new THREE.Vector2(((x - this.panel * width) / width) * 2 - 1, -(y / this.height) * 2 + 1);
+    this.raycaster.setFromCamera(ndc, this.viewCamera);
     return this.raycaster.ray;
   }
 
@@ -1220,7 +1305,7 @@ export class ViewportScene {
     const placed = (p: THREE.Vector3, m?: THREE.Matrix4): THREE.Vector3 => (m ? p.applyMatrix4(m) : p);
     // Anything more than this far behind the first surface hit is considered hidden.
     const slack = hit ? Math.max(0.05, hitDistance * 0.004) : Infinity;
-    const cameraPos = this.camera.position;
+    const cameraPos = this.viewCamera.position;
     const depthOf = (p: THREE.Vector3): number =>
       this.camera === this.orthographic
         ? p.clone().sub(this.raycaster.ray.origin).dot(this.raycaster.ray.direction)
