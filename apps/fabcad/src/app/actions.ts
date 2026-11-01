@@ -70,11 +70,13 @@ import {
 import {
   currentScope,
   documentStore,
+  downloadBlob,
   editSketchSolved,
   fileToBase64,
   modelState,
   pickFile,
   run,
+  safeFileName,
   sketchView,
 } from "./session";
 import { bodiesCenter } from "./moveTransform";
@@ -95,6 +97,24 @@ const titleCase = (id: string): string =>
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+
+/** Download the 3D view as a PNG, as it is shown. */
+export function exportViewImage(): void {
+  const view = viewportApi()?.capture();
+  if (!view) {
+    toast("Open the 3D view first.", "warning");
+    return;
+  }
+  view.toBlob((blob) => {
+    if (!blob) {
+      toast("The image could not be made.", "warning");
+      return;
+    }
+    const name = `${safeFileName(documentStore.document.name)}.png`;
+    downloadBlob(blob, name, "image/png");
+    toast(`Exported ${name}.`);
+  }, "image/png");
+}
 
 /** Names and icons of the commands that open a feature dialog. */
 export const DIALOG_COMMANDS: Partial<Record<Dialog["type"], { label: string; icon: string }>> = {

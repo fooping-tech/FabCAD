@@ -928,6 +928,17 @@ export const HELP: Record<string, HelpEntry> = {
     ],
     limitations: ["An imported body has no history of its own: there is nothing to edit in it."],
   },
+  "export.image": {
+    title: "Export Image",
+    summary: "Saves the 3D view as a PNG, at the angle and zoom it has now.",
+    what: [
+      "Export → PNG — current view downloads what the view shows now: the same angle, zoom and size, with the selection, the highlights and the sketches. The stereogram modes are saved as they are shown.",
+    ],
+    limitations: [
+      "The buttons and labels placed over the view are not in the image.",
+      "It works while the 3D view is shown. In FABRICATION, open the Model tab of Laser first.",
+    ],
+  },
   "export.model": {
     title: "Export 3D Model",
     summary: "Write the chosen bodies and components to a STEP or STL file.",

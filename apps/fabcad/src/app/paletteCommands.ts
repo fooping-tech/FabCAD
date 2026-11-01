@@ -6,6 +6,7 @@ import {
   beginSketchPlanePick,
   finishSketch,
   importStep,
+  exportViewImage,
   openExportModel,
   openDialog,
   setTool,
@@ -101,6 +102,7 @@ export function paletteCommands(hooks: PaletteHooks): PaletteCommand[] {
     add({ id: "ws.fabrication", label: "Switch to FABRICATION", group: "Workspace", keywords: "laser print svg", run: () => setWorkspace("fabrication") });
     add({ id: "export.step", label: "Export STEP", group: "Export", keywords: "download file", run: () => openExportModel("step") });
     add({ id: "export.stl", label: "Export STL", group: "Export", keywords: "download file", run: () => openExportModel("stl") });
+    add({ id: "export.image", label: "Export PNG — current view", group: "Export", keywords: "download file image picture screenshot", run: () => exportViewImage() });
     add({ id: "export.sketch-svg", label: "Export SVG — selected sketch", group: "Export", keywords: "download file", run: () => exportSketchSvg() });
     add({ id: "export.sketch-dxf", label: "Export DXF — selected sketch", group: "Export", keywords: "download file", run: () => exportSketchDxf() });
   }

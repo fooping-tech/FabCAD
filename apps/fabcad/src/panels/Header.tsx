@@ -1,6 +1,6 @@
 import { renameDocument } from "@fabcad/cad-document";
 import { type ReactElement, useEffect, useRef, useState } from "react";
-import { importStep, openDialog, openExportModel, setWorkspace } from "../app/actions";
+import { exportViewImage, importStep, openDialog, openExportModel, setWorkspace } from "../app/actions";
 import { appState } from "../app/appState";
 import {
   newProject,
@@ -233,6 +233,14 @@ export function Header({
             icon: "body",
             help: { id: "export.model", title: "Export 3D Model" },
             onSelect: () => openExportModel("stl"),
+          },
+          { separator: true },
+          { title: "Image" },
+          {
+            label: "PNG — current view",
+            icon: "eye",
+            help: { id: "export.image", title: "Export Image" },
+            onSelect: () => exportViewImage(),
           },
           { separator: true },
           { title: "Project" },

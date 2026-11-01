@@ -14,6 +14,8 @@ export interface ViewportApi {
   typePoint(point: { x: number; y: number }): boolean;
   /** The last point placed by the running Create tool, the base of relative typed points. */
   lastPick(): { x: number; y: number } | null;
+  /** The view as it is shown, or null when the 3D view is not on screen. */
+  capture(): HTMLCanvasElement | null;
 }
 
 let current: ViewportApi | null = null;
