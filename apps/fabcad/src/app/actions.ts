@@ -80,6 +80,7 @@ import {
   sketchView,
 } from "./session";
 import { bodiesCenter } from "./moveTransform";
+import { shareImage } from "./shareImage";
 import type { HandleContext } from "./dialogHandles";
 import { extrudeTargetReach, reachSpan } from "./extrudeTarget";
 import {
@@ -105,13 +106,16 @@ export function exportViewImage(): void {
     toast("Open the 3D view first.", "warning");
     return;
   }
-  view.toBlob((blob) => {
+  view.toBlob(async (blob) => {
     if (!blob) {
       toast("The image could not be made.", "warning");
       return;
     }
     const name = `${safeFileName(documentStore.document.name)}.png`;
-    downloadBlob(blob, name, "image/png");
+    const file = new File([blob], name, { type: "image/png" });
+    const shared = await shareImage(file, navigator, matchMedia("(pointer: coarse)").matches);
+    if (shared === "cancelled") return;
+    if (shared === "failed") downloadBlob(blob, name, "image/png");
     toast(`Exported ${name}.`);
   }, "image/png");
 }

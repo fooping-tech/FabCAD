@@ -933,6 +933,7 @@ export const HELP: Record<string, HelpEntry> = {
     summary: "Saves the 3D view as a PNG, at the angle and zoom it has now.",
     what: [
       "Export → PNG — current view downloads what the view shows now: the same angle, zoom and size, with the selection, the highlights and the sketches. The stereogram modes are saved as they are shown.",
+      "On a phone or tablet it opens the share sheet: choose Save Image to put it in your photos. A computer downloads the file.",
     ],
     limitations: [
       "The buttons and labels placed over the view are not in the image.",
