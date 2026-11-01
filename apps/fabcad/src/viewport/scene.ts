@@ -9,7 +9,8 @@ import {
 import type { PlanePatch } from "@fabcad/features";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { createViewRenderer, renderPanels, type ViewRenderer } from "./softwareRenderer";
+import { dotSeparation, eyesFor, heightsOf, randomDots } from "./randomDot";
+import { createViewRenderer, renderPanels, SoftwareRenderer, type ViewRenderer } from "./softwareRenderer";
 import type { Stereogram } from "../app/appState";
 import { panelAt, panelEyes, placeEye } from "./stereogram";
 import { COLORS } from "./theme";
@@ -115,6 +116,9 @@ export class ViewportScene {
   private stereogram: Stereogram = "off";
   /** The panel `project` and `viewCamera` speak of: the pointer's, or the one being drawn. */
   private panel: 0 | 1 = 0;
+  /** Depth of the random-dot image, drawn off screen whatever draws the view. */
+  private depthRenderer: SoftwareRenderer | null = null;
+  private dotNoise = new Uint8Array(0);
 
   private bodies = new Map<string, BodyEntry>();
   private bodyRoot = new THREE.Group();
@@ -140,7 +144,10 @@ export class ViewportScene {
   private listeners = new Set<() => void>();
   private originSize = 60;
 
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(
+    private canvas: HTMLCanvasElement,
+    private dotCanvas: HTMLCanvasElement,
+  ) {
     const { renderer, software } = createViewRenderer(canvas, { antialias: true, alpha: false });
     this.renderer = renderer;
     this.software = software;
@@ -221,7 +228,9 @@ export class ViewportScene {
     if (!this.needsRender) return;
     this.needsRender = false;
     this.lightRig.quaternion.copy(this.camera.quaternion);
-    if (this.stereogram === "off") {
+    if (this.stereogram === "random-dot") {
+      this.renderDots();
+    } else if (!this.split) {
       this.renderer.render(this.scene, this.camera);
     } else {
       this.updateEyes();
@@ -280,15 +289,60 @@ export class ViewportScene {
 
   // --------------------------------------------------------------- stereogram
 
-  /** Show the view as two images side by side, or as one (`off`). */
+  /** Show the view as two images side by side, as random dots, or as usual (`off`). */
   setStereogram(mode: Stereogram): void {
     if (mode === this.stereogram) return;
     this.stereogram = mode;
     this.panel = 0;
     // OrbitControls takes the pointer as a position in the whole canvas.
-    this.controls.zoomToCursor = mode === "off";
+    this.controls.zoomToCursor = !this.split;
+    this.dotCanvas.hidden = mode !== "random-dot";
     this.invalidate();
     this.emit();
+  }
+
+  /** Pixels of the view per dot: dots the eye can still tell apart. */
+  private static readonly DOT_SIZE = 2;
+
+  /** The random-dot image: the bodies alone give the depth, the rest would stand in the way. */
+  private renderDots(): void {
+    const ctx = this.dotCanvas.getContext("2d");
+    if (!ctx) return;
+    const width = Math.ceil(this.width / ViewportScene.DOT_SIZE);
+    const height = Math.ceil(this.height / ViewportScene.DOT_SIZE);
+    if (this.dotCanvas.width !== width || this.dotCanvas.height !== height || !this.depthRenderer) {
+      this.dotCanvas.width = width;
+      this.dotCanvas.height = height;
+      this.depthRenderer ??= new SoftwareRenderer(document.createElement("canvas"));
+      this.depthRenderer.setSize(width, height);
+      this.dotNoise = Uint8Array.from({ length: width * height }, () => (Math.random() < 0.5 ? 0 : 1));
+    }
+    const others = [this.originRoot, this.planeRoot, this.ghostRoot, this.highlightRoot];
+    const shown = others.map((o) => o.visible);
+    for (const o of others) o.visible = false;
+    this.depthRenderer.render(this.scene, this.camera);
+    others.forEach((o, i) => (o.visible = shown[i]!));
+
+    const eyes = eyesFor(width);
+    const dots = randomDots(heightsOf(this.depthRenderer.depths), width, eyes, this.dotNoise);
+    const image = ctx.createImageData(width, height);
+    for (let i = 0; i < dots.length; i++) {
+      const v = dots[i] ? 255 : 0;
+      image.data[i * 4] = v;
+      image.data[i * 4 + 1] = v;
+      image.data[i * 4 + 2] = v;
+      image.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(image, 0, 0);
+    // Two marks one background separation apart: when they look like three, the eyes are right.
+    const s = dotSeparation(0, eyes);
+    ctx.fillStyle = "#e0762a";
+    for (const x of [(width - s) / 2, (width + s) / 2]) ctx.fillRect(x - 3, 6, 6, 6);
+  }
+
+  /** Two images side by side. */
+  private get split(): boolean {
+    return this.stereogram === "parallel" || this.stereogram === "cross";
   }
 
   private panelCameras(): THREE.Camera[] {
@@ -296,7 +350,7 @@ export class ViewportScene {
   }
 
   private updateEyes(): void {
-    if (this.stereogram === "off") return;
+    if (!this.split) return;
     const aspect = this.panelWidth / this.height;
     const eyes = this.panelCameras();
     panelEyes(this.stereogram).forEach((side, i) => {
@@ -316,21 +370,21 @@ export class ViewportScene {
 
   /** The camera of the current panel. */
   private get viewCamera(): THREE.Camera {
-    return this.stereogram === "off" ? this.camera : this.panelCameras()[this.panel]!;
+    return this.split ? this.panelCameras()[this.panel]! : this.camera;
   }
 
   private get panelWidth(): number {
-    return this.stereogram === "off" ? this.width : this.width / 2;
+    return this.split ? this.width / 2 : this.width;
   }
 
   /** The pointer is at pixel column `x`: `project` answers for the panel it is over. */
   notePointer(x: number): void {
-    if (this.stereogram !== "off") this.panel = panelAt(x, this.width);
+    if (this.split) this.panel = panelAt(x, this.width);
   }
 
   /** Run `draw` once per panel, with `project` answering for that panel. */
   forEachPanel(draw: (left: number, width: number) => void): void {
-    if (this.stereogram === "off") {
+    if (!this.split) {
       draw(0, this.width);
       return;
     }

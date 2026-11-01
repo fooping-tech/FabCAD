@@ -4,7 +4,7 @@ import type { Stereogram } from "../app/appState";
 /**
  * Stereogram view: two images side by side, seen from two eyes, that merge into one image in
  * depth. `parallel`: each eye looks at its own side, as if looking far away. `cross`: the eyes
- * cross, so the images change sides.
+ * cross, so the images change sides. `random-dot` is one image instead: see `randomDot.ts`.
  */
 export type Eye = "left" | "right";
 

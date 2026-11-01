@@ -66,6 +66,10 @@ p { margin: 0; }
 .welcome-back a { color: #9fe0b8; }
 
 /* hero */
+.news { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-bottom: 22px; padding: 8px 14px; border: 1px solid rgba(239, 165, 98, 0.4); border-radius: 10px; font-size: 13.5px; line-height: 1.5; color: inherit; text-decoration: none; }
+.news:hover { border-color: rgba(239, 165, 98, 0.85); }
+.news-label { padding: 1px 8px; border-radius: 6px; background: #efa562; color: #0d1216; font-size: 12px; font-weight: 700; }
+.news time { color: var(--dim); }
 .hero { padding: 88px 0 40px; background: radial-gradient(1100px 520px at 72% -10%, rgba(239, 165, 98, 0.13), transparent 62%), radial-gradient(900px 460px at 10% 0%, rgba(124, 184, 228, 0.1), transparent 60%); }
 .lede { font-size: 18px; color: var(--muted); max-width: 60ch; margin-top: 24px; }
 .lede strong { display: block; color: var(--text); font-size: 21px; margin-bottom: 6px; }

@@ -206,14 +206,16 @@ export const HELP: Record<string, HelpEntry> = {
     title: "Stereogram",
     summary: "Shows the model as two images side by side that merge into one image in depth.",
     what: [
-      "Parallel and Cross, under Stereogram in the view buttons, split the view into two images of the model, seen from two eyes. Click the button that is on to return to one image.",
+      "Parallel and Cross, under Stereogram in the view buttons, split the view into two images of the model, seen from two eyes. Dots shows one image of random dots instead. Click the button that is on to return to the usual view.",
       "Parallel: look through the screen, as if at something far away, so that each eye sees its own side. Cross: cross your eyes, so that each eye sees the opposite side.",
+      "Dots: look through the screen until the two orange marks at the top look like three; the bodies then appear in depth. Only the bodies are in the image, without colour, edges or planes.",
       "The view works as usual: orbit, zoom, select faces and edges, and use features in either image. What is at the centre of the view sits on the screen; what is nearer stands out of it.",
     ],
     limitations: [
       "While a sketch is being edited the view shows one image, and the buttons are off. The stereogram comes back when the sketch is finished.",
       "Parallel viewing is hard when the images are further apart than your eyes: make the window narrower.",
       "Each image is half as wide, so the view is cropped at the sides. Fit frames the model for one image.",
+      "With Dots, the selection and the highlights cannot be seen in the image, and the image is redrawn more slowly on large models. Handles and visible sketches are drawn flat on top of it.",
       "Stop if your eyes get tired. The stereogram changes only the view, not the model, and it is not saved in the project.",
     ],
   },
