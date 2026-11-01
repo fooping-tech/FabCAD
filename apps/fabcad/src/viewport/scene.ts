@@ -301,15 +301,22 @@ export class ViewportScene {
     this.emit();
   }
 
-  /** Pixels of the view per dot: dots the eye can still tell apart. */
-  private static readonly DOT_SIZE = 2;
+  /** Pixels of the view per dot. One step of depth is one dot, so this sets the steps too. */
+  private static readonly DOT_SIZE = 0.4;
+
+  /** `DOT_SIZE` in whole pixels of the screen, as a dot cannot be smaller than one of them. */
+  private get dotSize(): number {
+    const ratio = window.devicePixelRatio;
+    return Math.max(1, Math.round(ViewportScene.DOT_SIZE * ratio)) / ratio;
+  }
 
   /** The random-dot image: the bodies alone give the depth, the rest would stand in the way. */
   private renderDots(): void {
     const ctx = this.dotCanvas.getContext("2d");
     if (!ctx) return;
-    const width = Math.ceil(this.width / ViewportScene.DOT_SIZE);
-    const height = Math.ceil(this.height / ViewportScene.DOT_SIZE);
+    const size = this.dotSize;
+    const width = Math.ceil(this.width / size);
+    const height = Math.ceil(this.height / size);
     if (this.dotCanvas.width !== width || this.dotCanvas.height !== height || !this.depthRenderer) {
       this.dotCanvas.width = width;
       this.dotCanvas.height = height;
@@ -323,7 +330,7 @@ export class ViewportScene {
     this.depthRenderer.render(this.scene, this.camera);
     others.forEach((o, i) => (o.visible = shown[i]!));
 
-    const eyes = eyesFor(width);
+    const eyes = Math.round(eyesFor(this.width) / size);
     const dots = randomDots(heightsOf(this.depthRenderer.depths), width, eyes, this.dotNoise);
     const image = ctx.createImageData(width, height);
     for (let i = 0; i < dots.length; i++) {
@@ -336,8 +343,9 @@ export class ViewportScene {
     ctx.putImageData(image, 0, 0);
     // Two marks one background separation apart: when they look like three, the eyes are right.
     const s = dotSeparation(0, eyes);
+    const mark = 12 / size;
     ctx.fillStyle = "#e0762a";
-    for (const x of [(width - s) / 2, (width + s) / 2]) ctx.fillRect(x - 3, 6, 6, 6);
+    for (const x of [(width - s) / 2, (width + s) / 2]) ctx.fillRect(x - mark / 2, mark, mark, mark);
   }
 
   /** Two images side by side. */

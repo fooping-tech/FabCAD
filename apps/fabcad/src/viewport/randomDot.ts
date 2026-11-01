@@ -15,8 +15,8 @@ export const dotSeparation = (height: number, eyes: number): number => {
   return Math.round(((1 - z) * eyes) / (2 - z));
 };
 
-/** The separation of the eyes in dots, for an image `width` dots wide. */
-export const eyesFor = (width: number): number => Math.min(120, Math.max(24, Math.round(width / 6)));
+/** The separation of the eyes in pixels of the view, for a view `width` pixels wide. */
+export const eyesFor = (width: number): number => Math.min(240, Math.max(48, Math.round(width / 6)));
 
 /** View distances (Infinity: nothing there) to heights: see `dotSeparation`. */
 export const heightsOf = (depth: Float32Array): Float32Array => {
