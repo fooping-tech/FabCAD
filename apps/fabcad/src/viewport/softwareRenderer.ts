@@ -52,6 +52,28 @@ interface Drawable {
   rank: number;
 }
 
+/**
+ * Draw `cameras` side by side, each in an equal share of the width of the view. Their aspect is
+ * the caller's to set.
+ */
+export const renderPanels = (renderer: ViewRenderer, scene: THREE.Scene, cameras: THREE.Camera[]): void => {
+  if (renderer instanceof SoftwareRenderer) {
+    renderer.renderPanels(scene, cameras);
+    return;
+  }
+  const gl = renderer as THREE.WebGLRenderer;
+  const { x: width, y: height } = gl.getSize(new THREE.Vector2());
+  const panel = width / cameras.length;
+  gl.setScissorTest(true);
+  cameras.forEach((camera, i) => {
+    gl.setViewport(i * panel, 0, panel, height);
+    gl.setScissor(i * panel, 0, panel, height);
+    gl.render(scene, camera);
+  });
+  gl.setScissorTest(false);
+  gl.setViewport(0, 0, width, height);
+};
+
 const tmpColor = new THREE.Color();
 const tmpVertexColor = new THREE.Color();
 
@@ -108,6 +130,18 @@ export class SoftwareRenderer implements ViewRenderer {
   }
 
   render(scene: THREE.Scene, camera: THREE.Camera): void {
+    this.drawTo(scene, camera, 0);
+  }
+
+  renderPanels(scene: THREE.Scene, cameras: THREE.Camera[]): void {
+    const full = this.width;
+    this.width = Math.ceil(full / cameras.length);
+    cameras.forEach((camera, i) => this.drawTo(scene, camera, i * this.width));
+    this.width = full;
+  }
+
+  /** One image, `this.width` wide, with its left side at `left` on the canvas. */
+  private drawTo(scene: THREE.Scene, camera: THREE.Camera, left: number): void {
     const ctx = this.context;
     if (!ctx) return;
     const w = this.width;
@@ -159,7 +193,7 @@ export class SoftwareRenderer implements ViewRenderer {
       else if ((d.object as THREE.Points).isPoints) this.drawPoints(d.object as THREE.Points, d.material, view);
       else this.drawLines(d.object as THREE.Line, d.material, view);
     }
-    ctx.putImageData(this.image, 0, 0);
+    ctx.putImageData(this.image, left, 0);
   }
 
   // ------------------------------------------------------------------ meshes

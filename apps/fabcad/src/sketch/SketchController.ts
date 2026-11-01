@@ -1608,6 +1608,17 @@ export class SketchController {
     const { width, height } = this.scene.size;
     ctx.clearRect(0, 0, width, height);
     this.labelHits = [];
+    this.scene.forEachPanel((left, panelWidth) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left, 0, panelWidth, height);
+      ctx.clip();
+      this.drawPanel(ctx, width, height);
+      ctx.restore();
+    });
+  }
+
+  private drawPanel(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const state = appState.get();
     const doc = this.doc;
     const dialog = state.dialog;

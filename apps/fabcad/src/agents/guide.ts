@@ -66,7 +66,7 @@ const SECTIONS: Section[] = [
             ["Browser", "left, upper half", "the tree of the document: Origin (XY / XZ / YZ planes, axes), Sketches, Bodies, Components (definitions, each with its Sketches, Features and Bodies) and Instances. Rows can be clicked to select, and to pick a plane. The component being edited has an ACTIVE badge"],
             ["Properties", "left, lower half", "properties of the selection, and the Parameters of the document"],
             ["View", "centre", "the 3D view. In a sketch, a banner at the top centre shows the sketch name, its constraint status and Finish Sketch"],
-            ["View buttons", "top right of the view", "Top, Front, Right, Bottom, Back, Left, Iso, Fit; Persp / Ortho"],
+            ["View buttons", "top right of the view", "Top, Front, Right, Bottom, Back, Left, Iso, Fit; Persp / Ortho; Stereogram (Parallel / Cross)"],
             ["Timeline", "bottom", "the history of the design, one item per feature. A red item has an error; hover it for the message. Drag an item to change the order (a red bar marks a place it cannot go). The button at its left opens the history log"],
             ["Status bar", "very bottom", "left: what the running command wants next. Right: cursor position in sketch coordinates (X … mm Y … mm), sketch status, autosave state (Autosaved …), Ready / Computing / Paused. Stop appears when a computation runs for 8 s or twice the longest computation of the project so far; Resume after it"],
           ],

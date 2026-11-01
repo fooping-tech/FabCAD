@@ -27,6 +27,7 @@ Parametric Sketch  →  CAD Solid  →  Generic Fabrication Compiler  →  SVG /
 | Profile | 交点を含めて閉領域を自動検出し、クリックで選択（複数選択可） |
 | 範囲選択 | スケッチの何もない場所からドラッグ。左から右は枠に完全に入ったものだけ（実線の枠）、右から左は枠に触れたものすべて（破線の枠）。`Shift` で追加 |
 | Measure | `I`。点・線・円・面・Body を 1 つまたは 2 つ選ぶと、長さ、半径、直径、面積、体積、距離、角度を表示します。値はコピーできます。計測は保存されず、履歴にも残りません |
+| Stereogram | ビューの Stereogram の **Parallel**（平行法）/ **Cross**（交差法）で、モデルを左右 2 枚の画像で表示して立体視できます。どちらの画像でも選択や回転ができます。スケッチの編集中は 1 枚の表示です |
 | Solid | Extrude（New Body / Join / Cut / Intersect、片側・反転・対称。Cut / Intersect を選ぶと向きは自動で立体の側に、Join / New Body に戻すと立体の外側に切り替わります。自分で向きを選んだあとは変えません。スケッチの閉領域のほか、立体の平らな面もそのまま押し出せます。矢印をドラッグして距離を決められ、結果を半透明でプレビュー）、Revolve、Sweep（プロファイルを、線・円弧・スプラインをつないだパスに沿って掃引）、Loft（2 つ以上の断面をつなぐ。断面はスケッチの閉領域または平らな面）、Combine（Union / Cut / Intersect）、Fillet、Chamfer、Shell |
 | Hole | `H`。スケッチの点に穴をあけます。1 つの Feature に複数の点を指定できます。Simple / Counterbore / Countersink、Distance / Through All、Flip |
 | Pattern / Mirror | Rectangular Pattern（1 方向または 2 方向）、Circular Pattern、Mirror。対象は Feature（Extrude、Revolve、Hole、Sweep、Loft）または Body。個数・間隔・角度を持つ 1 つの Feature として保存し、コピーの集まりにはしません |

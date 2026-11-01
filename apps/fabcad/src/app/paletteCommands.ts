@@ -111,6 +111,9 @@ export function paletteCommands(hooks: PaletteHooks): PaletteCommand[] {
     for (const v of VIEWS) {
       add({ id: `view.${v.id}`, label: `View: ${v.label}`, group: "View", run: () => viewportApi()?.setView(v.id) });
     }
+    add({ id: "view.stereogram-parallel", label: "Stereogram: Parallel", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "parallel" }) });
+    add({ id: "view.stereogram-cross", label: "Stereogram: Cross", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "cross" }) });
+    add({ id: "view.stereogram-off", label: "Stereogram: Off", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "off" }) });
   }
   add({ id: "parameters", label: "Parameters…", group: "File", keywords: "variables expressions", run: () => openDialog("parameters") });
   add({ id: "undo", label: "Undo", group: "Edit", shortcut: "Ctrl+Z", run: undo });

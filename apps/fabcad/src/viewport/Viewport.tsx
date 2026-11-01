@@ -29,8 +29,10 @@ import {
   selectionKey,
   toast,
 } from "../app/appState";
+import type { Stereogram } from "../app/appState";
 import { helpFor } from "../help/content";
 import { openHelpTopic } from "../help/helpState";
+import { useHelpTrigger } from "../help/useHelpTrigger";
 import { openContextMenu } from "../app/contextMenu";
 import { ROOT_GHOST } from "../app/components";
 import {
@@ -1194,6 +1196,13 @@ export function Viewport(): ReactElement {
     host.addEventListener("gesturechange", onGesture);
 
     // Capture phase: the manipulator must see the event before the camera controls do.
+    // Hit tests of handles compare with `scene.project`: it should answer for this panel. A drag
+    // stays in the panel it began in.
+    const notePanel = (e: PointerEvent): void => {
+      if (e.type === "pointerdown" || e.buttons === 0) scene.notePointer(e.clientX - host.getBoundingClientRect().left);
+    };
+    host.addEventListener("pointerdown", notePanel, { capture: true });
+    host.addEventListener("pointermove", notePanel, { capture: true });
     webgl.addEventListener("pointerdown", onPointerDown, { capture: true });
     webgl.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
@@ -1539,6 +1548,11 @@ export function Viewport(): ReactElement {
     sceneRef.current?.setProjection(app.projection);
   }, [app.projection, ready]);
 
+  // A sketch is drawn and picked in the plane of the screen: one image, whatever the mode.
+  useEffect(() => {
+    sceneRef.current?.setStereogram(app.activeSketchId ? "off" : app.stereogram);
+  }, [app.stereogram, app.activeSketchId, ready]);
+
   // Entering and leaving the sketch environment.
   const previousProjection = useRef(app.projection);
   const previousView = useRef<ReturnType<ViewportScene["saveView"]> | null>(null);
@@ -1616,6 +1630,7 @@ export function Viewport(): ReactElement {
     <div className={`viewport${tooling ? " tooling" : ""}`} ref={hostRef}>
       <canvas className="webgl" ref={webglRef} />
       <canvas className="overlay" ref={overlayRef} />
+      {app.stereogram !== "off" && !app.activeSketchId && <div className="stereo-divider" />}
 
       {activeSketch?.type === "sketch" && view && (
         <div className="sketch-banner">
@@ -1706,6 +1721,13 @@ export function Viewport(): ReactElement {
             </button>
           </div>
         </div>
+        <div className="view-card">
+          <div className="view-caption">Stereogram</div>
+          <div className="view-row">
+            <StereoButton mode="parallel" label="Parallel" title="Stereogram for parallel viewing" />
+            <StereoButton mode="cross" label="Cross" title="Stereogram for cross-eyed viewing" />
+          </div>
+        </div>
       </div>
 
       {building && (
@@ -1743,6 +1765,24 @@ export function Viewport(): ReactElement {
         </div>
       )}
     </div>
+  );
+}
+
+/** Turns a stereogram mode on, or back off when it is on. */
+function StereoButton({ mode, label, title }: { mode: Stereogram; label: string; title: string }): ReactElement {
+  const app = useStore(appState);
+  const { guard, ...help } = useHelpTrigger({ id: "view.stereogram", title: "Stereogram" }) ?? { guard: (f: () => void) => f };
+  return (
+    <button
+      className={app.stereogram === mode ? "on" : ""}
+      disabled={app.activeSketchId !== null}
+      aria-pressed={app.stereogram === mode}
+      onClick={guard(() => appState.set({ stereogram: app.stereogram === mode ? "off" : mode }))}
+      title={title}
+      {...help}
+    >
+      {label}
+    </button>
   );
 }
 
