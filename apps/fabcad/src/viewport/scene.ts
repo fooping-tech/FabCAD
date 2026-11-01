@@ -227,6 +227,10 @@ export class ViewportScene {
     if (this.animation) this.stepAnimation();
     if (!this.needsRender) return;
     this.needsRender = false;
+    this.draw();
+  };
+
+  private draw(): void {
     this.lightRig.quaternion.copy(this.camera.quaternion);
     if (this.stereogram === "random-dot") {
       this.renderDots();
@@ -236,7 +240,26 @@ export class ViewportScene {
       this.updateEyes();
       renderPanels(this.renderer, this.scene, this.panelCameras());
     }
-  };
+  }
+
+  /**
+   * The view as it is shown, with `overlay` on top, as a new canvas. Drawn here and now: WebGL
+   * keeps its picture only until the frame ends. Random dots keep their own size, as scaling
+   * them would blur the repeats that give the depth.
+   */
+  capture(overlay: HTMLCanvasElement): HTMLCanvasElement | null {
+    this.needsRender = false;
+    this.draw();
+    const base = this.stereogram === "random-dot" ? this.dotCanvas : this.canvas;
+    const out = document.createElement("canvas");
+    out.width = base.width;
+    out.height = base.height;
+    const ctx = out.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(base, 0, 0);
+    ctx.drawImage(overlay, 0, 0, out.width, out.height);
+    return out;
+  }
 
   resize(width: number, height: number): void {
     if (width <= 0 || height <= 0) return;

@@ -1271,6 +1271,7 @@ export function Viewport(): ReactElement {
       editDimension: (id) => controller.editDimension(id),
       typePoint: (point) => controller.typePoint(point),
       lastPick: () => controller.lastPick(),
+      capture: () => (getComputedStyle(webgl).visibility === "hidden" ? null : scene.capture(overlay)),
     });
 
     return () => {

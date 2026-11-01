@@ -884,6 +884,17 @@ export const HELP_JA: Record<string, HelpEntry> = {
     what: ["ファイルはプロジェクトの中に保存するので、プロジェクトだけで完結します。取り込んだ Body は、ほかの Feature で加工できます。"],
     limitations: ["取り込んだ Body には履歴がなく、Body そのものは編集できません。"],
   },
+  "export.image": {
+    title: "Export Image",
+    summary: "3D ビューを、いまの角度とズームのまま PNG に保存します。",
+    what: [
+      "Export → PNG — current view で、いまビューに見えているものをダウンロードします。角度、ズーム、大きさは表示のままで、選択、ハイライト、スケッチも含みます。Stereogram の表示も、そのままの形で保存します。",
+    ],
+    limitations: [
+      "ビューの上に置いたボタンやラベルは画像に入りません。",
+      "3D ビューが見えているときに使えます。FABRICATION では、先に Laser の Model タブを開きます。",
+    ],
+  },
   "export.model": {
     title: "Export 3D Model",
     summary: "選んだ Body とコンポーネントを STEP または STL に書き出します。",
