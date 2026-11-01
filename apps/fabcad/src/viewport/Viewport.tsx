@@ -252,6 +252,7 @@ export function Viewport(): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   const webglRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const dotsRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<ViewportScene | null>(null);
   const controllerRef = useRef<SketchController | null>(null);
   const [ready, setReady] = useState(false);
@@ -267,8 +268,9 @@ export function Viewport(): ReactElement {
     const host = hostRef.current;
     const webgl = webglRef.current;
     const overlay = overlayRef.current;
-    if (!host || !webgl || !overlay) return;
-    const scene = new ViewportScene(webgl);
+    const dots = dotsRef.current;
+    if (!host || !webgl || !overlay || !dots) return;
+    const scene = new ViewportScene(webgl, dots);
     const controller = new SketchController(overlay, scene);
     sceneRef.current = scene;
     controllerRef.current = controller;
@@ -1629,8 +1631,11 @@ export function Viewport(): ReactElement {
   return (
     <div className={`viewport${tooling ? " tooling" : ""}`} ref={hostRef}>
       <canvas className="webgl" ref={webglRef} />
+      <canvas className="stereo-dots" ref={dotsRef} hidden />
       <canvas className="overlay" ref={overlayRef} />
-      {app.stereogram !== "off" && !app.activeSketchId && <div className="stereo-divider" />}
+      {(app.stereogram === "parallel" || app.stereogram === "cross") && !app.activeSketchId && (
+        <div className="stereo-divider" />
+      )}
 
       {activeSketch?.type === "sketch" && view && (
         <div className="sketch-banner">
@@ -1726,6 +1731,7 @@ export function Viewport(): ReactElement {
           <div className="view-row">
             <StereoButton mode="parallel" label="Parallel" title="Stereogram for parallel viewing" />
             <StereoButton mode="cross" label="Cross" title="Stereogram for cross-eyed viewing" />
+            <StereoButton mode="random-dot" label="Dots" title="Random-dot stereogram" />
           </div>
         </div>
       </div>

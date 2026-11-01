@@ -129,6 +129,11 @@ export class SoftwareRenderer implements ViewRenderer {
     this.image = null;
   }
 
+  /** The view distance of each pixel of the last image; Infinity where nothing was drawn. */
+  get depths(): Float32Array {
+    return this.depth;
+  }
+
   render(scene: THREE.Scene, camera: THREE.Camera): void {
     this.drawTo(scene, camera, 0);
   }

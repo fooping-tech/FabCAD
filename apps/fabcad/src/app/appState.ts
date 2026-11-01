@@ -25,7 +25,7 @@ export type Workspace = "design" | "fabrication";
 export type FabricationTab = "model" | "parts" | "sheet";
 export type SelectionFilter = "auto" | "body" | "face" | "edge" | "vertex";
 export type Projection = "perspective" | "orthographic";
-export type Stereogram = "off" | "parallel" | "cross";
+export type Stereogram = "off" | "parallel" | "cross" | "random-dot";
 
 export type Selection =
   | { kind: "body"; bodyId: string }
@@ -398,7 +398,7 @@ export interface AppState {
   hover: Selection | null;
   selectionFilter: SelectionFilter;
   projection: Projection;
-  /** Two images side by side (see `viewport/stereogram.ts`). Not used while sketching. */
+  /** Two images side by side, or one of random dots (`viewport/stereogram.ts`, `randomDot.ts`). Not used while sketching. */
   stereogram: Stereogram;
   dialog: Dialog | null;
   dimensionEdit: DimensionEdit | null;

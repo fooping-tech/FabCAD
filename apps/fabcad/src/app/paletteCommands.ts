@@ -113,6 +113,7 @@ export function paletteCommands(hooks: PaletteHooks): PaletteCommand[] {
     }
     add({ id: "view.stereogram-parallel", label: "Stereogram: Parallel", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "parallel" }) });
     add({ id: "view.stereogram-cross", label: "Stereogram: Cross", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "cross" }) });
+    add({ id: "view.stereogram-dots", label: "Stereogram: Random Dots", group: "View", keywords: "stereo 3d autostereogram", run: () => appState.set({ stereogram: "random-dot" }) });
     add({ id: "view.stereogram-off", label: "Stereogram: Off", group: "View", keywords: "stereo 3d", run: () => appState.set({ stereogram: "off" }) });
   }
   add({ id: "parameters", label: "Parameters…", group: "File", keywords: "variables expressions", run: () => openDialog("parameters") });
