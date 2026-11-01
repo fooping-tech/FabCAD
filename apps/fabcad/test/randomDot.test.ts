@@ -27,8 +27,8 @@ describe("random-dot stereogram", () => {
 
   it("scales the eyes with the image, within limits", () => {
     expect(eyesFor(600)).toBe(100);
-    expect(eyesFor(50)).toBe(24);
-    expect(eyesFor(3000)).toBe(120);
+    expect(eyesFor(50)).toBe(48);
+    expect(eyesFor(3000)).toBe(240);
   });
 
   it("maps the nearest point to 1 and leaves the background at 0, below the model", () => {
