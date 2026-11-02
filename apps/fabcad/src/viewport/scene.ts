@@ -9,7 +9,7 @@ import {
 import type { PlanePatch } from "@fabcad/features";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dotSeparation, eyesFor, heightsOf, randomDots } from "./randomDot";
+import { dotSeparation, eyesFor, heightsOf, outlineDots, randomDots } from "./randomDot";
 import { createViewRenderer, renderPanels, SoftwareRenderer, type ViewRenderer } from "./softwareRenderer";
 import type { Stereogram } from "../app/appState";
 import { panelAt, panelEyes, placeEye } from "./stereogram";
@@ -327,6 +327,12 @@ export class ViewportScene {
   /** Pixels of the view per dot. One step of depth is one dot, so this sets the steps too. */
   private static readonly DOT_SIZE = 0.4;
 
+  /** Steps of depth per dot. */
+  private static readonly DOT_FINE = 4;
+  /** Colours of a black dot and a white dot. */
+  private static readonly PLAIN: number[][] = [[0, 0, 0], [255, 255, 255]];
+  private static readonly OUTLINE: number[][] = [[130, 40, 0], [255, 170, 90]];
+
   /** `DOT_SIZE` in whole pixels of the screen, as a dot cannot be smaller than one of them. */
   private get dotSize(): number {
     const ratio = window.devicePixelRatio;
@@ -353,14 +359,18 @@ export class ViewportScene {
     this.depthRenderer.render(this.scene, this.camera);
     others.forEach((o, i) => (o.visible = shown[i]!));
 
-    const eyes = Math.round(eyesFor(this.width) / size);
-    const dots = randomDots(heightsOf(this.depthRenderer.depths), width, eyes, this.dotNoise);
+    // Even, so that the background repeats at whole dots and stays black and white.
+    const eyes = 2 * Math.round(eyesFor(this.width) / size / 2);
+    const heights = heightsOf(this.depthRenderer.depths);
+    const fine = ViewportScene.DOT_FINE;
+    const dots = randomDots(heights, width, eyes, this.dotNoise, fine);
+    const outlines = outlineDots(heights, width, eyes, Math.max(1, Math.round(1 / size)));
     const image = ctx.createImageData(width, height);
     for (let i = 0; i < dots.length; i++) {
-      const v = dots[i] ? 255 : 0;
-      image.data[i * 4] = v;
-      image.data[i * 4 + 1] = v;
-      image.data[i * 4 + 2] = v;
+      // Outlines tint the dots without changing which are light: the depth stays in the pattern.
+      const light = dots[i]! / fine;
+      const [dark, bright] = (outlines[i] ? ViewportScene.OUTLINE : ViewportScene.PLAIN) as [number[], number[]];
+      for (let c = 0; c < 3; c++) image.data[i * 4 + c] = dark[c]! + (bright[c]! - dark[c]!) * light;
       image.data[i * 4 + 3] = 255;
     }
     ctx.putImageData(image, 0, 0);

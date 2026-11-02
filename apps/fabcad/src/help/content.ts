@@ -208,7 +208,7 @@ export const HELP: Record<string, HelpEntry> = {
     what: [
       "Parallel and Cross, under Stereogram in the view buttons, split the view into two images of the model, seen from two eyes. Dots shows one image of random dots instead. Click the button that is on to return to the usual view.",
       "Parallel: look through the screen, as if at something far away, so that each eye sees its own side. Cross: cross your eyes, so that each eye sees the opposite side.",
-      "Dots: look through the screen until the two orange marks at the top look like three; the bodies then appear in depth. Only the bodies are in the image, without colour, edges or planes.",
+      "Dots: look through the screen until the two orange marks at the top look like three; the bodies then appear in depth. Only the bodies are in the image, without planes. Their outlines are tinted orange and appear twice, side by side, until the image merges: then the middle one lies on the body.",
       "The view works as usual: orbit, zoom, select faces and edges, and use features in either image. What is at the centre of the view sits on the screen; what is nearer stands out of it.",
     ],
     limitations: [
