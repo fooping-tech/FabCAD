@@ -331,7 +331,7 @@ export class ViewportScene {
   private static readonly DOT_FINE = 4;
   /** Colours of a black dot and a white dot. */
   private static readonly PLAIN: number[][] = [[0, 0, 0], [255, 255, 255]];
-  private static readonly OUTLINE: number[][] = [[130, 40, 0], [255, 170, 90]];
+  private static readonly OUTLINE: number[][] = [[34, 22, 14], [244, 232, 220]];
 
   /** `DOT_SIZE` in whole pixels of the screen, as a dot cannot be smaller than one of them. */
   private get dotSize(): number {
