@@ -62,22 +62,28 @@ describe("random-dot stereogram", () => {
     expect(pattern(0.15).some((v) => v > 0 && v < fine)).toBe(true);
   });
 
-  it("marks both dots of the pair of a silhouette, and nothing on a flat slope", () => {
+  it("marks both dots of the pair of an outline across the image, and no slope", () => {
     const rows = 9;
     const heights = new Float32Array(WIDTH * rows);
     const flat = new Float32Array(WIDTH * rows);
     for (let y = 0; y < rows; y++) {
-      heights.fill(1, y * WIDTH + 100, y * WIDTH + 180);
-      for (let x = 0; x < WIDTH; x++) flat[y * WIDTH + x] = 0.4 + (0.3 * x) / WIDTH;
+      if (y >= 4) heights.fill(1, y * WIDTH + 100, y * WIDTH + 180);
+      flat.fill(0.4 + 0.03 * y, y * WIDTH, (y + 1) * WIDTH);
     }
     expect(outlineDots(flat, WIDTH, EYES, 1).every((v) => v === 0)).toBe(true);
     const marked = outlineDots(heights, WIDTH, EYES, 1);
     const row = 4 * WIDTH;
     const s = dotSeparation(1, EYES);
-    const left = 100 - (s >> 1);
+    const left = 140 - (s >> 1);
     expect(marked[row + left]).toBe(1);
     expect(marked[row + left + s]).toBe(1);
-    expect(marked[row + 140]).toBe(0);
+  });
+
+  it("leaves out outlines that run up and down", () => {
+    const rows = 9;
+    const heights = new Float32Array(WIDTH * rows);
+    for (let y = 0; y < rows; y++) heights.fill(1, y * WIDTH + 100, y * WIDTH + 180);
+    expect(outlineDots(heights, WIDTH, EYES, 1).every((v) => v === 0)).toBe(true);
   });
 
   it("uses the same dots for the same view", () => {

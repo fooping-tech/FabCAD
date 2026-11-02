@@ -96,23 +96,25 @@ const OUTLINE = 0.0008;
 const JUMP = 0.02;
 
 /**
- * Which dots carry an outline (1: yes): the silhouette, the steps and the creases of `heights`.
- * Both dots of the pair of an outline point are marked, so the two eyes see it at its depth.
+ * Which dots carry an outline (1: yes): the silhouette, the steps and the creases of `heights`
+ * that run across the image. Those that run up and down are left out, as the eyes read the depth
+ * from the sideways shift of just such edges. Both dots of the pair of an outline point are
+ * marked, so the two eyes see it at its depth.
  */
 export const outlineDots = (heights: Float32Array, width: number, eyes: number, gap: number): Uint8Array => {
   const rows = Math.floor(heights.length / width);
   const out = new Uint8Array(width * rows);
   // At a jump only the near side counts: the far side lies at another depth, a second outline.
-  const bends = (i: number, step: number): boolean => {
-    const before = heights[i - step]!;
-    const after = heights[i + step]!;
+  const bends = (i: number): boolean => {
+    const before = heights[i - gap * width]!;
+    const after = heights[i + gap * width]!;
     const here = heights[i]!;
     return Math.abs(before - 2 * here + after) > OUTLINE && here >= Math.max(before, after) - JUMP;
   };
   for (let y = gap; y < rows - gap; y++) {
-    for (let x = gap; x < width - gap; x++) {
+    for (let x = 0; x < width; x++) {
       const i = y * width + x;
-      if (!bends(i, gap) && !bends(i, gap * width)) continue;
+      if (!bends(i)) continue;
       const s = dotSeparation(heights[i]!, eyes);
       const left = x - (s >> 1);
       const right = left + s;
