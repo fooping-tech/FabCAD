@@ -329,6 +329,15 @@ export class ViewportScene {
 
   /** Steps of depth per dot. */
   private static readonly DOT_FINE = 4;
+  /**
+   * How light a dot with 0 to `DOT_FINE` white parts is drawn. A screen turns a pixel value into
+   * light as about its 2.2nd power: grey 128 gives a fifth of white, not half, so plain greys
+   * would make the parts of the image that have them darker than the black and white ones.
+   */
+  private static readonly DOT_SHADES = Array.from(
+    { length: ViewportScene.DOT_FINE + 1 },
+    (_, k) => (k / ViewportScene.DOT_FINE) ** (1 / 2.2),
+  );
   /** Colours of a black dot and a white dot. */
   private static readonly PLAIN: number[][] = [[0, 0, 0], [255, 255, 255]];
   private static readonly OUTLINE: number[][] = [[34, 22, 14], [244, 232, 220]];
@@ -368,7 +377,7 @@ export class ViewportScene {
     const image = ctx.createImageData(width, height);
     for (let i = 0; i < dots.length; i++) {
       // Outlines tint the dots without changing which are light: the depth stays in the pattern.
-      const light = dots[i]! / fine;
+      const light = ViewportScene.DOT_SHADES[dots[i]!]!;
       const [dark, bright] = (outlines[i] ? ViewportScene.OUTLINE : ViewportScene.PLAIN) as [number[], number[]];
       for (let c = 0; c < 3; c++) image.data[i * 4 + c] = dark[c]! + (bright[c]! - dark[c]!) * light;
       image.data[i * 4 + 3] = 255;
