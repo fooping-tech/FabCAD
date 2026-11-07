@@ -932,6 +932,7 @@ export function editFeature(featureId: string): void {
     case "split":
     case "sweep":
     case "loft":
+    case "sphere":
     case "offset-plane":
       dialog = dialogFromFeature(f);
       break;

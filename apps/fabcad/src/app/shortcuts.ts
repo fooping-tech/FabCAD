@@ -355,6 +355,8 @@ export function installShortcuts(hooks: ShortcutHooks): () => void {
   const onPaletteKey = (e: KeyboardEvent): void => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
     if (e.key.toLowerCase() !== "k" && e.code !== "KeyK") return;
+    // Kids Mode has no command palette.
+    if (appState.get().uiMode === "kids") return;
     e.preventDefault();
     e.stopPropagation();
     appState.set((st) => ({ commandPalette: st.commandPalette ? null : { query: "" }, contextMenu: null }));

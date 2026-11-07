@@ -138,8 +138,17 @@ export function cancelCommand(): void {
   appState.set({ kidsPanel: null });
 }
 
+/**
+ * けす: the shapes that are picked. A click on a shape picks one of its faces or edges; the
+ * whole shape is meant, so the picks become their bodies before the normal Delete runs.
+ */
 export function removeSelection(): void {
   const before = documentStore.document;
+  const picked = appState.get().selection;
+  const bodies = [...new Set(picked.flatMap((s) => ("bodyId" in s && !("ghost" in s && s.ghost) ? [s.bodyId] : [])))];
+  if (bodies.length > 0) {
+    appState.set({ selection: bodies.map((bodyId) => ({ kind: "body" as const, bodyId })) });
+  }
   deleteSelection();
   if (documentStore.document !== before) notify("deleted");
 }
