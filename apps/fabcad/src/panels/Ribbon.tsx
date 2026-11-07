@@ -352,6 +352,7 @@ function SolidRibbon(): ReactElement {
         <Tool icon="revolve" label="Revolve" title="Revolve" active={is("revolve")} help="solid.revolve" onClick={() => openDialog("revolve")} />
         <Tool icon="sweep" label="Sweep" title="Sweep — move a profile along a path" active={is("sweep")} help="solid.sweep" onClick={() => openDialog("sweep")} />
         <Tool icon="loft" label="Loft" title="Loft — a solid through two or more sections" active={is("loft")} help="solid.loft" onClick={() => openDialog("loft")} />
+        <Tool icon="sphere" label="Sphere" title="Sphere — a ball of a given diameter" active={is("sphere")} help="solid.sphere" onClick={() => openDialog("sphere")} />
         <Tool icon="hole" label="Hole" title="Hole (H)" active={is("hole")} help="solid.hole" onClick={() => openDialog("hole")} />
       </Group>
       <Group label="Modify">

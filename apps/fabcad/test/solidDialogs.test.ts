@@ -857,6 +857,29 @@ describe("the command of a dialog", () => {
     expect(dialogFromFeature({ type: "fillet" } as Feature)).toBeNull();
   });
 
+  it("makes a sphere, edits it, and turns it into a cut", () => {
+    const store = new DocumentStore(createDocument());
+    const dialog: SolidDialog = {
+      type: "sphere",
+      editing: null,
+      x: "5",
+      y: "0",
+      z: "10",
+      diameter: "20",
+      operation: "new",
+      targetBodyIds: [],
+    };
+    const id = run(store, dialog);
+    const made = feature(store, id, "sphere");
+    expect(made.center).toEqual({ x: "5", y: "0", z: "10" });
+    expect(made.bodyId).not.toBe("");
+    roundTrip(store, id);
+    const editing = dialogFromFeature(made)!;
+    expect(editing.type).toBe("sphere");
+    run(store, { ...editing, diameter: "30" } as SolidDialog);
+    expect(feature(store, id, "sphere").diameter).toBe("30");
+  });
+
   it("drills, repeats and mirrors holes", async () => {
     const store = new DocumentStore(createDocument());
     const engine = new FeatureEngine(kernel, solver);

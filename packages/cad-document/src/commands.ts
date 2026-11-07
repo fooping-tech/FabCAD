@@ -47,6 +47,7 @@ import {
   type RectangularPatternFeature,
   type RevolveAxis,
   type RevolveFeature,
+  type SphereFeature,
   type ShellFeature,
   type SketchFeature,
   type SplitFeature,
@@ -425,6 +426,52 @@ export function addRevolve(input: RevolveInput, out: CreatedRef = {}): Command {
       profiles: input.profiles,
       axis: input.axis,
       angle: input.angle,
+      operation,
+      targetBodyIds: operation === "new" ? [] : (input.targetBodyIds ?? []),
+      bodyId,
+    };
+    out.id = id;
+    out.bodyId = bodyId;
+    return withFeature(d, feature, bodies);
+  });
+}
+
+export interface SphereInput {
+  center: { x: string; y: string; z: string };
+  diameter: string;
+  operation?: BodyOperation;
+  targetBodyIds?: string[];
+  /** Component the sphere belongs to (the root when not given). */
+  componentId?: string;
+}
+
+export function addSphere(input: SphereInput, out: CreatedRef = {}): Command {
+  return command("Sphere", (doc) => {
+    const componentId =
+      input.componentId && doc.assembly.components[input.componentId]
+        ? input.componentId
+        : doc.assembly.rootComponentId;
+    const operation = input.operation ?? "new";
+    if (!targetsInComponent(doc, componentId, operation, input.targetBodyIds)) return doc;
+    let d = doc;
+    let id: string;
+    [id, d] = allocateId(d, "sphere");
+    const bodies: BodyRecord[] = [];
+    let bodyId = "";
+    if (operation === "new") {
+      let body: BodyRecord;
+      [body, d] = newBody(d, id, componentId);
+      bodies.push(body);
+      bodyId = body.id;
+    }
+    const feature: SphereFeature = {
+      id,
+      type: "sphere",
+      name: nextFeatureName(doc, "sphere"),
+      componentId,
+      suppressed: false,
+      center: { ...input.center },
+      diameter: input.diameter,
       operation,
       targetBodyIds: operation === "new" ? [] : (input.targetBodyIds ?? []),
       bodyId,
@@ -991,6 +1038,7 @@ export function updateFeature<T extends Feature = Feature>(
     if (
       (next.type === "extrude" ||
         next.type === "revolve" ||
+        next.type === "sphere" ||
         next.type === "sweep" ||
         next.type === "loft") &&
       f.type === next.type

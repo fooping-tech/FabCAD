@@ -1174,7 +1174,7 @@ export class FeatureEngine {
       }
       if (done.tools.length === 0) {
         throw new Error(
-          `"${name}" cannot be repeated: only features that add or remove material (Extrude, Revolve, Sweep, Loft, Hole and patterns of them) can. Pattern the body instead.`,
+          `"${name}" cannot be repeated: only features that add or remove material (Extrude, Revolve, Sphere, Sweep, Loft, Hole and patterns of them) can. Pattern the body instead.`,
         );
       }
       applications.push(...done.tools);
@@ -1454,6 +1454,25 @@ export class FeatureEngine {
           },
         );
         this.applyOperation(feature, tool, names, bodies, entry);
+        return;
+      }
+      case "sphere": {
+        const center = {
+          x: evaluateAs(feature.center.x, "length", scope),
+          y: evaluateAs(feature.center.y, "length", scope),
+          z: evaluateAs(feature.center.z, "length", scope),
+        };
+        const diameter = evaluateAs(feature.diameter, "length", scope);
+        if (!(diameter > 0)) throw new Error("Diameter must be greater than zero.");
+        const tool = kernel.sphere(center, diameter / 2);
+        // A sphere has a single face.
+        this.applyOperation(
+          feature,
+          tool,
+          (g) => nameSolid(g, feature.id, () => ({ role: "sphere", entity: "surface" })),
+          bodies,
+          entry,
+        );
         return;
       }
       case "boolean": {

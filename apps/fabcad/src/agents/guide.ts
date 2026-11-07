@@ -68,6 +68,7 @@ const SECTIONS: Section[] = [
             ["View", "centre", "the 3D view. In a sketch, a banner at the top centre shows the sketch name, its constraint status and Finish Sketch"],
             ["View buttons", "top right of the view", "Top, Front, Right, Bottom, Back, Left, Iso, Fit; Persp / Ortho; Stereogram (Parallel / Cross / Dots)"],
             ["Timeline", "bottom", "the history of the design, one item per feature. A red item has an error; hover it for the message. Drag an item to change the order (a red bar marks a place it cannot go). The button at its left opens the history log"],
+            ["Kids Mode", "whole screen, when chosen", "File → Kids mode · キッズモード swaps the header, ribbon, panels and timeline for a few big buttons with hiragana labels (かたちを つくる, おえかき, たかくする, うごかす, まわす, おおきさ, けす, もどす, ほぞん, ひらく, てんかいず) and a guide line at the top of the view. It edits the same document with the same commands. The おとなモード button at the top right returns to this layout; the choice is remembered in the browser (localStorage fabcad.ui-mode)"],
             ["Status bar", "very bottom", "left: what the running command wants next. Right: cursor position in sketch coordinates (X … mm Y … mm), sketch status, autosave state (Autosaved …), Ready / Computing / Paused. Stop appears when a computation runs for 8 s or twice the longest computation of the project so far; Resume after it"],
           ],
         },

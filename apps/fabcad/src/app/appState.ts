@@ -20,6 +20,7 @@ import type {
 import type { OriginPlaneName, Vec2, Vec3 } from "@fabcad/geometry";
 import type { ProfileRef } from "@fabcad/sketch";
 import { TinyStore } from "./tinyStore";
+import { type KidsNotice, type KidsPanel, type UiMode, browserStorage, loadUiMode } from "../kids/kidsModel";
 
 export type Workspace = "design" | "fabrication";
 export type FabricationTab = "model" | "parts" | "sheet";
@@ -211,6 +212,16 @@ export type LoftDialog = OperationPick & {
   ruled: boolean;
 };
 
+/** Sphere: centre coordinates and diameter (length expressions), as in Fusion. */
+export type SphereDialog = OperationPick & {
+  type: "sphere";
+  editing: string | null;
+  x: string;
+  y: string;
+  z: string;
+  diameter: string;
+};
+
 export type OffsetPlaneDialog = {
   type: "offset-plane";
   editing: string | null;
@@ -231,6 +242,7 @@ export type SolidDialog =
   | SplitDialog
   | SweepDialog
   | LoftDialog
+  | SphereDialog
   | OffsetPlaneDialog;
 
 /** Feature dialogs. `editing` is the id of an existing feature being edited. */
@@ -462,6 +474,15 @@ export interface AppState {
    * the session; nothing of it is stored in the document.
    */
   measuring: boolean;
+  /**
+   * Standard screen or Kids Mode. Only the screen changes: the document, its history and the
+   * commands are the same. Remembered in this browser (`kids/kidsModel.ts`).
+   */
+  uiMode: UiMode;
+  /** Kids Mode: the open panel (see `KidsPanel`). */
+  kidsPanel: KidsPanel | null;
+  /** Kids Mode: what just happened, for the guide line. Cleared after a moment. */
+  kidsNotice: KidsNotice | null;
 }
 
 export const appState = new TinyStore<AppState>({
@@ -517,6 +538,9 @@ export const appState = new TinyStore<AppState>({
   pendingSketchTool: null,
   sidePanelOpen: false,
   measuring: false,
+  uiMode: loadUiMode(browserStorage()),
+  kidsPanel: null,
+  kidsNotice: null,
 });
 
 let toastId = 1;

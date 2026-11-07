@@ -610,6 +610,13 @@ class ReplicadKernel implements GeometryKernel {
     });
   }
 
+  sphere(center: Vec3, radius: number): KernelShape {
+    if (!(radius > 1e-9)) throw new KernelError("The diameter of a sphere must be greater than zero.");
+    return guard("Sphere", () =>
+      wrap(replicad.makeSphere(radius).translate(tuple3(center)) as Shape3D),
+    );
+  }
+
   boolean(op: BooleanOp, target: KernelShape, tools: KernelShape[]): KernelShape {
     return guard("Boolean", () => {
       let result = unwrap(target);

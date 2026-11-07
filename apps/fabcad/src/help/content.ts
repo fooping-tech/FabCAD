@@ -173,6 +173,19 @@ export const HELP: Record<string, HelpEntry> = {
       "The 3D view is empty until the model has been computed again.",
     ],
   },
+  "ui.kids": {
+    title: "Kids Mode",
+    summary: "A simple screen for young children, with big buttons and words in hiragana.",
+    what: [
+      "Shows only a few big buttons with pictures and words: make a box, a cylinder or a ball, draw, make taller, move, turn, change the size, delete, undo, save and open.",
+      "It edits the same project with the same commands: what is made in Kids Mode opens in the normal screen with its whole history, and the other way round.",
+      "The choice is remembered in this browser. The おとなモード button at the top always returns to the normal screen.",
+    ],
+    limitations: [
+      "Advanced tools, constraints and fabrication settings are hidden. Use the normal screen to change them.",
+      "The unfolding (てんかいず) shows the preview only and does not export files.",
+    ],
+  },
   "file.share-link": {
     title: "Share Link",
     summary: "A link that opens this project, for someone else or another browser.",
@@ -711,6 +724,22 @@ export const HELP: Record<string, HelpEntry> = {
       OPERATION,
     ],
     limitations: ["No guide rails.", "Sections with holes are joined by their outer boundary."],
+  },
+  "solid.sphere": {
+    title: "Sphere",
+    summary: "A ball of a given diameter about a point.",
+    what: [
+      "Makes a sphere without a sketch: give its diameter and the coordinates of its centre.",
+      "Like the other features, it can make a new body or join, cut or intersect existing ones.",
+    ],
+    parameters: [
+      { name: "Diameter", text: "Length expression; parameters can be used." },
+      { name: "Center X", text: "X coordinate of the centre, in the coordinates of the active component." },
+      { name: "Center Y", text: "Y coordinate of the centre." },
+      { name: "Center Z", text: "Z coordinate of the centre." },
+      OPERATION,
+    ],
+    limitations: ["The centre is typed in: it cannot be picked on a point in the view yet."],
   },
   "solid.hole": {
     title: "Hole",

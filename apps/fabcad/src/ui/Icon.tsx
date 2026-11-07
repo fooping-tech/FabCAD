@@ -204,6 +204,42 @@ const P: Record<string, ReactElement> = {
   // ---- solid features
   extrude: <path d="M4 13l6 3 6-3M4 13l6-3 6 3M10 10V3M7.5 5.5L10 3l2.5 2.5" />,
   revolve: <path d="M10 3v14M10 5c4 0 6 1.5 6 3.5S14 12 10 12M13 14.5c-1 .4-2 .5-3 .5M7 9.5L10 12l-3 2.5" />,
+  sphere: (
+    <>
+      <circle cx="10" cy="10" r="6.5" />
+      <path d="M3.5 10c0 1.7 2.9 3 6.5 3s6.5-1.3 6.5-3" />
+    </>
+  ),
+  box: <path d="M3 6.5L10 3l7 3.5v7L10 17l-7-3.5zM3 6.5L10 10l7-3.5M10 10v7" />,
+  cylinder: (
+    <>
+      <ellipse cx="10" cy="5.5" rx="6" ry="2.5" />
+      <path d="M4 5.5v9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-9" />
+    </>
+  ),
+  back: <path d="M8 5L3 10l5 5M3 10h14" />,
+  home: <path d="M3 9.5L10 3.5l7 6M5 8v8.5h4v-5h2v5h4V8" />,
+  kids: (
+    <>
+      <circle cx="10" cy="10" r="7" />
+      <path d="M7 12c.8 1.2 1.8 1.8 3 1.8s2.2-.6 3-1.8M7.5 8h.01M12.5 8h.01" />
+    </>
+  ),
+  adult: (
+    <>
+      <circle cx="10" cy="6" r="3" />
+      <path d="M4 17c.5-3.5 2.8-5.5 6-5.5s5.5 2 6 5.5" />
+    </>
+  ),
+  pencil: <path d="M4 16l1-4 8.5-8.5 3 3L8 15zM12 5l3 3M4 16l4-1" />,
+  shapes: (
+    <>
+      <path d="M3 9.5h6.5V16H3z" />
+      <circle cx="14" cy="6.5" r="3.5" />
+      <path d="M14 11.5l3.5 5.5h-7z" />
+    </>
+  ),
+  unfold: <path d="M7 3h6v4h4v6h-4v4H7v-4H3V7h4zM7 7h6v6H7z" />,
   combine: (
     <>
       <circle cx="8" cy="10" r="5" />

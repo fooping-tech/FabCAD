@@ -20,6 +20,7 @@ import { pickDxf } from "../sketch/importDxf";
 import { useHelpTrigger } from "../help/useHelpTrigger";
 import { Icon } from "../ui/Icon";
 import { Menu } from "../ui/Menu";
+import { setUiMode } from "../kids/kidsActions";
 
 import { legalUrl } from "../legal/urls";
 
@@ -151,6 +152,13 @@ export function Header({
             help: { id: "legal", title: "Terms & Privacy" },
           },
           { label: "About FabCAD", icon: "info", onSelect: () => openDialog("about") },
+          { separator: true },
+          {
+            label: "Kids mode · キッズモード",
+            icon: "kids",
+            onSelect: () => setUiMode("kids"),
+            help: { id: "ui.kids", title: "Kids Mode" },
+          },
         ]}
       />
 
