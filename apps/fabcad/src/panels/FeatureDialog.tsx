@@ -259,6 +259,7 @@ const TITLES: Partial<Record<Dialog["type"], string>> = {
   split: FEATURE_LABELS.split,
   sweep: FEATURE_LABELS.sweep,
   loft: FEATURE_LABELS.loft,
+  sphere: FEATURE_LABELS.sphere,
   "offset-plane": DIALOG_COMMANDS["offset-plane"]?.label,
 };
 

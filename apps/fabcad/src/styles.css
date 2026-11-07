@@ -677,3 +677,108 @@ table.grid td input { padding: 2px 5px; }
   .timeline { padding: 0 6px; gap: 4px; }
   .timeline-controls button:nth-child(2), .timeline-controls button:nth-child(3) { display: none; }
 }
+
+/* ---------------------------------------------------------------- kids mode */
+/*
+ * Kids Mode (src/kids/): the same viewport with fewer, bigger controls. Buttons are at least
+ * 56 px (44 px for the small ones), labels 16–18 px, and every button has a picture and a word.
+ */
+.app.kids {
+  --kids-header-h: 72px;
+  --kids-toolbar-h: 104px;
+  grid-template-rows: var(--kids-header-h) var(--kids-toolbar-h) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "header" "ribbon" "main";
+  font-size: 16px;
+}
+.kids-header {
+  grid-area: header;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.kids-brand { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; color: var(--brand); margin-right: 8px; }
+.kids-toolbar {
+  grid-area: ribbon;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 8px 12px;
+  background: var(--panel-alt);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.kids-btn {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  flex: none;
+  min-width: 88px; min-height: 84px;
+  padding: 8px 10px;
+  border: 2px solid var(--line-strong); border-radius: 14px;
+  background: var(--panel); color: var(--ink-strong);
+  font: 700 18px/1.2 var(--font);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.kids-btn.small { min-width: 64px; min-height: 56px; padding: 4px 8px; font-size: 16px; border-radius: 12px; gap: 2px; }
+.kids-btn:hover:not(:disabled) { background: var(--hover); }
+.kids-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.kids-btn.on { border-color: var(--accent-strong); background: var(--accent-soft); }
+.kids-btn.primary { border-color: var(--accent-strong); background: var(--accent-strong); color: #fff; }
+.kids-btn.primary:hover:not(:disabled) { background: var(--brand); }
+.kids-btn:disabled { opacity: 0.4; cursor: default; }
+.kids-guide {
+  position: absolute; z-index: 20; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 24px);
+  padding: 10px 18px;
+  border: 2px solid var(--line-strong); border-radius: 999px;
+  background: var(--panel); color: var(--ink-strong);
+  font-size: 18px; font-weight: 700;
+  box-shadow: 0 4px 14px rgba(29, 43, 56, 0.12);
+  pointer-events: none;
+}
+.kids-guide.problem { border-color: var(--warn); background: var(--warn-soft); }
+.floating.kids-panel { width: min(340px, calc(100vw - 16px)); font-size: 16px; }
+.floating.kids-panel .floating-title { font-size: 18px; font-weight: 700; }
+.kids-panel-body { display: flex; flex-direction: column; gap: 14px; padding: 12px; }
+.kids-panel-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 0 12px 12px; }
+.kids-stepper-label { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.kids-stepper-row { display: flex; align-items: center; gap: 10px; }
+.kids-step {
+  flex: none; width: 56px; height: 56px;
+  border: 2px solid var(--line-strong); border-radius: 12px;
+  background: var(--panel); color: var(--ink-strong);
+  font: 700 28px/1 var(--font);
+  cursor: pointer; touch-action: manipulation;
+}
+.kids-step:hover { background: var(--hover); }
+.kids-value { flex: 1; text-align: center; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kids-value small { font-size: 16px; font-weight: 600; margin-left: 4px; color: var(--ink-soft); }
+.kids-slider { width: 100%; height: 44px; margin: 4px 0 0; accent-color: var(--accent-strong); }
+.kids-note { font-size: 16px; color: var(--ink-soft); line-height: 1.5; }
+/* The house button replaces the view buttons, which are not for Kids Mode. */
+.app.kids .view-tools { display: none; }
+.kids-home { position: absolute; z-index: 20; right: 12px; bottom: 12px; box-shadow: 0 4px 14px rgba(29, 43, 56, 0.12); }
+.kids-short { display: none; }
+/* In the unfolding the guide goes to the bottom, out of the way of the list of parts. */
+.app.kids.no-timeline .kids-guide { top: auto; bottom: 12px; }
+
+@media (max-width: 860px) {
+  .app.kids, .app.kids.no-timeline {
+    --kids-header-h: 64px;
+    --kids-toolbar-h: 100px;
+    grid-template-rows: var(--kids-header-h) minmax(0, 1fr) var(--kids-toolbar-h);
+    grid-template-areas: "header" "main" "ribbon";
+  }
+  .kids-header { gap: 4px; padding: 0 6px; overflow: hidden; }
+  .kids-brand { display: none; }
+  .kids-header .kids-btn.small { min-width: 52px; padding: 4px; }
+  .kids-long { display: none; }
+  .kids-short { display: inline; }
+  .kids-toolbar { justify-content: flex-start; border-bottom: 0; border-top: 1px solid var(--line); gap: 8px; }
+  .kids-btn { min-width: 60px; min-height: 80px; padding: 6px 4px; font-size: 16px; }
+  .kids-toolbar { gap: 6px; padding: 8px; }
+  .kids-btn.small { min-width: 56px; }
+  .kids-guide { top: 8px; font-size: 16px; padding: 8px 14px; }
+  .app.kids .toasts { bottom: 12px; }
+}

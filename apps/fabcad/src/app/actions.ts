@@ -128,6 +128,7 @@ export const DIALOG_COMMANDS: Partial<Record<Dialog["type"], { label: string; ic
   revolve: { label: "Revolve", icon: "revolve" },
   sweep: { label: "Sweep", icon: "sweep" },
   loft: { label: "Loft", icon: "loft" },
+  sphere: { label: "Sphere", icon: "sphere" },
   hole: { label: "Hole", icon: "hole" },
   fillet: { label: "Fillet", icon: "fillet-3d" },
   chamfer: { label: "Chamfer", icon: "chamfer-3d" },
@@ -669,6 +670,18 @@ function newSolidDialog(type: SolidDialog["type"], selection: Selection[]): Soli
         selection,
         (p) => (p.kind === "profile" || p.kind === "face" ? "" : null),
       );
+    case "sphere":
+      return {
+        type,
+        editing: null,
+        x: "0",
+        y: "0",
+        z: "0",
+        diameter: "20",
+        // A sphere stands on its own, as in Fusion: joining it to every body is rarely meant.
+        operation: "new",
+        targetBodyIds: operation.targetBodyIds,
+      };
     case "offset-plane":
       return preselect<Extract<SolidDialog, { type: "offset-plane" }>>(
         { type, editing: null, base: null, offset: "10", picking: "base" },
@@ -702,6 +715,7 @@ export function openDialog(type: Dialog["type"]): void {
     case "split":
     case "sweep":
     case "loft":
+    case "sphere":
     case "offset-plane":
       dialog = newSolidDialog(type, [...inSketch, ...selection]);
       break;
@@ -1370,6 +1384,8 @@ export const featureIcon = (feature: Feature): string => {
       return "extrude";
     case "revolve":
       return "revolve";
+    case "sphere":
+      return "sphere";
     case "boolean":
       return "combine";
     case "fillet":

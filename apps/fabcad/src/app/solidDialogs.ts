@@ -10,6 +10,7 @@ import {
   type Feature,
   type HoleFeature,
   type LoftFeature,
+  type SphereFeature,
   type LoftSection,
   type MirrorFeature,
   type MoveFeature,
@@ -28,6 +29,7 @@ import {
   addCircularPattern,
   addHole,
   addLoft,
+  addSphere,
   addMirror,
   addMove,
   addOffsetPlane,
@@ -81,6 +83,7 @@ const SOLID_TYPES: ReadonlySet<string> = new Set<SolidDialog["type"]>([
   "split",
   "sweep",
   "loft",
+  "sphere",
   "offset-plane",
 ]);
 
@@ -298,6 +301,8 @@ export function dialogWants(dialog: SolidDialog): PickWants {
       return dialog.picking === "profile" ? { profiles: true } : { sketchCurves: true };
     case "loft":
       return { profiles: true, faces: "planar" };
+    case "sphere":
+      return {};
     case "offset-plane":
       return PLANE;
   }
@@ -586,6 +591,8 @@ export function applyPick(
       };
       return patch;
     }
+    case "sphere":
+      return null;
     case "offset-plane": {
       const base = pickPlane(picked, ctx, dialog);
       const patch: Partial<OffsetPlaneDialog> | null = base ? { base } : null;
@@ -621,6 +628,7 @@ export function nextPicking<D extends SolidDialog>(dialog: D): D {
     case "sweep":
       return at(dialog.profiles.length > 0 ? "path" : "profile");
     case "loft":
+    case "sphere":
     case "offset-plane":
       return dialog;
   }
@@ -731,6 +739,8 @@ export function dialogReferences(dialog: SolidDialog): DialogReferences {
       break;
     case "offset-plane":
       plane(dialog.base);
+      break;
+    case "sphere":
       break;
   }
   return out;
@@ -913,6 +923,14 @@ export function solidDialogProblem(dialog: SolidDialog, doc: CadDocument, scope:
         return dialog.sections.length === 0 ? "Select the sections" : "Select a second section";
       }
       return operationProblem(dialog);
+    case "sphere":
+      return (
+        check("X", dialog.x, "length", scope, "any") ??
+        check("Y", dialog.y, "length", scope, "any") ??
+        check("Z", dialog.z, "length", scope, "any") ??
+        check("Diameter", dialog.diameter, "length", scope) ??
+        operationProblem(dialog)
+      );
     case "offset-plane":
       if (!dialog.base) return "Select a flat face or a plane";
       return check("Offset", dialog.offset, "length", scope, "any");
@@ -1051,6 +1069,17 @@ export function dialogFromFeature(f: Feature): SolidDialog | null {
         editing: f.id,
         sections: f.sections,
         ruled: f.ruled ?? false,
+        operation: f.operation,
+        targetBodyIds: f.targetBodyIds,
+      };
+    case "sphere":
+      return {
+        type: "sphere",
+        editing: f.id,
+        x: f.center.x,
+        y: f.center.y,
+        z: f.center.z,
+        diameter: f.diameter,
         operation: f.operation,
         targetBodyIds: f.targetBodyIds,
       };
@@ -1221,6 +1250,17 @@ export function solidDialogCommand(
       return editing
         ? updateFeature<LoftFeature>(editing, input, "Edit loft")
         : addLoft(input, out);
+    }
+    case "sphere": {
+      const input = {
+        center: { x: dialog.x, y: dialog.y, z: dialog.z },
+        diameter: dialog.diameter,
+        operation: dialog.operation,
+        targetBodyIds: targetsOf(dialog),
+      };
+      return editing
+        ? updateFeature<SphereFeature>(editing, input, "Edit sphere")
+        : addSphere({ ...input, componentId }, out);
     }
     case "offset-plane": {
       if (!dialog.base) return null;

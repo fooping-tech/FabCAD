@@ -24,6 +24,7 @@ import {
   addParameter,
   addRectangularPattern,
   addSketch,
+  addSphere,
   addSplit,
   addSweep,
   affectedFeatures,
@@ -1969,5 +1970,52 @@ describe("history", () => {
     for (const id of engine.bodyIds()) {
       expect(engine.bodyNames(id)).toEqual(ctx.engine.bodyNames(id));
     }
+  });
+});
+
+// ------------------------------------------------------------------ sphere
+
+describe("sphere", () => {
+  const ball = (d: number): number => (Math.PI * d ** 3) / 6;
+
+  it("makes a new body about its centre and follows its expressions", async () => {
+    const ctx = context();
+    run(ctx, addParameter({ name: "d", expression: "20", unit: "mm" }));
+    const s: CreatedRef = {};
+    run(ctx, addSphere({ center: { x: "10", y: "0", z: "5" }, diameter: "d" }, s));
+    await compute(ctx);
+    const g = geometry(ctx, s.bodyId!);
+    expect(g.volume / ball(20)).toBeCloseTo(1, 3);
+    expect(g.bounds.min.x).toBeCloseTo(0, 4);
+    expect(g.bounds.max.z).toBeCloseTo(15, 4);
+    expect(g.faces).toHaveLength(1);
+    expect(names(ctx, s.bodyId!).faces[0]?.role).toBe("sphere");
+    expect(featureExpressions(ctx.store.document.features[s.id!]!).map((e) => e.key)).toEqual([
+      "center.x",
+      "center.y",
+      "center.z",
+      "diameter",
+    ]);
+    setParameter(ctx, "d", "30");
+    await compute(ctx);
+    expect(geometry(ctx, s.bodyId!).volume / ball(30)).toBeCloseTo(1, 3);
+  });
+
+  it("cuts a body and refuses a diameter of zero", async () => {
+    const ctx = context();
+    const base = block(ctx, { x: -20, y: -20 }, { x: 20, y: 20 }, "20");
+    const s: CreatedRef = {};
+    run(
+      ctx,
+      addSphere(
+        { center: { x: "0", y: "0", z: "20" }, diameter: "10", operation: "cut", targetBodyIds: [base.bodyId] },
+        s,
+      ),
+    );
+    await compute(ctx);
+    expect(geometry(ctx, base.bodyId).volume / (40 * 40 * 20 - ball(10) / 2)).toBeCloseTo(1, 3);
+    run(ctx, updateFeature(s.id!, { diameter: "0" }));
+    const result = await compute(ctx, false);
+    expect(result.features[s.id!]?.state).toBe("error");
   });
 });

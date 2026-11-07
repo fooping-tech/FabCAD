@@ -67,6 +67,21 @@ export interface RevolveFeature extends FeatureBase {
   bodyId: string;
 }
 
+/**
+ * A sphere about a point given by coordinates (in the coordinates of its component), as
+ * Create → Sphere in Fusion. It needs no sketch.
+ */
+export interface SphereFeature extends FeatureBase {
+  type: "sphere";
+  /** Length expressions of the centre. */
+  center: { x: string; y: string; z: string };
+  /** Length expression. */
+  diameter: string;
+  operation: BodyOperation;
+  targetBodyIds: string[];
+  bodyId: string;
+}
+
 export interface BooleanFeature extends FeatureBase {
   type: "boolean";
   operation: "union" | "cut" | "intersect";
@@ -426,6 +441,7 @@ export type Feature =
   | OffsetPlaneFeature
   | ExtrudeFeature
   | RevolveFeature
+  | SphereFeature
   | BooleanFeature
   | FilletFeature
   | ChamferFeature
@@ -448,6 +464,7 @@ export const FEATURE_LABELS: Record<FeatureType, string> = {
   "offset-plane": "Plane",
   extrude: "Extrude",
   revolve: "Revolve",
+  sphere: "Sphere",
   boolean: "Combine",
   fillet: "Fillet",
   chamfer: "Chamfer",
@@ -505,6 +522,13 @@ export function featureExpressions(feature: Feature): FeatureExpression[] {
       return feature.to ? [] : [{ key: "distance", expression: feature.distance, kind: "length" }];
     case "revolve":
       return [{ key: "angle", expression: feature.angle, kind: "angle" }];
+    case "sphere":
+      return [
+        { key: "center.x", expression: feature.center.x, kind: "length" },
+        { key: "center.y", expression: feature.center.y, kind: "length" },
+        { key: "center.z", expression: feature.center.z, kind: "length" },
+        { key: "diameter", expression: feature.diameter, kind: "length" },
+      ];
     case "fillet":
       return [{ key: "radius", expression: feature.radius, kind: "length" }];
     case "chamfer":
@@ -729,6 +753,7 @@ export function featureInputBodies(feature: Feature, lookup?: FeatureLookup): st
       return unique([...(feature.operation === "new" ? [] : feature.targetBodyIds), ...references]);
     case "revolve":
     case "sweep":
+    case "sphere":
       return feature.operation === "new" ? [] : feature.targetBodyIds.slice();
     case "loft":
       return unique([
@@ -775,6 +800,7 @@ function outputBodies(feature: Feature, lookup: FeatureLookup | undefined, seen:
     case "revolve":
     case "sweep":
     case "loft":
+    case "sphere":
       return feature.operation === "new" ? [feature.bodyId] : feature.targetBodyIds.slice();
     case "boolean":
       return [feature.targetBodyId];
@@ -827,6 +853,7 @@ export function featureCreatedBodies(feature: Feature): string[] {
     case "revolve":
     case "sweep":
     case "loft":
+    case "sphere":
       return feature.operation === "new" && feature.bodyId ? [feature.bodyId] : [];
     case "import":
       return [feature.bodyId];

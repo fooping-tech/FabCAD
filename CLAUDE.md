@@ -59,6 +59,7 @@ npm run build
 | `apps/fabcad/src/print/` | FABRICATION ワークスペースの 3D Print。設定は `extensions["fabrication.print"]`。受け取るのは Body のメッシュ（`modelState` の tessellation）だけ |
 | `apps/fabcad/src/fabrication/` | FABRICATION ワークスペース。`pipeline.ts` は React に依存しない純粋な関数。Body ごとの判定結果は `FabricationOutput.detections` |
 | `apps/fabcad/src/help/` | アプリ内ヘルプ。`content.ts`（英語の本文のレジストリ `HELP` と、項目がないときの `helpFor()`）、`content.ja.ts`（日本語の本文 `HELP_JA`）、`useHelpTrigger.ts`（右クリックと長押し）、`HelpMenu.tsx`（短い説明）、`HelpOverlay.tsx`（詳細）。状態は `appState.help` だけで、ドキュメントにもコマンドにも触れない |
+| `apps/fabcad/src/kids/` | キッズモード。`kidsModel.ts`（いまの `appState` からボタンと案内を決める純粋な関数、モードの保存）、`presets.ts`（はこ・つつ・たま を既存の Command で作る）、`sizeFields.ts`（おおきさで変えられる寸法）、`kidsActions.ts`、`KidsUI.tsx`。モードは `appState.uiMode` で、ドキュメントにも Command にも何も足さない。`App.tsx` は要素の位置を変えずに入れ替えるので、Viewport はマウントし直さない |
 | `apps/fabcad/src/ui/` | `Icon.tsx`、`Menu.tsx`、`Popover.tsx`（画面内に収まるメニュー）、`FloatingPanel.tsx`（クリックの横に開く、動かせるコマンドの窓）、`placement.ts`（位置の計算。純粋な関数）、`gestures.ts`（ダブルタップと長押し。純粋な関数） |
 
 スケッチは 3D ビューの上に重ねた 2D キャンバスに、3D カメラで投影して描く。マウス位置は視線とスケッチ平面の交点でスケッチ座標に変換する。

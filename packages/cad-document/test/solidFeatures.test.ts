@@ -28,6 +28,7 @@ import {
   addMirror,
   addMove,
   addParameter,
+  addSphere,
   addRectangularPattern,
   addSketch,
   addSplit,
@@ -801,5 +802,25 @@ describe("save and load", () => {
     const store = new DocumentStore(loaded);
     expect(store.execute(removeFeatures([pattern]))).toBe(true);
     expect(store.document.bodies[instance]).toBeUndefined();
+  });
+});
+
+describe("sphere", () => {
+  it("adds a body, drops it when it becomes a cut, and renames its parameters", () => {
+    const store = new DocumentStore(createDocument());
+    store.execute(addParameter({ name: "d", expression: "12", unit: "mm" }));
+    const out: CreatedRef = {};
+    store.execute(addSphere({ center: { x: "0", y: "d", z: "0" }, diameter: "d * 2" }, out));
+    const f = store.document.features[out.id!]!;
+    expect(f.type).toBe("sphere");
+    expect(f.name).toBe("Sphere001");
+    expect(store.document.bodies[out.bodyId!]?.createdBy).toBe(out.id);
+    store.execute(updateFeature(out.id!, { operation: "cut", targetBodyIds: [] }));
+    expect(store.document.bodies[out.bodyId!]).toBeUndefined();
+    const p = store.document.parameters.find((q) => q.name === "d")!;
+    store.execute(renameParameter(p.id, "size"));
+    const g = store.document.features[out.id!]!;
+    expect(g.type === "sphere" && [g.center.y, g.diameter]).toEqual(["size", "size * 2"]);
+    expect(FEATURE_LABELS.sphere).toBe("Sphere");
   });
 });

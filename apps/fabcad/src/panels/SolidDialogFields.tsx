@@ -17,6 +17,7 @@ import type {
   OffsetPlaneDialog,
   SolidDialog,
   SourcePick,
+  SphereDialog,
   SplitDialog,
   SweepDialog,
 } from "../app/appState";
@@ -789,6 +790,24 @@ function LoftFields({ dialog }: { dialog: LoftDialog }): ReactElement {
   );
 }
 
+function SphereFields({ dialog }: { dialog: SphereDialog }): ReactElement {
+  return (
+    <>
+      <Value
+        label="Diameter"
+        kind="length"
+        autoFocus
+        value={dialog.diameter}
+        onChange={(diameter) => patchDialog({ diameter })}
+      />
+      <Value label="Center X" kind="length" value={dialog.x} onChange={(x) => patchDialog({ x })} />
+      <Value label="Center Y" kind="length" value={dialog.y} onChange={(y) => patchDialog({ y })} />
+      <Value label="Center Z" kind="length" value={dialog.z} onChange={(z) => patchDialog({ z })} />
+      <OperationFields dialog={dialog} />
+    </>
+  );
+}
+
 function OffsetPlaneFields({ dialog }: { dialog: OffsetPlaneDialog }): ReactElement {
   return (
     <>
@@ -968,6 +987,8 @@ export function SolidDialogBody({ dialog }: { dialog: SolidDialog }): ReactEleme
       return <SweepFields dialog={dialog} />;
     case "loft":
       return <LoftFields dialog={dialog} />;
+    case "sphere":
+      return <SphereFields dialog={dialog} />;
     case "offset-plane":
       return <OffsetPlaneFields dialog={dialog} />;
   }

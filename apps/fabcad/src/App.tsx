@@ -41,6 +41,14 @@ import { openExportModel } from "./app/actions";
 import { TextDialog } from "./text/TextDialog";
 import { TouchBar } from "./viewport/TouchBar";
 import { Viewport } from "./viewport/Viewport";
+import {
+  KidsCommandPanel,
+  KidsGuide,
+  KidsHeader,
+  KidsHomeButton,
+  KidsSizePanel,
+  KidsToolbar,
+} from "./kids/KidsUI";
 
 /**
  * Exporting manufacturing data works from any workspace, so the fabrication pipeline is kept
@@ -93,6 +101,7 @@ export function App(): ReactElement {
   const fabricationTab = useStore(appState, (s) => s.fabricationTab);
   const dialog = useStore(appState, (s) => s.dialog);
   const sidePanelOpen = useStore(appState, (s) => s.sidePanelOpen);
+  const kids = useStore(appState, (s) => s.uiMode === "kids");
 
   useEffect(() => {
     startSession();
@@ -106,72 +115,95 @@ export function App(): ReactElement {
   const showViewport = !fabrication || (!printing && fabricationTab === "model");
 
   return (
-    <div className={`app${fabrication ? " no-timeline" : ""}`}>
-      <Header
-        onExportFabrication={(format) => exportHandler(format)}
-        onExportPrint={openPrintExport}
-      />
-      <Ribbon />
-      {sidePanelOpen && (
+    <div className={`app${fabrication ? " no-timeline" : ""}${kids ? " kids" : ""}`}>
+      {/*
+        Kids Mode swaps the header, the ribbon and the panels for its own simpler ones. The
+        elements keep their places in the tree, so the viewport is never mounted again.
+      */}
+      {kids ? (
+        <KidsHeader />
+      ) : (
+        <Header
+          onExportFabrication={(format) => exportHandler(format)}
+          onExportPrint={openPrintExport}
+        />
+      )}
+      {kids ? <KidsToolbar /> : <Ribbon />}
+      {!kids && sidePanelOpen && (
         <div className="side-backdrop" onPointerDown={() => appState.set({ sidePanelOpen: false })} />
       )}
-      <aside className={`side${sidePanelOpen ? " open" : ""}`}>
-        <button
-          className="side-grip"
-          aria-label="Close panel"
-          onClick={() => appState.set({ sidePanelOpen: false })}
-        />
-        {printing ? (
-          <PrintSidePanel state={print} />
-        ) : fabrication ? (
-          <FabricationSidePanel />
-        ) : (
-          <>
-            <BrowserTree />
-            <PropertiesPanel />
-          </>
-        )}
-      </aside>
+      {!kids && (
+        <aside className={`side${sidePanelOpen ? " open" : ""}`}>
+          <button
+            className="side-grip"
+            aria-label="Close panel"
+            onClick={() => appState.set({ sidePanelOpen: false })}
+          />
+          {printing ? (
+            <PrintSidePanel state={print} />
+          ) : fabrication ? (
+            <FabricationSidePanel />
+          ) : (
+            <>
+              <BrowserTree />
+              <PropertiesPanel />
+            </>
+          )}
+        </aside>
+      )}
       <main className="main">
         {/* The viewport stays mounted so that the WebGL context and the camera survive. */}
         <div style={{ position: "absolute", inset: 0, visibility: showViewport ? "visible" : "hidden" }}>
           <Viewport />
         </div>
-        <TouchBar />
-        {!fabrication && <FeatureDialog />}
-        {!fabrication && <SketchToolPanel />}
-        {!fabrication && <ShapeDimensionsPanel />}
-        {!fabrication && <SketchTransformPanel />}
-
-        {!fabrication && <MeasurePanel />}
-        {!fabrication && <InstanceMovePanel />}
-        {!fabrication && <NewComponentPanel />}
-        {!fabrication && <TextDialog />}
-        {fabrication && !printing && (
+        {kids ? (
           <>
-            <FabricationMain />
-            <FabricationTabs />
+            <KidsGuide />
+            {!fabrication && <KidsHomeButton />}
+            {!fabrication && <KidsCommandPanel />}
+            {!fabrication && <KidsSizePanel />}
+            {fabrication && !printing && <FabricationMain />}
+          </>
+        ) : (
+          <>
+            <TouchBar />
+            {!fabrication && <FeatureDialog />}
+            {!fabrication && <SketchToolPanel />}
+            {!fabrication && <ShapeDimensionsPanel />}
+            {!fabrication && <SketchTransformPanel />}
+            {!fabrication && <MeasurePanel />}
+            {!fabrication && <InstanceMovePanel />}
+            {!fabrication && <NewComponentPanel />}
+            {!fabrication && <TextDialog />}
+            {fabrication && !printing && (
+              <>
+                <FabricationMain />
+                <FabricationTabs />
+              </>
+            )}
+            {printing && <PrintView job={print.job} stale={print.stale} />}
           </>
         )}
-        {printing && <PrintView job={print.job} stale={print.stale} />}
       </main>
-      {!fabrication && <Timeline />}
-      <StatusBar />
+      {!kids && !fabrication && <Timeline />}
+      {!kids && <StatusBar />}
       <Toasts />
-      <ContextMenu />
-      <HistoryLogPanel />
-      <ShareLinkPanel />
+      {!kids && <ContextMenu />}
+      {!kids && <HistoryLogPanel />}
+      {!kids && <ShareLinkPanel />}
       <RecoveryPanel />
-      <CommandPalette
-        exportFabrication={(format) => exportHandler(format)}
-        exportPrint={openPrintExport}
-      />
-      <ExportModelPanel />
+      {!kids && (
+        <CommandPalette
+          exportFabrication={(format) => exportHandler(format)}
+          exportPrint={openPrintExport}
+        />
+      )}
+      {!kids && <ExportModelPanel />}
       <HelpMenu />
       <HelpOverlay />
-      {dialog?.type === "parameters" && <ParametersDialog />}
-      {dialog?.type === "about" && <AboutDialog />}
-      {dialog?.type === "import-dxf" && (
+      {!kids && dialog?.type === "parameters" && <ParametersDialog />}
+      {!kids && dialog?.type === "about" && <AboutDialog />}
+      {!kids && dialog?.type === "import-dxf" && (
         <ImportDxfDialog fileName={dialog.fileName} drawing={dialog.drawing} />
       )}
       <FabricationExportBridge register={registerExport} />

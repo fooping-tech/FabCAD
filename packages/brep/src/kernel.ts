@@ -199,6 +199,9 @@ export interface GeometryKernel {
     angle: number,
   ): KernelShape;
 
+  /** A solid sphere about `center` (mm). */
+  sphere(center: Vec3, radius: number): KernelShape;
+
   boolean(op: BooleanOp, target: KernelShape, tools: KernelShape[]): KernelShape;
   fillet(shape: KernelShape, edges: PointRef[], radius: number): KernelShape;
   chamfer(shape: KernelShape, edges: PointRef[], distance: number): KernelShape;
